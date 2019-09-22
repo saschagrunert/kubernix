@@ -1,5 +1,7 @@
-/target
 **/*.rs.bk
-Cargo.lock
+*.csr
 *.etcd
+*.pem
+/target
+Cargo.lock
 log
