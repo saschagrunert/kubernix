@@ -5,6 +5,7 @@ pkgs.stdenv.mkDerivation {
   buildInputs = with pkgs; [
     bash
     cargo
+    cfssl
     conmon
     cri-o
     etcd

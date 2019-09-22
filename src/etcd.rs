@@ -9,7 +9,7 @@ pub struct Etcd {
 impl Etcd {
     pub fn new(config: &Config) -> Fallible<Etcd> {
         debug!("Starting etcd");
-        let mut process = Process::new(config, "etcd")?;
+        let mut process = Process::new(config, &["etcd"])?;
 
         process.wait_ready("ready to serve client requests")?;
         debug!("etcd is ready");

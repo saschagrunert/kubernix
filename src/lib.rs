@@ -7,8 +7,9 @@ pub use config::Config;
 
 use crio::Crio;
 use etcd::Etcd;
-use failure::Fallible;
+use failure::{bail, Fallible};
 
+use rayon::scope;
 use std::fs::create_dir_all;
 
 pub struct Kubernix {
@@ -22,9 +23,17 @@ impl Kubernix {
         create_dir_all(&config.log.dir)?;
 
         // Spawn the processes
-        let etcd = Etcd::new(config)?;
-        let crio = Crio::new(config)?;
-        Ok(Kubernix { crio, etcd })
+        let mut crio_result: Option<Fallible<Crio>> = None;
+        let mut etcd_result: Option<Fallible<Etcd>> = None;
+        scope(|s| {
+            s.spawn(|_| crio_result = Some(Crio::new(config)));
+            s.spawn(|_| etcd_result = Some(Etcd::new(config)));
+        });
+
+        match (crio_result, etcd_result) {
+            (Some(c), Some(e)) => return Ok(Kubernix { crio: c?, etcd: e? }),
+            _ => bail!("Unable to spawn processes"),
+        }
     }
 
     pub fn stop(&mut self) -> Fallible<()> {

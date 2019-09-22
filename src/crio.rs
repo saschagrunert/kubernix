@@ -1,6 +1,10 @@
 use crate::{config::Config, process::Process};
-use failure::Fallible;
+use failure::{format_err, Fallible};
 use log::debug;
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 pub struct Crio {
     process: Process,
@@ -9,15 +13,38 @@ pub struct Crio {
 impl Crio {
     pub fn new(config: &Config) -> Fallible<Crio> {
         debug!("Starting CRI-O");
-        let mut process = Process::new(config,
-        "crio
-            --log-level=debug 
-            --conmon=/nix/store/9x6hhiv7m8yi58b2891fszv9b999fx34-conmon-2.0.0/bin/conmon
-        ")?;
+        let conmon = Self::find_executable("conmon")
+            .ok_or_else(|| format_err!("Unable to find conmon in $PATH"))?;
+        let mut process = Process::new(
+            config,
+            &[
+                "crio",
+                &format!("--log-level={}", config.log.level),
+                &format!("--conmon={}", conmon.display()),
+            ],
+        )?;
 
         process.wait_ready("sandboxes:")?;
         debug!("CRI-O is ready");
         Ok(Crio { process })
+    }
+
+    fn find_executable<P>(name: P) -> Option<PathBuf>
+    where
+        P: AsRef<Path>,
+    {
+        env::var_os("PATH").and_then(|paths| {
+            env::split_paths(&paths)
+                .filter_map(|dir| {
+                    let full_path = dir.join(&name);
+                    if full_path.is_file() {
+                        Some(full_path)
+                    } else {
+                        None
+                    }
+                })
+                .next()
+        })
     }
 
     pub fn stop(&mut self) -> Fallible<()> {

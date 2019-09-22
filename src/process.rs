@@ -23,13 +23,14 @@ pub struct Process {
 impl Process {
     /// Creates a new `Process` instance by spawning the provided command `cmd`.
     /// If the process creation fails, an `Error` will be returned.
-    pub fn new(config: &Config, command: &str) -> Fallible<Process> {
+    pub fn new(config: &Config, command: &[&str]) -> Fallible<Process> {
         // Prepare the commands
         let cmd = command
-            .split_whitespace()
-            .nth(0)
+            .get(0)
+            .map(|x| x.to_owned())
             .ok_or_else(|| format_err!("No valid command provided"))?;
-        let args: Vec<&str> = command.split_whitespace().skip(1).collect();
+        let args: Vec<&str> =
+            command.iter().map(|x| x.to_owned()).skip(1).collect();
 
         let log_file = Path::new(&config.log.dir).join(format!("{}.log", cmd));
         let out_file = File::create(&log_file)?;
