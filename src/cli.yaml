@@ -1,0 +1,16 @@
+---
+name: kubernix
+bin_name: kubernix
+author: Sascha Grunert <mail@saschagrunert.de>
+after_help: 'More info at: https://github.com/saschagrunert/kubernix'
+global_settings:
+  - ColoredHelp
+
+args:
+  - config:
+      default_value: kubernix.toml
+      env: CONFIG_FILE
+      help: File path to the configuration file
+      long: config-file
+      short: c
+      value_name: PATH

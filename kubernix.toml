@@ -1,0 +1,3 @@
+[log]
+dir = "log"
+level = "debug"

@@ -1,0 +1,19 @@
+[package]
+name = "kubernix"
+version = "0.1.0"
+authors = ["Sascha Grunert <mail@saschagrunert.de>"]
+edition = "2018"
+license = "MIT"
+
+[[bin]]
+name = "kubernix"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "2.33.0", features = ["yaml"]}
+ctrlc = "3.1.3"
+env_logger = "0.6.2"
+failure = "0.1.5"
+log = "0.4.8"
+serde = { version = "1.0.101", features = ["derive"] }
+toml = "0.5.3"
