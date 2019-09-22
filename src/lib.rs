@@ -22,7 +22,7 @@ pub struct Kubernix {
 impl Kubernix {
     pub fn new(config: &Config) -> Fallible<Kubernix> {
         // Setup the PKI
-        Pki::setup(config)?;
+        let pki = Pki::setup(config)?;
 
         // Create the log dir
         create_dir_all(&config.log.dir)?;
@@ -32,7 +32,7 @@ impl Kubernix {
         let mut etcd_result: Option<Fallible<Etcd>> = None;
         scope(|s| {
             s.spawn(|_| crio_result = Some(Crio::new(config)));
-            s.spawn(|_| etcd_result = Some(Etcd::new(config)));
+            s.spawn(|_| etcd_result = Some(Etcd::new(config, &pki)));
         });
 
         match (crio_result, etcd_result) {

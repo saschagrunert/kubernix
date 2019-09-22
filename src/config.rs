@@ -9,6 +9,9 @@ use toml;
 pub struct Config {
     /// The logger configuration
     pub log: LogConfig,
+
+    /// The PKI configuration
+    pub pki: PkiConfig,
 }
 
 impl Config {
@@ -28,5 +31,13 @@ pub struct LogConfig {
     pub level: String,
 
     /// The logging directory for spawned processes
+    pub dir: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+/// The PKI configuration
+pub struct PkiConfig {
+    /// The directory for created certificates
     pub dir: String,
 }

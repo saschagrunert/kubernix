@@ -4,4 +4,6 @@
 *.pem
 /target
 Cargo.lock
+kubeconfig
 log
+pki

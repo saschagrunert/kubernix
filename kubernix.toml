@@ -1,3 +1,9 @@
 [log]
 dir = "log"
 level = "debug"
+
+[pki]
+dir = "pki"
+
+[kubeconfig]
+dir = "kubeconfig"
