@@ -12,6 +12,9 @@ pub struct Config {
 
     /// The PKI configuration
     pub pki: PkiConfig,
+
+    /// The Kube configuration
+    pub kube: KubeConfig,
 }
 
 impl Config {
@@ -39,5 +42,13 @@ pub struct LogConfig {
 /// The PKI configuration
 pub struct PkiConfig {
     /// The directory for created certificates
+    pub dir: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+/// The Kube configuration
+pub struct KubeConfig {
+    /// The directory for created configs
     pub dir: String,
 }
