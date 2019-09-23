@@ -16,7 +16,7 @@ workflows:
 prepare-env: &prepare-env
   run:
     name: Install dependencies
-    command: apk add -y bash ca-certificates make openssh
+    command: apk add bash ca-certificates make openssh
 
 jobs:
   build:
