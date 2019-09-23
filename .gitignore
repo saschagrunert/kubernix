@@ -3,7 +3,6 @@
 *.etcd
 *.pem
 /target
-Cargo.lock
 log
 pki
 kube
