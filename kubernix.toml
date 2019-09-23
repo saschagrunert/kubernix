@@ -5,5 +5,5 @@ level = "debug"
 [pki]
 dir = "pki"
 
-[kubeconfig]
-dir = "kubeconfig"
+[kube]
+dir = "kube"

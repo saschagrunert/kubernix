@@ -1,5 +1,5 @@
 use crate::Config;
-use failure::Fallible;
+use failure::{bail, Fallible};
 use log::debug;
 use std::{
     fs::create_dir_all,
@@ -13,11 +13,19 @@ const ASSETS_DIR: &str = "assets";
 pub struct Pki {
     pub apiserver_cert: PathBuf,
     pub apiserver_key: PathBuf,
+    pub proxy_cert: PathBuf,
+    pub proxy_key: PathBuf,
+    pub controller_manager_cert: PathBuf,
+    pub controller_manager_key: PathBuf,
+    pub scheduler_cert: PathBuf,
+    pub scheduler_key: PathBuf,
+    pub admin_cert: PathBuf,
+    pub admin_key: PathBuf,
     pub ca: PathBuf,
 }
 
 impl Pki {
-    pub fn setup(config: &Config) -> Fallible<Pki> {
+    pub fn new(config: &Config) -> Fallible<Pki> {
         // Create the target dir
         let pki_dir = Path::new(&config.pki.dir);
         create_dir_all(pki_dir)?;
@@ -45,49 +53,81 @@ impl Pki {
             .spawn()?;
 
         let pipe = cfssl.stdout.take().unwrap();
-        Command::new("cfssljson")
+        let output = Command::new("cfssljson")
             .arg("-bare")
             .arg(dir.join(PREFIX))
             .stdin(pipe)
             .output()?;
+        if !output.status.success() {
+            bail!("Command executed with failing error code");
+        }
         debug!("CA certificates created");
         self.ca = dir.join(format!("{}.pem", PREFIX));
         Ok(())
     }
 
     fn setup_admin(&mut self, dir: &Path) -> Fallible<()> {
-        self.generate(dir, "admin", "assets/admin-csr.json")
+        const PREFIX: &str = "admin";
+        let (c, k) = self.generate(dir, PREFIX, "assets/admin-csr.json")?;
+        self.admin_cert = c;
+        self.admin_key = k;
+        Ok(())
     }
 
     fn setup_controller_manager(&mut self, dir: &Path) -> Fallible<()> {
-        self.generate(
+        const PREFIX: &str = "kube-controller-manager";
+        let (c, k) = self.generate(
             dir,
-            "kube-controller-manager",
+            PREFIX,
             "assets/kube-controller-manager-csr.json",
-        )
+        )?;
+        self.controller_manager_cert = c;
+        self.controller_manager_key = k;
+        Ok(())
     }
 
     fn setup_proxy(&mut self, dir: &Path) -> Fallible<()> {
-        self.generate(dir, "kube-proxy", "assets/kube-proxy-csr.json")
+        const PREFIX: &str = "kube-proxy";
+        let (c, k) =
+            self.generate(dir, PREFIX, "assets/kube-proxy-csr.json")?;
+        self.proxy_cert = c;
+        self.proxy_key = k;
+        Ok(())
     }
 
     fn setup_scheduler(&mut self, dir: &Path) -> Fallible<()> {
-        self.generate(dir, "kube-scheduler", "assets/kube-scheduler-csr.json")
+        const PREFIX: &str = "kube-scheduler";
+        let (c, k) =
+            self.generate(dir, PREFIX, "assets/kube-scheduler-csr.json")?;
+        self.scheduler_cert = c;
+        self.scheduler_key = k;
+        Ok(())
     }
 
     fn setup_apiserver(&mut self, dir: &Path) -> Fallible<()> {
         const PREFIX: &str = "kubernetes";
-        self.generate(dir, PREFIX, "assets/kubernetes-csr.json")?;
-        self.apiserver_cert = dir.join(format!("{}.pem", PREFIX));
-        self.apiserver_key = dir.join(format!("{}-key.pem", PREFIX));
+        let (c, k) =
+            self.generate(dir, PREFIX, "assets/kubernetes-csr.json")?;
+        self.apiserver_cert = c;
+        self.apiserver_key = k;
         Ok(())
     }
 
     fn setup_service_account(&mut self, dir: &Path) -> Fallible<()> {
-        self.generate(dir, "service-account", "assets/service-account-csr.json")
+        self.generate(
+            dir,
+            "service-account",
+            "assets/service-account-csr.json",
+        )?;
+        Ok(())
     }
 
-    fn generate(&mut self, dir: &Path, name: &str, csr: &str) -> Fallible<()> {
+    fn generate(
+        &mut self,
+        dir: &Path,
+        name: &str,
+        csr: &str,
+    ) -> Fallible<(PathBuf, PathBuf)> {
         debug!("Creating certificate for {}", name);
         let hostnames = &[
             "127.0.0.1",
@@ -115,6 +155,10 @@ impl Pki {
             .stdin(pipe)
             .output()?;
         debug!("Certificate created for {}", name);
-        Ok(())
+
+        Ok((
+            dir.join(format!("{}.pem", name)),
+            dir.join(format!("{}-key.pem", name)),
+        ))
     }
 }
