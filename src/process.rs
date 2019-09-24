@@ -71,8 +71,6 @@ impl Process {
                 debug!("Found pattern '{}' in line '{}'", pattern, line);
                 return Ok(());
             }
-            // Don't push too hard
-            thread::sleep(Duration::from_secs(1));
         }
 
         bail!("Timed out waiting for process to become ready")
