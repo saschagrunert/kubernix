@@ -61,7 +61,7 @@ impl Process {
         );
         let now = Instant::now();
         let file = File::open(&self.log_file)?;
-        let reader = BufReader::new(file);
+        let mut reader = BufReader::new(file);
 
         while now.elapsed().as_secs() < READYNESS_TIMEOUT {
             let mut line = String::new();
