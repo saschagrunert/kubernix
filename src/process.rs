@@ -66,7 +66,7 @@ impl Process {
         while now.elapsed().as_secs() < READYNESS_TIMEOUT {
             let mut line = String::new();
             reader.read_line(&mut line)?;
-               
+
             if line.contains(pattern) {
                 debug!("Found pattern '{}' in line '{}'", pattern, line);
                 return Ok(());
