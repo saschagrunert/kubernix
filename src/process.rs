@@ -46,7 +46,7 @@ impl Process {
             .spawn()?;
 
         Ok(Process {
-            command: cmd.to_owned() + &args.join(" "),
+            command: cmd.to_owned() + " " + &args.join(" "),
             child,
             log_file: log_file.clone(),
         })
@@ -77,7 +77,7 @@ impl Process {
                 return Ok(());
             }
             // Don't push too hard
-            thread::sleep(Duration::from_secs(2));
+            thread::sleep(Duration::from_secs(1));
         }
 
         bail!("Timed out waiting for process to become ready")
