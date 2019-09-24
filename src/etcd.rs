@@ -15,7 +15,7 @@ impl Etcd {
                 "etcd",
                 "--advertise-client-urls=https://127.0.0.1:2379",
                 "--client-cert-auth",
-                "--data-dir=etcd",
+                &format!("--data-dir={}", config.root.join("etcd").display()),
                 "--initial-advertise-peer-urls=https://127.0.0.1:2380",
                 "--initial-cluster-state=new",
                 "--initial-cluster-token=etcd-cluster",

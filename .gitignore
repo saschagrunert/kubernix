@@ -1,8 +1,3 @@
 **/*.rs.bk
-*.csr
-*.etcd
-*.pem
 /target
-log
-pki
-kube
+run
