@@ -4,7 +4,7 @@ use log::debug;
 use std::{
     fs::create_dir_all,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 #[derive(Default)]
@@ -103,7 +103,7 @@ impl KubeConfig {
         let target = Path::new(dir).join(format!("{}.kubeconfig", name));
         let kubeconfig_arg = format!("--kubeconfig={}", target.display());
 
-        let output = Command::new("kubectl")
+        let status = Command::new("kubectl")
             .arg("config")
             .arg("set-cluster")
             .arg("kubernetes")
@@ -111,12 +111,14 @@ impl KubeConfig {
             .arg("--embed-certs=true")
             .arg("--server=https://127.0.0.1:6443")
             .arg(&kubeconfig_arg)
-            .output()?;
-        if !output.status.success() {
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if !status.success() {
             bail!("Kubectl set-cluster command failed");
         }
 
-        let output = Command::new("kubectl")
+        let status = Command::new("kubectl")
             .arg("config")
             .arg("set-credentials")
             .arg(user)
@@ -124,30 +126,36 @@ impl KubeConfig {
             .arg(format!("--client-key={}", key.display()))
             .arg("--embed-certs=true")
             .arg(&kubeconfig_arg)
-            .output()?;
-        if !output.status.success() {
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if !status.success() {
             bail!("Kubectl set-credentials command failed");
         }
 
-        let output = Command::new("kubectl")
+        let status = Command::new("kubectl")
             .arg("config")
             .arg("set-context")
             .arg("default")
             .arg("--cluster=kubernetes")
             .arg(format!("--user={}", user))
             .arg(&kubeconfig_arg)
-            .output()?;
-        if !output.status.success() {
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if !status.success() {
             bail!("Kubectl set-context command failed");
         }
 
-        let output = Command::new("kubectl")
+        let status = Command::new("kubectl")
             .arg("config")
             .arg("use-context")
             .arg("default")
             .arg(&kubeconfig_arg)
-            .output()?;
-        if !output.status.success() {
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if !status.success() {
             bail!("Kubectl use-context command failed");
         }
 

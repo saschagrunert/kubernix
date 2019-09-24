@@ -1,5 +1,5 @@
 use crate::Config;
-use failure::{bail, Fallible};
+use failure::{bail, format_err, Fallible};
 use log::debug;
 use std::{
     fs::create_dir_all,
@@ -50,16 +50,22 @@ impl Pki {
             .arg("-initca")
             .arg(Path::new(ASSETS_DIR).join("ca-csr.json"))
             .stdout(Stdio::piped())
+            .stderr(Stdio::null())
             .spawn()?;
 
-        let pipe = cfssl.stdout.take().unwrap();
-        let output = Command::new("cfssljson")
+        let pipe = cfssl
+            .stdout
+            .take()
+            .ok_or_else(|| format_err!("unable to get stdout"))?;
+        let status = Command::new("cfssljson")
             .arg("-bare")
             .arg(dir.join(PREFIX))
             .stdin(pipe)
-            .output()?;
-        if !output.status.success() {
-            bail!("Command executed with failing error code");
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if !status.success() {
+            bail!("CA certificate generation failed");
         }
         debug!("CA certificates created");
         self.ca = dir.join(format!("{}.pem", PREFIX));
@@ -146,14 +152,23 @@ impl Pki {
             .arg(format!("-hostname={}", hostnames.join(",")))
             .arg(csr)
             .stdout(Stdio::piped())
+            .stderr(Stdio::null())
             .spawn()?;
 
-        let pipe = cfssl.stdout.take().unwrap();
-        Command::new("cfssljson")
+        let pipe = cfssl
+            .stdout
+            .take()
+            .ok_or_else(|| format_err!("unable to get stdout"))?;
+        let status = Command::new("cfssljson")
             .arg("-bare")
             .arg(dir.join(name))
             .stdin(pipe)
-            .output()?;
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if !status.success() {
+            bail!("cfssl command failed");
+        }
         debug!("Certificate created for {}", name);
 
         Ok((
