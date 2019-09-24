@@ -1,5 +1,6 @@
 mod config;
 mod crio;
+mod encryptionconfig;
 mod etcd;
 mod kubeconfig;
 mod pki;
@@ -8,9 +9,10 @@ mod process;
 pub use config::Config;
 
 use crio::Crio;
+use encryptionconfig::EncryptionConfig;
 use etcd::Etcd;
 use failure::{bail, Fallible};
-use kubeconfig::Kubeconfig;
+use kubeconfig::KubeConfig;
 use pki::Pki;
 
 use rayon::scope;
@@ -20,7 +22,8 @@ pub struct Kubernix {
     etcd: Etcd,
     crio: Crio,
     pki: Pki,
-    kubeconfig: Kubeconfig,
+    kubeconfig: KubeConfig,
+    encryptionconfig: EncryptionConfig,
 }
 
 impl Kubernix {
@@ -28,11 +31,12 @@ impl Kubernix {
         // Setup the PKI
         let pki = Pki::new(config)?;
 
-        // Setup the kubeconfigs
-        let kubeconfig = Kubeconfig::new(config, &pki)?;
+        // Setup the configs
+        let kubeconfig = KubeConfig::new(config, &pki)?;
+        let encryptionconfig = EncryptionConfig::new(config)?;
 
         // Create the log dir
-        create_dir_all(&config.log.dir)?;
+        create_dir_all(config.root.join(&config.log.dir))?;
 
         // Spawn the processes
         let mut crio_result: Option<Fallible<Crio>> = None;
@@ -49,6 +53,7 @@ impl Kubernix {
                     etcd: e?,
                     pki,
                     kubeconfig,
+                    encryptionconfig,
                 })
             }
             _ => bail!("Unable to spawn processes"),

@@ -4,7 +4,7 @@ use log::debug;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Child, Command, Stdio},
     thread,
     time::{Duration, Instant},
@@ -32,7 +32,9 @@ impl Process {
         let args: Vec<&str> =
             command.iter().map(|x| x.to_owned()).skip(1).collect();
 
-        let log_file = Path::new(&config.log.dir).join(format!("{}.log", cmd));
+        let log_file = &config
+            .root
+            .join(config.log.dir.join(format!("{}.log", cmd)));
         let out_file = File::create(&log_file)?;
         let err_file = out_file.try_clone()?;
 
@@ -46,7 +48,7 @@ impl Process {
         Ok(Process {
             command: cmd.to_owned() + &args.join(" "),
             child,
-            log_file,
+            log_file: log_file.clone(),
         })
     }
 

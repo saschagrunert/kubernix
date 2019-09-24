@@ -1,12 +1,16 @@
 //! Configuration related structures
 use failure::Fallible;
 use serde::Deserialize;
-use std::fs::read_to_string;
+use std::{fs::read_to_string, path::PathBuf};
 use toml;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
 /// The global configuration
 pub struct Config {
+    /// The root path during runtime
+    pub root: PathBuf,
+
     /// The logger configuration
     pub log: LogConfig,
 
@@ -34,7 +38,7 @@ pub struct LogConfig {
     pub level: String,
 
     /// The logging directory for spawned processes
-    pub dir: String,
+    pub dir: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -42,7 +46,7 @@ pub struct LogConfig {
 /// The PKI configuration
 pub struct PkiConfig {
     /// The directory for created certificates
-    pub dir: String,
+    pub dir: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -50,5 +54,5 @@ pub struct PkiConfig {
 /// The Kube configuration
 pub struct KubeConfig {
     /// The directory for created configs
-    pub dir: String,
+    pub dir: PathBuf,
 }

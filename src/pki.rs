@@ -27,7 +27,7 @@ pub struct Pki {
 impl Pki {
     pub fn new(config: &Config) -> Fallible<Pki> {
         // Create the target dir
-        let pki_dir = Path::new(&config.pki.dir);
+        let pki_dir = &config.root.join(&config.pki.dir);
         create_dir_all(pki_dir)?;
 
         let mut pki = Pki::default();

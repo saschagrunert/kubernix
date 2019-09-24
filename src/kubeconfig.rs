@@ -8,20 +8,20 @@ use std::{
 };
 
 #[derive(Default)]
-pub struct Kubeconfig {
+pub struct KubeConfig {
     proxy: PathBuf,
     controller_manager: PathBuf,
     scheduler: PathBuf,
     admin: PathBuf,
 }
 
-impl Kubeconfig {
-    pub fn new(config: &Config, pki: &Pki) -> Fallible<Kubeconfig> {
+impl KubeConfig {
+    pub fn new(config: &Config, pki: &Pki) -> Fallible<KubeConfig> {
         // Create the target dir
-        let kube_dir = Path::new(&config.kube.dir);
+        let kube_dir = &config.root.join(&config.kube.dir);
         create_dir_all(kube_dir)?;
 
-        let mut kube = Kubeconfig::default();
+        let mut kube = KubeConfig::default();
         kube.setup_proxy(kube_dir, &pki)?;
         kube.setup_controller_manager(kube_dir, &pki)?;
         kube.setup_scheduler(kube_dir, &pki)?;

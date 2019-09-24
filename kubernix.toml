@@ -1,3 +1,5 @@
+root = run
+
 [log]
 dir = "log"
 level = "debug"
