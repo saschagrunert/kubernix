@@ -60,20 +60,15 @@ impl Process {
             self.command, pattern
         );
         let now = Instant::now();
+        let file = File::open(&self.log_file)?;
+        let reader = BufReader::new(file);
 
         while now.elapsed().as_secs() < READYNESS_TIMEOUT {
-            let file = File::open(&self.log_file)?;
-            let reader = BufReader::new(file);
-            let line = reader
-                .lines()
-                .filter_map(|line| line.ok())
-                .take_while(|_| now.elapsed().as_secs() < READYNESS_TIMEOUT)
-                .find(|line| line.find(pattern).is_some())
-                .ok_or_else(|| {
-                    format_err!("Timed out waiting for process to become ready")
-                });
-            if let Ok(l) = line {
-                debug!("Found pattern '{}' in line '{}'", pattern, l);
+            let mut line = String::new();
+            reader.read_line(&mut line)?;
+               
+            if line.contains(pattern) {
+                debug!("Found pattern '{}' in line '{}'", pattern, line);
                 return Ok(());
             }
             // Don't push too hard
