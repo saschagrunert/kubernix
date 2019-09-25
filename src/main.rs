@@ -46,5 +46,6 @@ fn run() -> Fallible<()> {
 
     // Cleanup on sigint
     while running.load(Ordering::SeqCst) {}
+    info!("Cleaning up");
     kube.stop()
 }
