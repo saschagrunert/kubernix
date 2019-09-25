@@ -21,11 +21,12 @@ impl APIServer {
         let dir = config.root.join("api-server");
         create_dir_all(&dir)?;
 
-        let mut process = Process::new(
+        let process = Process::new(
             config,
             &[
                 "kube-apiserver".to_owned(),
-                "--advertise-address=127.0.0.1".to_owned(),
+                // TODO: make generic
+                "--advertise-address=10.0.0.21".to_owned(),
                 "--allow-privileged=true".to_owned(),
                 "--audit-log-maxage=30".to_owned(),
                 "--audit-log-maxbackup=3".to_owned(),
