@@ -17,9 +17,10 @@ use failure::{bail, Fallible};
 use kubeconfig::KubeConfig;
 use pki::Pki;
 
+use failure::format_err;
 use log::info;
 use rayon::scope;
-use std::fs::create_dir_all;
+use std::{fs::create_dir_all, process::Command};
 
 const ASSETS_DIR: &str = "assets";
 
@@ -34,8 +35,12 @@ pub struct Kubernix {
 
 impl Kubernix {
     pub fn new(config: &Config) -> Fallible<Kubernix> {
+        // Retrieve the local IP
+        let ip = Self::local_ip()?;
+        info!("Using local IP {}", ip);
+
         // Setup the PKI
-        let pki = Pki::new(config)?;
+        let pki = Pki::new(config, &ip)?;
 
         // Setup the configs
         let kubeconfig = KubeConfig::new(config, &pki)?;
@@ -53,7 +58,7 @@ impl Kubernix {
             s.spawn(|_| etcd_result = Some(Etcd::new(config, &pki)));
         });
 
-        let apiserver = APIServer::new(config, &pki, &encryptionconfig)?;
+        let apiserver = APIServer::new(config, &ip, &pki, &encryptionconfig)?;
 
         match (crio_result, etcd_result) {
             (Some(c), Some(e)) => {
@@ -72,6 +77,23 @@ impl Kubernix {
 
     pub fn stop(&mut self) -> Fallible<()> {
         self.crio.stop()?;
+        self.apiserver.stop()?;
         self.etcd.stop()
+    }
+
+    fn local_ip() -> Fallible<String> {
+        let cmd = Command::new("ip")
+            .arg("route")
+            .arg("get")
+            .arg("1.2.3.4")
+            .output()?;
+        if !cmd.status.success() {
+            bail!("unable to retrieve local IP")
+        }
+        let out = String::from_utf8(cmd.stdout)?;
+        let ip = out.split_whitespace().nth(6).ok_or_else(|| {
+            format_err!("Different ip command output expected")
+        })?;
+        Ok(ip.to_owned())
     }
 }

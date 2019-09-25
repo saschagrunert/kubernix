@@ -13,6 +13,7 @@ pub struct APIServer {
 impl APIServer {
     pub fn new(
         config: &Config,
+        ip: &str,
         pki: &Pki,
         encryptionconfig: &EncryptionConfig,
     ) -> Fallible<APIServer> {
@@ -21,12 +22,11 @@ impl APIServer {
         let dir = config.root.join("api-server");
         create_dir_all(&dir)?;
 
-        let process = Process::new(
+        let mut process = Process::new(
             config,
             &[
                 "kube-apiserver".to_owned(),
-                // TODO: make generic
-                "--advertise-address=10.0.0.21".to_owned(),
+                format!("--advertise-address={}", ip),
                 "--allow-privileged=true".to_owned(),
                 "--audit-log-maxage=30".to_owned(),
                 "--audit-log-maxbackup=3".to_owned(),
@@ -66,7 +66,7 @@ impl APIServer {
             ],
         )?;
 
-        //process.wait_ready("ready to serve client requests")?;
+        process.wait_ready("etcd ok")?;
         info!("API server is ready");
         Ok(APIServer { process })
     }

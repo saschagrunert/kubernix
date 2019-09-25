@@ -22,10 +22,11 @@ pub struct Pki {
     pub admin_cert: PathBuf,
     pub admin_key: PathBuf,
     pub ca: PathBuf,
+    ip: String,
 }
 
 impl Pki {
-    pub fn new(config: &Config) -> Fallible<Pki> {
+    pub fn new(config: &Config, ip: &str) -> Fallible<Pki> {
         info!("Generating certificates");
 
         // Create the target dir
@@ -33,6 +34,7 @@ impl Pki {
         create_dir_all(pki_dir)?;
 
         let mut pki = Pki::default();
+        pki.ip = ip.to_owned();
         pki.setup_ca(pki_dir)?;
         pki.setup_admin(pki_dir)?;
         pki.setup_controller_manager(pki_dir)?;
@@ -138,6 +140,7 @@ impl Pki {
     ) -> Fallible<(PathBuf, PathBuf)> {
         debug!("Creating certificate for {}", name);
         let hostnames = &[
+            &self.ip,
             "127.0.0.1",
             "kubernetes",
             "kubernetes.default",

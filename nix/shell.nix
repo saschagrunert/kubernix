@@ -11,6 +11,7 @@ pkgs.stdenv.mkDerivation {
     cri-o
     cri-tools
     etcd
+    iproute
     iptables
     kubernetes
     runc
