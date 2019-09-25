@@ -7,6 +7,7 @@ pkgs.stdenv.mkDerivation {
     cargo
     cfssl
     conmon
+    cni-plugins
     cri-o
     etcd
     iptables

@@ -1,4 +1,4 @@
-use crate::Config;
+use crate::{Config, ASSETS_DIR};
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
 use std::{
@@ -6,8 +6,6 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
-
-const ASSETS_DIR: &str = "assets";
 
 #[derive(Default)]
 pub struct Pki {

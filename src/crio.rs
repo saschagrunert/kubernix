@@ -1,8 +1,9 @@
-use crate::{config::Config, process::Process};
+use crate::{process::Process, Config, ASSETS_DIR};
 use failure::{format_err, Fallible};
 use log::info;
 use std::{
     env,
+    fs::{copy, create_dir_all},
     path::{Path, PathBuf},
 };
 
@@ -15,12 +16,34 @@ impl Crio {
         info!("Starting CRI-O");
         let conmon = Self::find_executable("conmon")
             .ok_or_else(|| format_err!("Unable to find conmon in $PATH"))?;
+
+        let bridge = Self::find_executable("bridge")
+            .ok_or_else(|| format_err!("Unable to find CNI bridge in $PATH"))?;
+        let cni = bridge
+            .parent()
+            .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
+
+        let dir = config.root.join("crio");
+        create_dir_all(&dir)?;
+
+        let cni_config = dir.join("cni");
+        create_dir_all(&cni_config)?;
+        let bridge_json = Path::new("bridge.json");
+        let cni_asset = Path::new(ASSETS_DIR).join(&bridge_json);
+        copy(cni_asset, cni_config.join(&bridge_json))?;
+
         let mut process = Process::new(
             config,
             &[
                 "crio".to_owned(),
-                format!("--log-level={}", config.log.level),
+                "--log-level=debug".to_owned(),
+                "--storage-driver=overlay".to_owned(),
                 format!("--conmon={}", conmon.display()),
+                format!("--listen={}", dir.join("crio.sock").display()),
+                format!("--root={}", dir.join("storage").display()),
+                format!("--runroot={}", dir.join("run").display()),
+                format!("--cni-config-dir={}", cni_config.display()),
+                format!("--cni-plugin-dir={}", cni.display()),
             ],
         )?;
 

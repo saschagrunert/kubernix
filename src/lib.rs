@@ -19,6 +19,8 @@ use log::info;
 use rayon::scope;
 use std::fs::create_dir_all;
 
+const ASSETS_DIR: &str = "assets";
+
 pub struct Kubernix {
     etcd: Etcd,
     crio: Crio,
