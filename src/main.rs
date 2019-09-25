@@ -1,16 +1,24 @@
 use clap::{crate_version, load_yaml, App};
 use failure::{format_err, Fallible};
 use kubernix::{Config, Kubernix};
-use log::info;
+use log::{error, info};
 use std::{
     env::set_var,
+    process::exit,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
 };
 
-pub fn main() -> Fallible<()> {
+pub fn main() {
+    if let Err(e) = run() {
+        error!("{}", e);
+        exit(1);
+    }
+}
+
+fn run() -> Fallible<()> {
     // Parse CLI arguments
     let yaml = load_yaml!("cli.yaml");
     let matches = App::from_yaml(yaml).version(crate_version!()).get_matches();
@@ -38,6 +46,5 @@ pub fn main() -> Fallible<()> {
 
     // Cleanup on sigint
     while running.load(Ordering::SeqCst) {}
-    info!("Cleaning up");
     kube.stop()
 }

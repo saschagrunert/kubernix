@@ -9,6 +9,7 @@ pkgs.stdenv.mkDerivation {
     conmon
     cni-plugins
     cri-o
+    cri-tools
     etcd
     iptables
     kubernetes
