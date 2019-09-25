@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
     process::{Command, Stdio},
     sync::mpsc::{channel, Sender},
-    thread::{self, JoinHandle},
+    thread,
     time::Instant,
 };
 

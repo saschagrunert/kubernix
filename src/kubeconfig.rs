@@ -1,6 +1,6 @@
 use crate::{pki::Pki, Config};
 use failure::{bail, Fallible};
-use log::debug;
+use log::{debug, info};
 use std::{
     fs::create_dir_all,
     path::{Path, PathBuf},
@@ -17,6 +17,8 @@ pub struct KubeConfig {
 
 impl KubeConfig {
     pub fn new(config: &Config, pki: &Pki) -> Fallible<KubeConfig> {
+        info!("Creating kubeconfigs");
+
         // Create the target dir
         let kube_dir = &config.root.join(&config.kube.dir);
         create_dir_all(kube_dir)?;

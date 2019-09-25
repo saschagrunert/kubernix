@@ -1,6 +1,6 @@
 use crate::{config::Config, pki::Pki, process::Process};
 use failure::Fallible;
-use log::debug;
+use log::info;
 
 pub struct Etcd {
     process: Process,
@@ -8,7 +8,7 @@ pub struct Etcd {
 
 impl Etcd {
     pub fn new(config: &Config, pki: &Pki) -> Fallible<Etcd> {
-        debug!("Starting etcd");
+        info!("Starting etcd");
         let mut process = Process::new(
             config,
             &[
@@ -35,7 +35,7 @@ impl Etcd {
         )?;
 
         process.wait_ready("ready to serve client requests")?;
-        debug!("etcd is ready");
+        info!("etcd is ready");
         Ok(Etcd { process })
     }
 

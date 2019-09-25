@@ -15,6 +15,7 @@ use failure::{bail, Fallible};
 use kubeconfig::KubeConfig;
 use pki::Pki;
 
+use log::info;
 use rayon::scope;
 use std::fs::create_dir_all;
 
@@ -39,6 +40,7 @@ impl Kubernix {
         create_dir_all(config.root.join(&config.log.dir))?;
 
         // Spawn the processes
+        info!("Starting processes");
         let mut crio_result: Option<Fallible<Crio>> = None;
         let mut etcd_result: Option<Fallible<Etcd>> = None;
         scope(|s| {

@@ -1,15 +1,18 @@
 use crate::Config;
 use base64::encode;
 use failure::Fallible;
+use log::info;
 use rand::{thread_rng, Rng};
 use std::{fs, path::PathBuf};
 
 pub struct EncryptionConfig {
-    path: PathBuf,
+    pub path: PathBuf,
 }
 
 impl EncryptionConfig {
     pub fn new(config: &Config) -> Fallible<EncryptionConfig> {
+        info!("Creating encryptionconfig");
+
         let rnd = thread_rng().gen::<[u8; 32]>();
         let b64 = encode(&rnd);
         let yml = format!(

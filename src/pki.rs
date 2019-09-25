@@ -1,6 +1,6 @@
 use crate::Config;
 use failure::{bail, format_err, Fallible};
-use log::debug;
+use log::{debug, info};
 use std::{
     fs::create_dir_all,
     path::{Path, PathBuf},
@@ -26,6 +26,8 @@ pub struct Pki {
 
 impl Pki {
     pub fn new(config: &Config) -> Fallible<Pki> {
+        info!("Generating certificates");
+
         // Create the target dir
         let pki_dir = &config.root.join(&config.pki.dir);
         create_dir_all(pki_dir)?;

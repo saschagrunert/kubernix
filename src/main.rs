@@ -33,7 +33,7 @@ pub fn main() -> Fallible<()> {
     })?;
 
     // Run kubernix
-    info!("Starting processes");
+    info!("Starting kubernix");
     let mut kube = Kubernix::new(&config)?;
 
     // Cleanup on sigint

@@ -1,6 +1,6 @@
 use crate::{config::Config, process::Process};
 use failure::{format_err, Fallible};
-use log::debug;
+use log::info;
 use std::{
     env,
     path::{Path, PathBuf},
@@ -12,7 +12,7 @@ pub struct Crio {
 
 impl Crio {
     pub fn new(config: &Config) -> Fallible<Crio> {
-        debug!("Starting CRI-O");
+        info!("Starting CRI-O");
         let conmon = Self::find_executable("conmon")
             .ok_or_else(|| format_err!("Unable to find conmon in $PATH"))?;
         let mut process = Process::new(
@@ -25,7 +25,7 @@ impl Crio {
         )?;
 
         process.wait_ready("sandboxes:")?;
-        debug!("CRI-O is ready");
+        info!("CRI-O is ready");
         Ok(Crio { process })
     }
 
