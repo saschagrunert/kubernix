@@ -1,3 +1,4 @@
+mod apiserver;
 mod config;
 mod crio;
 mod encryptionconfig;
@@ -8,6 +9,7 @@ mod process;
 
 pub use config::Config;
 
+use apiserver::APIServer;
 use crio::Crio;
 use encryptionconfig::EncryptionConfig;
 use etcd::Etcd;
@@ -24,6 +26,7 @@ const ASSETS_DIR: &str = "assets";
 pub struct Kubernix {
     etcd: Etcd,
     crio: Crio,
+    apiserver: APIServer,
     pki: Pki,
     kubeconfig: KubeConfig,
     encryptionconfig: EncryptionConfig,
@@ -50,11 +53,14 @@ impl Kubernix {
             s.spawn(|_| etcd_result = Some(Etcd::new(config, &pki)));
         });
 
+        let apiserver = APIServer::new(config, &pki, &encryptionconfig)?;
+
         match (crio_result, etcd_result) {
             (Some(c), Some(e)) => {
                 return Ok(Kubernix {
                     crio: c?,
                     etcd: e?,
+                    apiserver,
                     pki,
                     kubeconfig,
                     encryptionconfig,

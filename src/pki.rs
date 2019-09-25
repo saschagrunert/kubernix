@@ -17,6 +17,8 @@ pub struct Pki {
     pub controller_manager_key: PathBuf,
     pub scheduler_cert: PathBuf,
     pub scheduler_key: PathBuf,
+    pub service_account_cert: PathBuf,
+    pub service_account_key: PathBuf,
     pub admin_cert: PathBuf,
     pub admin_key: PathBuf,
     pub ca: PathBuf,
@@ -120,11 +122,11 @@ impl Pki {
     }
 
     fn setup_service_account(&mut self, dir: &Path) -> Fallible<()> {
-        self.generate(
-            dir,
-            "service-account",
-            "assets/service-account-csr.json",
-        )?;
+        const PREFIX: &str = "service-account";
+        let (c, k) =
+            self.generate(dir, PREFIX, "assets/service-account-csr.json")?;
+        self.service_account_cert = c;
+        self.service_account_key = k;
         Ok(())
     }
 
