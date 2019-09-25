@@ -1,13 +1,14 @@
 use crate::Config;
 use failure::{bail, format_err, Fallible};
-use log::debug;
+use log::{debug, error};
 use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::PathBuf,
-    process::{Child, Command, Stdio},
-    thread,
-    time::{Duration, Instant},
+    process::{Command, Stdio},
+    sync::mpsc::{channel, Sender},
+    thread::{self, JoinHandle},
+    time::Instant,
 };
 
 /// The maximum wait time for processes to become ready
@@ -16,20 +17,20 @@ const READYNESS_TIMEOUT: u64 = 30;
 /// A general process abstraction
 pub struct Process {
     command: String,
-    child: Child,
+    kill: Sender<()>,
     log_file: PathBuf,
 }
 
 impl Process {
     /// Creates a new `Process` instance by spawning the provided command `cmd`.
     /// If the process creation fails, an `Error` will be returned.
-    pub fn new(config: &Config, command: &[&str]) -> Fallible<Process> {
+    pub fn new(config: &Config, command: &[String]) -> Fallible<Process> {
         // Prepare the commands
         let cmd = command
             .get(0)
             .map(|x| x.to_owned())
             .ok_or_else(|| format_err!("No valid command provided"))?;
-        let args: Vec<&str> =
+        let args: Vec<String> =
             command.iter().map(|x| x.to_owned()).skip(1).collect();
 
         let log_file = &config
@@ -39,15 +40,38 @@ impl Process {
         let err_file = out_file.try_clone()?;
 
         // Spawn the process child
-        let child = Command::new(cmd)
+        let mut child = Command::new(cmd.clone())
             .args(&args)
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file))
             .spawn()?;
 
+        let (kill_tx, kill_rx) = channel();
+        let c = cmd.clone();
+        thread::spawn(move || loop {
+            // Verify that the process is still running
+            match child.try_wait() {
+                Ok(Some(s)) => {
+                    error!("Process '{}' died: {}", c, s);
+                    break;
+                }
+                Err(e) => error!("Unable to wait for process: {}", e),
+                Ok(None) => {} // process still running
+            }
+
+            // Kill the process if requested
+            if kill_rx.try_recv().is_ok() {
+                debug!("Stopping process '{}'", c);
+                if child.kill().is_err() {
+                    error!("Unable to kill process '{}'", c)
+                }
+                break;
+            }
+        });
+
         Ok(Process {
-            command: cmd.to_owned() + " " + &args.join(" "),
-            child,
+            command: format!("{} {}", cmd, args.join(" ")),
+            kill: kill_tx,
             log_file: log_file.clone(),
         })
     }
@@ -78,7 +102,7 @@ impl Process {
 
     /// Stopping the process by killing it
     pub fn stop(&mut self) -> Fallible<()> {
-        self.child.kill()?;
+        self.kill.send(())?;
         Ok(())
     }
 }

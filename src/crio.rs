@@ -18,9 +18,9 @@ impl Crio {
         let mut process = Process::new(
             config,
             &[
-                "crio",
-                &format!("--log-level={}", config.log.level),
-                &format!("--conmon={}", conmon.display()),
+                "crio".to_owned(),
+                format!("--log-level={}", config.log.level),
+                format!("--conmon={}", conmon.display()),
             ],
         )?;
 
