@@ -18,13 +18,13 @@ impl Scheduler {
         create_dir_all(&dir)?;
 
         let yml = format!(
-            "---
+            r#"---
 apiVersion: kubescheduler.config.k8s.io/v1alpha1
 kind: KubeSchedulerConfiguration
 clientConnection:
-  kubeconfig: \"{}\"
+  kubeconfig: "{}"
 leaderElection:
-  leaderElect: true",
+  leaderElect: true"#,
             kubeconfig.scheduler.display()
         );
         let cfg = &dir.join("config.yml");
