@@ -8,6 +8,7 @@ mod kubeconfig;
 mod kubelet;
 mod pki;
 mod process;
+mod proxy;
 mod scheduler;
 
 pub use config::Config;
@@ -21,6 +22,7 @@ use failure::{bail, Fallible};
 use kubeconfig::KubeConfig;
 use kubelet::Kubelet;
 use pki::Pki;
+use proxy::Proxy;
 use scheduler::Scheduler;
 
 use failure::format_err;
@@ -40,6 +42,7 @@ pub struct Kubernix {
     controllermanager: ControllerManager,
     scheduler: Scheduler,
     kubelet: Kubelet,
+    proxy: Proxy,
 }
 
 impl Kubernix {
@@ -69,6 +72,7 @@ impl Kubernix {
             None;
         let mut scheduler_result: Option<Fallible<Scheduler>> = None;
         let mut kubelet_result: Option<Fallible<Kubelet>> = None;
+        let mut proxy_result: Option<Fallible<Proxy>> = None;
 
         // Full path to the CRI socket
         let socket = config.root.join(&config.crio.dir).join("crio.sock");
@@ -96,6 +100,7 @@ impl Kubernix {
                 kubelet_result =
                     Some(Kubelet::new(config, &pki, &kubeconfig, &socket))
             });
+            s.spawn(|_| proxy_result = Some(Proxy::new(config, &kubeconfig)));
         });
 
         match (
@@ -105,6 +110,7 @@ impl Kubernix {
             controllermanager_result,
             scheduler_result,
             kubelet_result,
+            proxy_result,
         ) {
             (
                 Some(Ok(crio)),
@@ -113,6 +119,7 @@ impl Kubernix {
                 Some(Ok(controllermanager)),
                 Some(Ok(scheduler)),
                 Some(Ok(kubelet)),
+                Some(Ok(proxy)),
             ) => {
                 info!("Everything is up and running");
                 Ok(Kubernix {
@@ -125,6 +132,7 @@ impl Kubernix {
                     controllermanager,
                     scheduler,
                     kubelet,
+                    proxy,
                 })
             }
             _ => bail!("Unable to spawn processes"),
@@ -132,6 +140,7 @@ impl Kubernix {
     }
 
     pub fn stop(&mut self) -> Fallible<()> {
+        self.proxy.stop()?;
         self.kubelet.stop()?;
         self.apiserver.stop()?;
         self.controllermanager.stop()?;
