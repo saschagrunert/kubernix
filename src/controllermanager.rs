@@ -44,7 +44,7 @@ impl ControllerManager {
             ],
         )?;
 
-        process.wait_ready("Caches are synched")?;
+        process.wait_ready("Serving securely")?;
         info!("Controller Manager is ready");
         Ok(ControllerManager { process })
     }
