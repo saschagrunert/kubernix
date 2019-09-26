@@ -87,16 +87,23 @@ impl Kubernix {
             controllermanager_result,
             scheduler_result,
         ) {
-            (Some(c), Some(e), Some(a), Some(m), Some(s)) => {
-                return Ok(Kubernix {
+            (
+                Some(Ok(crio)),
+                Some(Ok(etcd)),
+                Some(Ok(apiserver)),
+                Some(Ok(controllermanager)),
+                Some(Ok(scheduler)),
+            ) => {
+                info!("Everything is up and running");
+                Ok(Kubernix {
                     pki,
                     kubeconfig,
                     encryptionconfig,
-                    crio: c?,
-                    etcd: e?,
-                    apiserver: a?,
-                    controllermanager: m?,
-                    scheduler: s?,
+                    crio,
+                    etcd,
+                    apiserver,
+                    controllermanager,
+                    scheduler,
                 })
             }
             _ => bail!("Unable to spawn processes"),

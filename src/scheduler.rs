@@ -1,6 +1,4 @@
-use crate::{
-    config::Config, kubeconfig::KubeConfig, pki::Pki, process::Process,
-};
+use crate::{config::Config, kubeconfig::KubeConfig, process::Process};
 use failure::Fallible;
 use log::info;
 use std::fs::{self, create_dir_all};

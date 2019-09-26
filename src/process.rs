@@ -97,6 +97,8 @@ impl Process {
             }
         }
 
+        // Cleanup since process is not ready
+        self.stop()?;
         bail!("Timed out waiting for process to become ready")
     }
 
