@@ -9,6 +9,7 @@ dir = "pki"
 
 [kube]
 dir = "kube"
+service-cidr = "10.32.0.0/24"
 
 [crio]
 dir = "crio"
