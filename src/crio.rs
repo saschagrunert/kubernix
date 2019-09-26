@@ -1,4 +1,4 @@
-use crate::{process::Process, Config, ASSETS_DIR};
+use crate::{process::Process, Config};
 use failure::{format_err, Fallible};
 use log::info;
 use std::{
