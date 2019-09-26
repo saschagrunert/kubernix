@@ -29,8 +29,8 @@ impl Etcd {
                 format!("--key-file={}", pki.apiserver_key.display()),
                 format!("--peer-cert-file={}", pki.apiserver_cert.display()),
                 format!("--peer-key-file={}", pki.apiserver_key.display()),
-                format!("--peer-trusted-ca-file={}", pki.ca.display()),
-                format!("--trusted-ca-file={}", pki.ca.display()),
+                format!("--peer-trusted-ca-file={}", pki.ca_cert.display()),
+                format!("--trusted-ca-file={}", pki.ca_cert.display()),
             ],
         )?;
 

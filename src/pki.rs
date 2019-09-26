@@ -21,7 +21,8 @@ pub struct Pki {
     pub service_account_key: PathBuf,
     pub admin_cert: PathBuf,
     pub admin_key: PathBuf,
-    pub ca: PathBuf,
+    pub ca_cert: PathBuf,
+    pub ca_key: PathBuf,
     ip: String,
 }
 
@@ -72,7 +73,8 @@ impl Pki {
             bail!("CA certificate generation failed");
         }
         debug!("CA certificates created");
-        self.ca = dir.join(format!("{}.pem", PREFIX));
+        self.ca_cert = dir.join(format!("{}.pem", PREFIX));
+        self.ca_key = dir.join(format!("{}-key.pem", PREFIX));
         Ok(())
     }
 

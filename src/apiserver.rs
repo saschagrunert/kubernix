@@ -19,7 +19,7 @@ impl APIServer {
     ) -> Fallible<APIServer> {
         info!("Starting API sever");
 
-        let dir = config.root.join("api-server");
+        let dir = config.root.join("apiserver");
         create_dir_all(&dir)?;
 
         let mut process = Process::new(
@@ -34,8 +34,8 @@ impl APIServer {
                 format!("--audit-log-path={}", dir.join("audit.log").display()),
                 "--authorization-mode=Node,RBAC".to_owned(),
                 "--bind-address=0.0.0.0".to_owned(),
-                format!("--client-ca-file={}", pki.ca.display()),
-                format!("--etcd-cafile={}", pki.ca.display()),
+                format!("--client-ca-file={}", pki.ca_cert.display()),
+                format!("--etcd-cafile={}", pki.ca_cert.display()),
                 format!("--etcd-certfile={}", pki.apiserver_cert.display()),
                 format!("--etcd-keyfile={}", pki.apiserver_key.display()),
                 "--etcd-servers=https://127.0.0.1:2379".to_owned(),
@@ -44,7 +44,10 @@ impl APIServer {
                     "--encryption-provider-config={}",
                     encryptionconfig.path.display()
                 ),
-                format!("--kubelet-certificate-authority={}", pki.ca.display()),
+                format!(
+                    "--kubelet-certificate-authority={}",
+                    pki.ca_cert.display()
+                ),
                 format!(
                     "--kubelet-client-certificate={}",
                     pki.apiserver_cert.display()

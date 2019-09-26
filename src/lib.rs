@@ -1,5 +1,6 @@
 mod apiserver;
 mod config;
+mod controllermanager;
 mod crio;
 mod encryptionconfig;
 mod etcd;
@@ -10,6 +11,7 @@ mod process;
 pub use config::Config;
 
 use apiserver::APIServer;
+use controllermanager::ControllerManager;
 use crio::Crio;
 use encryptionconfig::EncryptionConfig;
 use etcd::Etcd;
@@ -25,12 +27,13 @@ use std::{fs::create_dir_all, process::Command};
 const ASSETS_DIR: &str = "assets";
 
 pub struct Kubernix {
-    etcd: Etcd,
-    crio: Crio,
-    apiserver: APIServer,
     pki: Pki,
     kubeconfig: KubeConfig,
     encryptionconfig: EncryptionConfig,
+    etcd: Etcd,
+    crio: Crio,
+    apiserver: APIServer,
+    controllermanager: ControllerManager,
 }
 
 impl Kubernix {
@@ -59,16 +62,19 @@ impl Kubernix {
         });
 
         let apiserver = APIServer::new(config, &ip, &pki, &encryptionconfig)?;
+        let controllermanager =
+            ControllerManager::new(config, &pki, &kubeconfig)?;
 
         match (crio_result, etcd_result) {
             (Some(c), Some(e)) => {
                 return Ok(Kubernix {
-                    crio: c?,
-                    etcd: e?,
-                    apiserver,
                     pki,
                     kubeconfig,
                     encryptionconfig,
+                    crio: c?,
+                    etcd: e?,
+                    apiserver,
+                    controllermanager,
                 })
             }
             _ => bail!("Unable to spawn processes"),
@@ -76,8 +82,9 @@ impl Kubernix {
     }
 
     pub fn stop(&mut self) -> Fallible<()> {
-        self.crio.stop()?;
         self.apiserver.stop()?;
+        self.controllermanager.stop()?;
+        self.crio.stop()?;
         self.etcd.stop()
     }
 

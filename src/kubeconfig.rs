@@ -9,10 +9,10 @@ use std::{
 
 #[derive(Default)]
 pub struct KubeConfig {
-    proxy: PathBuf,
-    controller_manager: PathBuf,
-    scheduler: PathBuf,
-    admin: PathBuf,
+    pub proxy: PathBuf,
+    pub controller_manager: PathBuf,
+    pub scheduler: PathBuf,
+    pub admin: PathBuf,
 }
 
 impl KubeConfig {
@@ -38,7 +38,7 @@ impl KubeConfig {
             dir,
             NAME,
             &format!("system:{}", NAME),
-            &pki.ca,
+            &pki.ca_cert,
             &pki.proxy_cert,
             &pki.proxy_key,
         )?;
@@ -56,7 +56,7 @@ impl KubeConfig {
             dir,
             NAME,
             &format!("system:{}", NAME),
-            &pki.ca,
+            &pki.ca_cert,
             &pki.controller_manager_cert,
             &pki.controller_manager_key,
         )?;
@@ -70,7 +70,7 @@ impl KubeConfig {
             dir,
             NAME,
             &format!("system:{}", NAME),
-            &pki.ca,
+            &pki.ca_cert,
             &pki.scheduler_cert,
             &pki.scheduler_key,
         )?;
@@ -84,7 +84,7 @@ impl KubeConfig {
             dir,
             NAME,
             NAME,
-            &pki.ca,
+            &pki.ca_cert,
             &pki.admin_cert,
             &pki.admin_key,
         )?;
