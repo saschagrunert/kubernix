@@ -39,11 +39,11 @@ impl Crio {
   "hairpinMode": true,
   "ipam": {
     "type": "host-local",
-    "routes": [{ "dst": "0.0.0.0/0" }, { "dst": "1100:200::1/24" }],
-    "ranges": [[{ "subnet": "10.88.0.0/16" }], [{ "subnet": "1100:200::/24" }]]
+    "routes": [{ "dst": "0.0.0.0/0" }],
+    "ranges": [[{ "subnet": "{}" }]]
   }
 }
-"#))?;
+"#, config.crio.cidr))?;
 
         let mut process = Process::new(
             config,
