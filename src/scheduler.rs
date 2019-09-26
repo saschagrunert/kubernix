@@ -12,7 +12,6 @@ pub struct Scheduler {
 impl Scheduler {
     pub fn new(
         config: &Config,
-        pki: &Pki,
         kubeconfig: &KubeConfig,
     ) -> Fallible<Scheduler> {
         info!("Starting Scheduler");

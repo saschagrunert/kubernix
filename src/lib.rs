@@ -59,27 +59,44 @@ impl Kubernix {
         info!("Starting processes");
         let mut crio_result: Option<Fallible<Crio>> = None;
         let mut etcd_result: Option<Fallible<Etcd>> = None;
+        let mut apiserver_result: Option<Fallible<APIServer>> = None;
+        let mut controllermanager_result: Option<Fallible<ControllerManager>> =
+            None;
+        let mut scheduler_result: Option<Fallible<Scheduler>> = None;
+
         scope(|s| {
             s.spawn(|_| crio_result = Some(Crio::new(config)));
-            s.spawn(|_| etcd_result = Some(Etcd::new(config, &pki)));
+            s.spawn(|_| {
+                etcd_result = Some(Etcd::new(config, &pki));
+                apiserver_result =
+                    Some(APIServer::new(config, &ip, &pki, &encryptionconfig));
+            });
+            s.spawn(|_| {
+                controllermanager_result =
+                    Some(ControllerManager::new(config, &pki, &kubeconfig))
+            });
+            s.spawn(|_| {
+                scheduler_result = Some(Scheduler::new(config, &kubeconfig))
+            });
         });
 
-        let apiserver = APIServer::new(config, &ip, &pki, &encryptionconfig)?;
-        let controllermanager =
-            ControllerManager::new(config, &pki, &kubeconfig)?;
-        let scheduler = Scheduler::new(config, &pki, &kubeconfig)?;
-
-        match (crio_result, etcd_result) {
-            (Some(c), Some(e)) => {
+        match (
+            crio_result,
+            etcd_result,
+            apiserver_result,
+            controllermanager_result,
+            scheduler_result,
+        ) {
+            (Some(c), Some(e), Some(a), Some(m), Some(s)) => {
                 return Ok(Kubernix {
                     pki,
                     kubeconfig,
                     encryptionconfig,
                     crio: c?,
                     etcd: e?,
-                    apiserver,
-                    controllermanager,
-                    scheduler,
+                    apiserver: a?,
+                    controllermanager: m?,
+                    scheduler: s?,
                 })
             }
             _ => bail!("Unable to spawn processes"),
@@ -105,7 +122,7 @@ impl Kubernix {
         }
         let out = String::from_utf8(cmd.stdout)?;
         let ip = out.split_whitespace().nth(6).ok_or_else(|| {
-            format_err!("Different ip command output expected")
+            format_err!("Different `ip` command output expected")
         })?;
         Ok(ip.to_owned())
     }
