@@ -7,6 +7,7 @@ mod etcd;
 mod kubeconfig;
 mod pki;
 mod process;
+mod scheduler;
 
 pub use config::Config;
 
@@ -18,6 +19,7 @@ use etcd::Etcd;
 use failure::{bail, Fallible};
 use kubeconfig::KubeConfig;
 use pki::Pki;
+use scheduler::Scheduler;
 
 use failure::format_err;
 use log::info;
@@ -34,6 +36,7 @@ pub struct Kubernix {
     crio: Crio,
     apiserver: APIServer,
     controllermanager: ControllerManager,
+    scheduler: Scheduler,
 }
 
 impl Kubernix {
@@ -64,6 +67,7 @@ impl Kubernix {
         let apiserver = APIServer::new(config, &ip, &pki, &encryptionconfig)?;
         let controllermanager =
             ControllerManager::new(config, &pki, &kubeconfig)?;
+        let scheduler = Scheduler::new(config, &pki, &kubeconfig)?;
 
         match (crio_result, etcd_result) {
             (Some(c), Some(e)) => {
@@ -75,6 +79,7 @@ impl Kubernix {
                     etcd: e?,
                     apiserver,
                     controllermanager,
+                    scheduler,
                 })
             }
             _ => bail!("Unable to spawn processes"),
@@ -84,6 +89,7 @@ impl Kubernix {
     pub fn stop(&mut self) -> Fallible<()> {
         self.apiserver.stop()?;
         self.controllermanager.stop()?;
+        self.scheduler.stop()?;
         self.crio.stop()?;
         self.etcd.stop()
     }
