@@ -17,7 +17,7 @@ impl APIServer {
         pki: &Pki,
         encryptionconfig: &EncryptionConfig,
     ) -> Fallible<APIServer> {
-        info!("Starting API sever");
+        info!("Starting API Server");
 
         let dir = config.root.join("apiserver");
         create_dir_all(&dir)?;
@@ -70,7 +70,7 @@ impl APIServer {
         )?;
 
         process.wait_ready("etcd ok")?;
-        info!("API server is ready");
+        info!("API Server is ready");
         Ok(APIServer { process })
     }
 
