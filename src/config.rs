@@ -63,6 +63,12 @@ pub struct PkiConfig {
 pub struct KubeConfig {
     /// The directory for created configs
     pub dir: PathBuf,
+
+    /// Cluster CIDR
+    pub clusterCidr: String,
+
+    /// Service CIDR
+    pub serviceCidr: String,
 }
 
 #[derive(Deserialize)]
@@ -71,4 +77,7 @@ pub struct KubeConfig {
 pub struct CrioConfig {
     /// The directory for CRI-O
     pub dir: PathBuf,
+
+    /// Container Networking CIDR
+    pub cidr: String,
 }
