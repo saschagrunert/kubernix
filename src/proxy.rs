@@ -36,7 +36,7 @@ clusterCIDR: "10.200.0.0/16"
             ],
         )?;
 
-        process.wait_ready("Successfully registered node")?;
+        process.wait_ready("Caches are synched")?;
         info!("Proxy is ready");
         Ok(Proxy { process })
     }
