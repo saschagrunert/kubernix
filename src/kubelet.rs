@@ -52,7 +52,7 @@ tlsPrivateKeyFile: "{}"
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
 
-        let process = Process::new(
+        let mut process = Process::new(
             config,
             &[
                 "kubelet".to_owned(),
@@ -70,7 +70,7 @@ tlsPrivateKeyFile: "{}"
             ],
         )?;
 
-        //process.wait_ready("etcd ok")?;
+        process.wait_ready("Successfully registered node")?;
         info!("Kubelet is ready");
         Ok(Kubelet { process })
     }
