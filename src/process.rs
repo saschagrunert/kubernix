@@ -6,6 +6,7 @@ use std::{
     io::{BufRead, BufReader},
     path::PathBuf,
     process::{Command, Stdio},
+    str,
     sync::mpsc::{channel, Sender},
     thread,
     time::Instant,
@@ -28,7 +29,7 @@ impl Process {
         // Prepare the commands
         let cmd = command
             .get(0)
-            .map(|x| x.to_owned())
+            .map(str::to_owned)
             .ok_or_else(|| format_err!("No valid command provided"))?;
         let args: Vec<String> =
             command.iter().map(|x| x.to_owned()).skip(1).collect();
