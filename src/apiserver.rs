@@ -82,7 +82,7 @@ impl APIServer {
 
     fn setup_rbac(dir: &Path, admin_config: &Path) -> Fallible<()> {
         debug!("Creating API Server RBAC rule for kubelet");
-        let yml = "---
+        let yml = r#"---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRole
 metadata:
@@ -93,7 +93,7 @@ metadata:
   name: system:kube-apiserver-to-kubelet
 rules:
   - apiGroups:
-      - \"\"
+      - ""
     resources:
       - nodes/proxy
       - nodes/stats
@@ -101,13 +101,13 @@ rules:
       - nodes/spec
       - nodes/metrics
     verbs:
-      - \"*\"
+      - "*"
 ---
 apiVersion: rbac.authorization.k8s.io/v1beta1
 kind: ClusterRoleBinding
 metadata:
   name: system:kube-apiserver
-  namespace: \"\"
+  namespace: ""
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -115,7 +115,7 @@ roleRef:
 subjects:
   - apiGroup: rbac.authorization.k8s.io
     kind: User
-    name: kubernetes";
+    name: kubernetes"#;
         let yml_file = dir.join("rbac.yml");
         fs::write(&yml_file, yml)?;
 
