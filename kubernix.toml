@@ -12,3 +12,4 @@ dir = "kube"
 
 [crio]
 dir = "crio"
+cidr = "10.88.0.0/16"
