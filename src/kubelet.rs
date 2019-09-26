@@ -40,12 +40,13 @@ authorization:
 clusterDomain: "cluster.local"
 clusterDNS:
   - "10.32.0.10"
-podCIDR: "10.88.0.0/16"
+podCIDR: "{}"
 runtimeRequestTimeout: "15m"
 tlsCertFile: "{}"
 tlsPrivateKeyFile: "{}"
 "#,
             pki.ca_cert.display(),
+            config.crio.cidr,
             pki.kubelet_cert.display(),
             pki.kubelet_key.display()
         );
