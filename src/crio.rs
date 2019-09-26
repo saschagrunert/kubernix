@@ -3,7 +3,7 @@ use failure::{format_err, Fallible};
 use log::info;
 use std::{
     env,
-    fs::{copy, create_dir_all},
+    fs::{create_dir_all, self},
     path::{Path, PathBuf},
 };
 
@@ -28,9 +28,22 @@ impl Crio {
 
         let cni_config = dir.join("cni");
         create_dir_all(&cni_config)?;
-        let bridge_json = Path::new("bridge.json");
-        let cni_asset = Path::new(ASSETS_DIR).join(&bridge_json);
-        copy(cni_asset, cni_config.join(&bridge_json))?;
+        let bridge_json = cni_config.join("bridge.json");
+        fs::write(bridge_json, format!(r#"{
+  "cniVersion": "0.3.1",
+  "name": "crio-bridge",
+  "type": "bridge",
+  "bridge": "cni0",
+  "isGateway": true,
+  "ipMasq": true,
+  "hairpinMode": true,
+  "ipam": {
+    "type": "host-local",
+    "routes": [{ "dst": "0.0.0.0/0" }, { "dst": "1100:200::1/24" }],
+    "ranges": [[{ "subnet": "10.88.0.0/16" }], [{ "subnet": "1100:200::/24" }]]
+  }
+}
+"#))?;
 
         let mut process = Process::new(
             config,
