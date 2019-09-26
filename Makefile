@@ -27,7 +27,7 @@ nixpkgs:
 
 .PHONY: shell
 shell:
-	$(call nix-shell-pure)
+	$(call nix-shell-pure,sudo)
 
 .PHONY: run
 run:

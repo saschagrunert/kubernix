@@ -68,8 +68,13 @@ impl Kubernix {
             s.spawn(|_| crio_result = Some(Crio::new(config)));
             s.spawn(|_| {
                 etcd_result = Some(Etcd::new(config, &pki));
-                apiserver_result =
-                    Some(APIServer::new(config, &ip, &pki, &encryptionconfig));
+                apiserver_result = Some(APIServer::new(
+                    config,
+                    &ip,
+                    &pki,
+                    &encryptionconfig,
+                    &kubeconfig,
+                ));
             });
             s.spawn(|_| {
                 controllermanager_result =

@@ -1,10 +1,14 @@
 use crate::{
-    config::Config, encryptionconfig::EncryptionConfig, pki::Pki,
-    process::Process,
+    config::Config, encryptionconfig::EncryptionConfig, kubeconfig::KubeConfig,
+    pki::Pki, process::Process,
 };
-use failure::Fallible;
-use log::info;
-use std::fs::create_dir_all;
+use failure::{bail, Fallible};
+use log::{debug, info};
+use std::{
+    fs::{self, create_dir_all},
+    path::Path,
+    process::{Command, Stdio},
+};
 
 pub struct APIServer {
     process: Process,
@@ -16,6 +20,7 @@ impl APIServer {
         ip: &str,
         pki: &Pki,
         encryptionconfig: &EncryptionConfig,
+        kubeconfig: &KubeConfig,
     ) -> Fallible<APIServer> {
         info!("Starting API Server");
 
@@ -70,8 +75,64 @@ impl APIServer {
         )?;
 
         process.wait_ready("etcd ok")?;
+        Self::setup_rbac(&dir, &kubeconfig.admin)?;
         info!("API Server is ready");
         Ok(APIServer { process })
+    }
+
+    fn setup_rbac(dir: &Path, admin_config: &Path) -> Fallible<()> {
+        debug!("Creating API Server RBAC rule for kubelet");
+        let yml = "---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  annotations:
+    rbac.authorization.kubernetes.io/autoupdate: \"true\"
+  labels:
+    kubernetes.io/bootstrapping: rbac-defaults
+  name: system:kube-apiserver-to-kubelet
+rules:
+  - apiGroups:
+      - \"\"
+    resources:
+      - nodes/proxy
+      - nodes/stats
+      - nodes/log
+      - nodes/spec
+      - nodes/metrics
+    verbs:
+      - \"*\"
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: system:kube-apiserver
+  namespace: \"\"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:kube-apiserver-to-kubelet
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: User
+    name: kubernetes";
+        let yml_file = dir.join("rbac.yml");
+        fs::write(&yml_file, yml)?;
+
+        let status = Command::new("kubectl")
+            .arg("apply")
+            .arg(format!("--kubeconfig={}", admin_config.display()))
+            .arg("-f")
+            .arg(yml_file)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()?;
+        if !status.success() {
+            bail!("kubectl apply command failed");
+        }
+
+        debug!("API Server RBAC rule created");
+        Ok(())
     }
 
     pub fn stop(&mut self) -> Fallible<()> {
