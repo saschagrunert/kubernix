@@ -21,9 +21,10 @@ apiVersion: kubeproxy.config.k8s.io/v1alpha1
 clientConnection:
   kubeconfig: "{}"
 mode: "iptables"
-clusterCIDR: "10.200.0.0/16"
+clusterCIDR: "{}"
 "#,
             kubeconfig.proxy.display(),
+            config.kube.clusterCidr,
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
