@@ -9,6 +9,7 @@ use std::{
 
 #[derive(Default)]
 pub struct KubeConfig {
+    pub kubelet: PathBuf,
     pub proxy: PathBuf,
     pub controller_manager: PathBuf,
     pub scheduler: PathBuf,
@@ -16,7 +17,12 @@ pub struct KubeConfig {
 }
 
 impl KubeConfig {
-    pub fn new(config: &Config, pki: &Pki) -> Fallible<KubeConfig> {
+    pub fn new(
+        config: &Config,
+        pki: &Pki,
+        ip: &str,
+        hostname: &str,
+    ) -> Fallible<KubeConfig> {
         info!("Creating kubeconfigs");
 
         // Create the target dir
@@ -24,18 +30,41 @@ impl KubeConfig {
         create_dir_all(kube_dir)?;
 
         let mut kube = KubeConfig::default();
-        kube.setup_proxy(kube_dir, &pki)?;
-        kube.setup_controller_manager(kube_dir, &pki)?;
-        kube.setup_scheduler(kube_dir, &pki)?;
-        kube.setup_admin(kube_dir, &pki)?;
+        const LOCALHOST: &str = "127.0.0.1";
+        kube.setup_kubelet(kube_dir, &pki, ip, hostname)?;
+        kube.setup_proxy(kube_dir, &pki, ip)?;
+        kube.setup_controller_manager(kube_dir, &pki, LOCALHOST)?;
+        kube.setup_scheduler(kube_dir, &pki, LOCALHOST)?;
+        kube.setup_admin(kube_dir, &pki, LOCALHOST)?;
 
         Ok(kube)
     }
 
-    fn setup_proxy(&mut self, dir: &Path, pki: &Pki) -> Fallible<()> {
+    fn setup_kubelet(
+        &mut self,
+        dir: &Path,
+        pki: &Pki,
+        ip: &str,
+        hostname: &str,
+    ) -> Fallible<()> {
+        let target = self.setup_kubeconfig(
+            dir,
+            ip,
+            hostname,
+            &format!("system:node:{}", hostname),
+            &pki.ca_cert,
+            &pki.kubelet_cert,
+            &pki.kubelet_key,
+        )?;
+        self.kubelet = target;
+        Ok(())
+    }
+
+    fn setup_proxy(&mut self, dir: &Path, pki: &Pki, ip: &str) -> Fallible<()> {
         const NAME: &str = "kube-proxy";
         let target = self.setup_kubeconfig(
             dir,
+            ip,
             NAME,
             &format!("system:{}", NAME),
             &pki.ca_cert,
@@ -50,10 +79,12 @@ impl KubeConfig {
         &mut self,
         dir: &Path,
         pki: &Pki,
+        ip: &str,
     ) -> Fallible<()> {
         const NAME: &str = "kube-controller-manager";
         let target = self.setup_kubeconfig(
             dir,
+            ip,
             NAME,
             &format!("system:{}", NAME),
             &pki.ca_cert,
@@ -64,10 +95,16 @@ impl KubeConfig {
         Ok(())
     }
 
-    fn setup_scheduler(&mut self, dir: &Path, pki: &Pki) -> Fallible<()> {
+    fn setup_scheduler(
+        &mut self,
+        dir: &Path,
+        pki: &Pki,
+        ip: &str,
+    ) -> Fallible<()> {
         const NAME: &str = "kube-scheduler";
         let target = self.setup_kubeconfig(
             dir,
+            ip,
             NAME,
             &format!("system:{}", NAME),
             &pki.ca_cert,
@@ -78,10 +115,11 @@ impl KubeConfig {
         Ok(())
     }
 
-    fn setup_admin(&mut self, dir: &Path, pki: &Pki) -> Fallible<()> {
+    fn setup_admin(&mut self, dir: &Path, pki: &Pki, ip: &str) -> Fallible<()> {
         const NAME: &str = "admin";
         let target = self.setup_kubeconfig(
             dir,
+            ip,
             NAME,
             NAME,
             &pki.ca_cert,
@@ -95,6 +133,7 @@ impl KubeConfig {
     fn setup_kubeconfig(
         &mut self,
         dir: &Path,
+        ip: &str,
         name: &str,
         user: &str,
         ca: &Path,
@@ -111,7 +150,7 @@ impl KubeConfig {
             .arg("kubernetes")
             .arg(format!("--certificate-authority={}", ca.display()))
             .arg("--embed-certs=true")
-            .arg("--server=https://127.0.0.1:6443")
+            .arg(format!("--server=https://{}:6443", ip))
             .arg(&kubeconfig_arg)
             .stdout(Stdio::null())
             .stderr(Stdio::null())

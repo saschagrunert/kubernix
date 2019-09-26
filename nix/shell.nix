@@ -7,6 +7,7 @@ pkgs.stdenv.mkDerivation {
     cargo
     cfssl
     conmon
+    conntrack-tools
     cni-plugins
     cri-o
     cri-tools
@@ -15,6 +16,7 @@ pkgs.stdenv.mkDerivation {
     iptables
     kubernetes
     runc
+    socat
     rustPackages.clippy
     utillinux
   ];

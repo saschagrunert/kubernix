@@ -5,6 +5,7 @@ mod crio;
 mod encryptionconfig;
 mod etcd;
 mod kubeconfig;
+mod kubelet;
 mod pki;
 mod process;
 mod scheduler;
@@ -18,6 +19,7 @@ use encryptionconfig::EncryptionConfig;
 use etcd::Etcd;
 use failure::{bail, Fallible};
 use kubeconfig::KubeConfig;
+use kubelet::Kubelet;
 use pki::Pki;
 use scheduler::Scheduler;
 
@@ -37,19 +39,22 @@ pub struct Kubernix {
     apiserver: APIServer,
     controllermanager: ControllerManager,
     scheduler: Scheduler,
+    kubelet: Kubelet,
 }
 
 impl Kubernix {
     pub fn new(config: &Config) -> Fallible<Kubernix> {
         // Retrieve the local IP
         let ip = Self::local_ip()?;
+        let hostname = hostname::get_hostname()
+            .ok_or_else(|| format_err!("Unable to retrieve hostname"))?;
         info!("Using local IP {}", ip);
 
         // Setup the PKI
-        let pki = Pki::new(config, &ip)?;
+        let pki = Pki::new(config, &ip, &hostname)?;
 
         // Setup the configs
-        let kubeconfig = KubeConfig::new(config, &pki)?;
+        let kubeconfig = KubeConfig::new(config, &pki, &ip, &hostname)?;
         let encryptionconfig = EncryptionConfig::new(config)?;
 
         // Create the log dir
@@ -63,9 +68,13 @@ impl Kubernix {
         let mut controllermanager_result: Option<Fallible<ControllerManager>> =
             None;
         let mut scheduler_result: Option<Fallible<Scheduler>> = None;
+        let mut kubelet_result: Option<Fallible<Kubelet>> = None;
+
+        // Full path to the CRI socket
+        let socket = config.root.join(&config.crio.dir).join("crio.sock");
 
         scope(|s| {
-            s.spawn(|_| crio_result = Some(Crio::new(config)));
+            s.spawn(|_| crio_result = Some(Crio::new(config, &socket)));
             s.spawn(|_| {
                 etcd_result = Some(Etcd::new(config, &pki));
                 apiserver_result = Some(APIServer::new(
@@ -83,6 +92,10 @@ impl Kubernix {
             s.spawn(|_| {
                 scheduler_result = Some(Scheduler::new(config, &kubeconfig))
             });
+            s.spawn(|_| {
+                kubelet_result =
+                    Some(Kubelet::new(config, &pki, &kubeconfig, &socket))
+            });
         });
 
         match (
@@ -91,6 +104,7 @@ impl Kubernix {
             apiserver_result,
             controllermanager_result,
             scheduler_result,
+            kubelet_result,
         ) {
             (
                 Some(Ok(crio)),
@@ -98,6 +112,7 @@ impl Kubernix {
                 Some(Ok(apiserver)),
                 Some(Ok(controllermanager)),
                 Some(Ok(scheduler)),
+                Some(Ok(kubelet)),
             ) => {
                 info!("Everything is up and running");
                 Ok(Kubernix {
@@ -109,6 +124,7 @@ impl Kubernix {
                     apiserver,
                     controllermanager,
                     scheduler,
+                    kubelet,
                 })
             }
             _ => bail!("Unable to spawn processes"),
@@ -116,6 +132,7 @@ impl Kubernix {
     }
 
     pub fn stop(&mut self) -> Fallible<()> {
+        self.kubelet.stop()?;
         self.apiserver.stop()?;
         self.controllermanager.stop()?;
         self.scheduler.stop()?;

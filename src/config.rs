@@ -22,6 +22,9 @@ pub struct Config {
 
     /// The Kube configuration
     pub kube: KubeConfig,
+
+    /// The CRI-O configuration
+    pub crio: CrioConfig,
 }
 
 impl Config {
@@ -59,5 +62,13 @@ pub struct PkiConfig {
 /// The Kube configuration
 pub struct KubeConfig {
     /// The directory for created configs
+    pub dir: PathBuf,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+/// The CRI-O configuration
+pub struct CrioConfig {
+    /// The directory for CRI-O
     pub dir: PathBuf,
 }

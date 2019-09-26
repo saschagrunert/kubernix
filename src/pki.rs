@@ -9,6 +9,8 @@ use std::{
 
 #[derive(Default)]
 pub struct Pki {
+    pub kubelet_cert: PathBuf,
+    pub kubelet_key: PathBuf,
     pub apiserver_cert: PathBuf,
     pub apiserver_key: PathBuf,
     pub proxy_cert: PathBuf,
@@ -24,10 +26,11 @@ pub struct Pki {
     pub ca_cert: PathBuf,
     pub ca_key: PathBuf,
     ip: String,
+    hostname: String,
 }
 
 impl Pki {
-    pub fn new(config: &Config, ip: &str) -> Fallible<Pki> {
+    pub fn new(config: &Config, ip: &str, hostname: &str) -> Fallible<Pki> {
         info!("Generating certificates");
 
         // Create the target dir
@@ -36,7 +39,9 @@ impl Pki {
 
         let mut pki = Pki::default();
         pki.ip = ip.to_owned();
+        pki.hostname = hostname.to_owned();
         pki.setup_ca(pki_dir)?;
+        pki.setup_kubelet(pki_dir)?;
         pki.setup_admin(pki_dir)?;
         pki.setup_controller_manager(pki_dir)?;
         pki.setup_proxy(pki_dir)?;
@@ -75,6 +80,14 @@ impl Pki {
         debug!("CA certificates created");
         self.ca_cert = dir.join(format!("{}.pem", PREFIX));
         self.ca_key = dir.join(format!("{}-key.pem", PREFIX));
+        Ok(())
+    }
+
+    fn setup_kubelet(&mut self, dir: &Path) -> Fallible<()> {
+        let prefix = format!("system:node:{}", self.hostname);
+        let (c, k) = self.generate(dir, &prefix, "assets/node-csr.json")?;
+        self.kubelet_cert = c;
+        self.kubelet_key = k;
         Ok(())
     }
 
@@ -144,6 +157,7 @@ impl Pki {
         let hostnames = &[
             &self.ip,
             "127.0.0.1",
+            &self.hostname,
             "kubernetes",
             "kubernetes.default",
             "kubernetes.default.svc",

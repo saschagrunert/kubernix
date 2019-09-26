@@ -9,3 +9,6 @@ dir = "pki"
 
 [kube]
 dir = "kube"
+
+[crio]
+dir = "crio"

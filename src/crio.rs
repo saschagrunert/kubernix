@@ -12,7 +12,7 @@ pub struct Crio {
 }
 
 impl Crio {
-    pub fn new(config: &Config) -> Fallible<Crio> {
+    pub fn new(config: &Config, socket: &Path) -> Fallible<Crio> {
         info!("Starting CRI-O");
         let conmon = Self::find_executable("conmon")
             .ok_or_else(|| format_err!("Unable to find conmon in $PATH"))?;
@@ -23,7 +23,7 @@ impl Crio {
             .parent()
             .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
 
-        let dir = config.root.join("crio");
+        let dir = config.root.join(&config.crio.dir);
         create_dir_all(&dir)?;
 
         let cni_config = dir.join("cni");
@@ -39,7 +39,7 @@ impl Crio {
                 "--log-level=debug".to_owned(),
                 "--storage-driver=overlay".to_owned(),
                 format!("--conmon={}", conmon.display()),
-                format!("--listen={}", dir.join("crio.sock").display()),
+                format!("--listen={}", &socket.display()),
                 format!("--root={}", dir.join("storage").display()),
                 format!("--runroot={}", dir.join("run").display()),
                 format!("--cni-config-dir={}", cni_config.display()),
