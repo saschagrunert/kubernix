@@ -11,6 +11,7 @@ dir = "pki"
 dir = "kube"
 cluster-cidr = "10.200.0.0/16"
 service-cidr = "10.32.0.0/24"
+cluster-dns = "10.32.0.10"
 
 [crio]
 dir = "crio"
