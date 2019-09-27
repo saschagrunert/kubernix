@@ -42,13 +42,14 @@ authorization:
   mode: Webhook
 clusterDomain: "cluster.local"
 clusterDNS:
-  - "10.32.0.10"
+  - "{}"
 podCIDR: "{}"
 runtimeRequestTimeout: "15m"
 tlsCertFile: "{}"
 tlsPrivateKeyFile: "{}"
 "#,
             pki.ca_cert.display(),
+            config.kube.cluster_dns,
             config.crio.cidr,
             pki.kubelet_cert.display(),
             pki.kubelet_key.display()
