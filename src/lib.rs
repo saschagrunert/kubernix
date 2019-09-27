@@ -34,13 +34,7 @@ use std::{fs::create_dir_all, process::Command};
 const ASSETS_DIR: &str = "assets";
 
 pub struct Kubernix {
-    etcd: Etcd,
-    crio: Crio,
-    apiserver: APIServer,
-    controllermanager: ControllerManager,
-    scheduler: Scheduler,
-    kubelet: Kubelet,
-    proxy: Proxy,
+    processes: Vec<Box<dyn Stoppable>>,
 }
 
 impl Kubernix {
@@ -121,13 +115,15 @@ impl Kubernix {
             ) => {
                 info!("Everything is up and running");
                 Ok(Kubernix {
-                    crio,
-                    etcd,
-                    apiserver,
-                    controllermanager,
-                    scheduler,
-                    kubelet,
-                    proxy,
+                    processes: vec![
+                        Box::new(crio),
+                        Box::new(etcd),
+                        Box::new(apiserver),
+                        Box::new(controllermanager),
+                        Box::new(scheduler),
+                        Box::new(kubelet),
+                        Box::new(proxy),
+                    ],
                 })
             }
             (a, b, c, d, e, f, g) => {
@@ -159,13 +155,9 @@ impl Kubernix {
     }
 
     pub fn stop(&mut self) {
-        self.proxy.stop();
-        self.kubelet.stop();
-        self.apiserver.stop();
-        self.controllermanager.stop();
-        self.scheduler.stop();
-        self.crio.stop();
-        self.etcd.stop();
+        for x in &mut self.processes {
+            x.stop();
+        }
     }
 
     fn local_ip() -> Fallible<String> {
