@@ -58,42 +58,43 @@ impl Kubernix {
 
         // Spawn the processes
         info!("Starting processes");
-        let mut crio_result: Option<Fallible<Crio>> = None;
-        let mut etcd_result: Option<Fallible<Etcd>> = None;
-        let mut apiserver_result: Option<Fallible<APIServer>> = None;
-        let mut controllermanager_result: Option<Fallible<ControllerManager>> =
-            None;
-        let mut scheduler_result: Option<Fallible<Scheduler>> = None;
-        let mut kubelet_result: Option<Fallible<Kubelet>> = None;
-        let mut proxy_result: Option<Fallible<Proxy>> = None;
+        let mut crio_result: Fallible<Crio> = Err(format_err!("Not started"));
+        let mut etcd_result: Fallible<Etcd> = Err(format_err!("Not started"));
+        let mut apiserver_result: Fallible<APIServer> =
+            Err(format_err!("Not started"));
+        let mut controllermanager_result: Fallible<ControllerManager> =
+            Err(format_err!("Not started"));
+        let mut scheduler_result: Fallible<Scheduler> =
+            Err(format_err!("Not started"));
+        let mut kubelet_result: Fallible<Kubelet> =
+            Err(format_err!("Not started"));
+        let mut proxy_result: Fallible<Proxy> = Err(format_err!("Not started"));
 
         // Full path to the CRI socket
         let socket = config.root.join(&config.crio.dir).join("crio.sock");
 
         scope(|s| {
-            s.spawn(|_| crio_result = Some(Crio::new(config, &socket)));
+            s.spawn(|_| crio_result = Crio::new(config, &socket));
             s.spawn(|_| {
-                etcd_result = Some(Etcd::new(config, &pki));
-                apiserver_result = Some(APIServer::new(
+                etcd_result = Etcd::new(config, &pki);
+                apiserver_result = APIServer::new(
                     config,
                     &ip,
                     &pki,
                     &encryptionconfig,
                     &kubeconfig,
-                ));
+                );
             });
             s.spawn(|_| {
                 controllermanager_result =
-                    Some(ControllerManager::new(config, &pki, &kubeconfig))
+                    ControllerManager::new(config, &pki, &kubeconfig)
             });
-            s.spawn(|_| {
-                scheduler_result = Some(Scheduler::new(config, &kubeconfig))
-            });
+            s.spawn(|_| scheduler_result = Scheduler::new(config, &kubeconfig));
             s.spawn(|_| {
                 kubelet_result =
-                    Some(Kubelet::new(config, &pki, &kubeconfig, &socket))
+                    Kubelet::new(config, &pki, &kubeconfig, &socket)
             });
-            s.spawn(|_| proxy_result = Some(Proxy::new(config, &kubeconfig)));
+            s.spawn(|_| proxy_result = Proxy::new(config, &kubeconfig));
         });
 
         match (
@@ -106,13 +107,13 @@ impl Kubernix {
             proxy_result,
         ) {
             (
-                Some(Ok(crio)),
-                Some(Ok(etcd)),
-                Some(Ok(apiserver)),
-                Some(Ok(controllermanager)),
-                Some(Ok(scheduler)),
-                Some(Ok(kubelet)),
-                Some(Ok(proxy)),
+                Ok(crio),
+                Ok(etcd),
+                Ok(apiserver),
+                Ok(controllermanager),
+                Ok(scheduler),
+                Ok(kubelet),
+                Ok(proxy),
             ) => {
                 CoreDNS::apply(&config, &kubeconfig)?;
 
@@ -138,25 +139,25 @@ impl Kubernix {
                 kubelet,
                 proxy,
             ) => {
-                if let Some(Ok(mut x)) = crio {
+                if let Ok(mut x) = crio {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = etcd {
+                if let Ok(mut x) = etcd {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = apiserver {
+                if let Ok(mut x) = apiserver {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = controllermanager {
+                if let Ok(mut x) = controllermanager {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = scheduler {
+                if let Ok(mut x) = scheduler {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = kubelet {
+                if let Ok(mut x) = kubelet {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = proxy {
+                if let Ok(mut x) = proxy {
                     x.stop();
                 }
 
