@@ -9,10 +9,10 @@ dir = "pki"
 
 [kube]
 dir = "kube"
-cluster-cidr = "10.200.0.0/16"
-service-cidr = "10.32.0.0/24"
-cluster-dns = "10.32.0.10"
+cluster-cidr = "172.200.0.0/16"
+service-cidr = "172.50.0.0/24"
+cluster-dns = "172.50.0.10"
 
 [crio]
 dir = "crio"
-cidr = "10.88.0.0/16"
+cidr = "172.100.0.0/16"
