@@ -1,4 +1,7 @@
-use crate::{process::Process, Config};
+use crate::{
+    process::{Process, Stoppable},
+    Config,
+};
 use failure::{format_err, Fallible};
 use log::info;
 use std::{
@@ -88,9 +91,10 @@ impl Crio {
                 .next()
         })
     }
+}
 
-    pub fn stop(&mut self) -> Fallible<()> {
-        self.process.stop()?;
-        Ok(())
+impl Stoppable for Crio {
+    fn stop(&mut self) {
+        self.process.stop();
     }
 }

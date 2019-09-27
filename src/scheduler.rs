@@ -1,4 +1,8 @@
-use crate::{config::Config, kubeconfig::KubeConfig, process::Process};
+use crate::{
+    config::Config,
+    kubeconfig::KubeConfig,
+    process::{Process, Stoppable},
+};
 use failure::Fallible;
 use log::info;
 use std::fs::{self, create_dir_all};
@@ -43,9 +47,10 @@ leaderElection:
         info!("Scheduler is ready");
         Ok(Scheduler { process })
     }
+}
 
-    pub fn stop(&mut self) -> Fallible<()> {
-        self.process.stop()?;
-        Ok(())
+impl Stoppable for Scheduler {
+    fn stop(&mut self) {
+        self.process.stop();
     }
 }

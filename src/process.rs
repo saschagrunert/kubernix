@@ -1,6 +1,6 @@
 use crate::Config;
 use failure::{bail, format_err, Fallible};
-use log::{debug, error};
+use log::{debug, error, warn};
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -19,6 +19,11 @@ pub struct Process {
     command: String,
     kill: Sender<()>,
     log_file: PathBuf,
+}
+
+/// The trait to stop something
+pub trait Stoppable {
+    fn stop(&mut self);
 }
 
 impl Process {
@@ -98,13 +103,16 @@ impl Process {
         }
 
         // Cleanup since process is not ready
-        self.stop()?;
+        self.stop();
         bail!("Timed out waiting for process to become ready")
     }
+}
 
+impl Stoppable for Process {
     /// Stopping the process by killing it
-    pub fn stop(&mut self) -> Fallible<()> {
-        self.kill.send(())?;
-        Ok(())
+    fn stop(&mut self) {
+        if self.kill.send(()).is_err() {
+            warn!("Unable to kill process '{}'", self.command);
+        }
     }
 }

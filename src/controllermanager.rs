@@ -1,5 +1,8 @@
 use crate::{
-    config::Config, kubeconfig::KubeConfig, pki::Pki, process::Process,
+    config::Config,
+    kubeconfig::KubeConfig,
+    pki::Pki,
+    process::{Process, Stoppable},
 };
 use failure::Fallible;
 use log::info;
@@ -51,9 +54,10 @@ impl ControllerManager {
         info!("Controller Manager is ready");
         Ok(ControllerManager { process })
     }
+}
 
-    pub fn stop(&mut self) -> Fallible<()> {
-        self.process.stop()?;
-        Ok(())
+impl Stoppable for ControllerManager {
+    fn stop(&mut self) {
+        self.process.stop();
     }
 }

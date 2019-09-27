@@ -1,6 +1,9 @@
 use crate::{
-    config::Config, encryptionconfig::EncryptionConfig, kubeconfig::KubeConfig,
-    pki::Pki, process::Process,
+    config::Config,
+    encryptionconfig::EncryptionConfig,
+    kubeconfig::KubeConfig,
+    pki::Pki,
+    process::{Process, Stoppable},
 };
 use failure::{bail, Fallible};
 use log::{debug, info};
@@ -137,9 +140,10 @@ subjects:
         debug!("API Server RBAC rule created");
         Ok(())
     }
+}
 
-    pub fn stop(&mut self) -> Fallible<()> {
-        self.process.stop()?;
-        Ok(())
+impl Stoppable for APIServer {
+    fn stop(&mut self) {
+        self.process.stop();
     }
 }

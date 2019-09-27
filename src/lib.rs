@@ -22,6 +22,7 @@ use failure::{bail, Fallible};
 use kubeconfig::KubeConfig;
 use kubelet::Kubelet;
 use pki::Pki;
+use process::Stoppable;
 use proxy::Proxy;
 use scheduler::Scheduler;
 
@@ -131,25 +132,25 @@ impl Kubernix {
             }
             (a, b, c, d, e, f, g) => {
                 if let Some(Ok(mut x)) = a {
-                    x.stop()?;
+                    x.stop();
                 }
                 if let Some(Ok(mut x)) = b {
-                    x.stop()?;
+                    x.stop();
                 }
                 if let Some(Ok(mut x)) = c {
-                    x.stop()?;
+                    x.stop();
                 }
                 if let Some(Ok(mut x)) = d {
-                    x.stop()?;
+                    x.stop();
                 }
                 if let Some(Ok(mut x)) = e {
-                    x.stop()?;
+                    x.stop();
                 }
                 if let Some(Ok(mut x)) = f {
-                    x.stop()?;
+                    x.stop();
                 }
                 if let Some(Ok(mut x)) = g {
-                    x.stop()?;
+                    x.stop();
                 }
 
                 bail!("Unable to spawn processes")
@@ -157,14 +158,14 @@ impl Kubernix {
         }
     }
 
-    pub fn stop(&mut self) -> Fallible<()> {
-        self.proxy.stop()?;
-        self.kubelet.stop()?;
-        self.apiserver.stop()?;
-        self.controllermanager.stop()?;
-        self.scheduler.stop()?;
-        self.crio.stop()?;
-        self.etcd.stop()
+    pub fn stop(&mut self) {
+        self.proxy.stop();
+        self.kubelet.stop();
+        self.apiserver.stop();
+        self.controllermanager.stop();
+        self.scheduler.stop();
+        self.crio.stop();
+        self.etcd.stop();
     }
 
     fn local_ip() -> Fallible<String> {

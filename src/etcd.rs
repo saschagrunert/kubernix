@@ -1,4 +1,8 @@
-use crate::{config::Config, pki::Pki, process::Process};
+use crate::{
+    config::Config,
+    pki::Pki,
+    process::{Process, Stoppable},
+};
 use failure::Fallible;
 use log::info;
 
@@ -38,9 +42,10 @@ impl Etcd {
         info!("etcd is ready");
         Ok(Etcd { process })
     }
+}
 
-    pub fn stop(&mut self) -> Fallible<()> {
-        self.process.stop()?;
-        Ok(())
+impl Stoppable for Etcd {
+    fn stop(&mut self) {
+        self.process.stop();
     }
 }

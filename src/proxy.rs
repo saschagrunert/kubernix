@@ -1,4 +1,8 @@
-use crate::{config::Config, kubeconfig::KubeConfig, process::Process};
+use crate::{
+    config::Config,
+    kubeconfig::KubeConfig,
+    process::{Process, Stoppable},
+};
 use failure::Fallible;
 use log::info;
 use std::fs::{self, create_dir_all};
@@ -41,9 +45,10 @@ clusterCIDR: "{}"
         info!("Proxy is ready");
         Ok(Proxy { process })
     }
+}
 
-    pub fn stop(&mut self) -> Fallible<()> {
-        self.process.stop()?;
-        Ok(())
+impl Stoppable for Proxy {
+    fn stop(&mut self) {
+        self.process.stop();
     }
 }

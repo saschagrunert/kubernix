@@ -1,5 +1,8 @@
 use crate::{
-    config::Config, kubeconfig::KubeConfig, pki::Pki, process::Process,
+    config::Config,
+    kubeconfig::KubeConfig,
+    pki::Pki,
+    process::{Process, Stoppable},
 };
 use failure::Fallible;
 use log::info;
@@ -75,9 +78,10 @@ tlsPrivateKeyFile: "{}"
         info!("Kubelet is ready");
         Ok(Kubelet { process })
     }
+}
 
-    pub fn stop(&mut self) -> Fallible<()> {
-        self.process.stop()?;
-        Ok(())
+impl Stoppable for Kubelet {
+    fn stop(&mut self) {
+        self.process.stop();
     }
 }
