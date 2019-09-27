@@ -2,12 +2,12 @@
 use failure::Fallible;
 use serde::Deserialize;
 use std::{
-    fs::{canonicalize, read_to_string},
+    fs::{canonicalize, create_dir_all, read_to_string},
     path::PathBuf,
 };
 use toml;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The global configuration
 pub struct Config {
@@ -33,12 +33,13 @@ impl Config {
     /// invalid, an `Error` will be returned.
     pub fn from_file(filename: &str) -> Fallible<Self> {
         let mut config: Self = toml::from_str(&read_to_string(filename)?)?;
+        create_dir_all(&config.root)?;
         config.root = canonicalize(config.root)?;
         Ok(config)
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The logger configuration
 pub struct LogConfig {
@@ -49,7 +50,7 @@ pub struct LogConfig {
     pub dir: PathBuf,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The PKI configuration
 pub struct PkiConfig {
@@ -57,7 +58,7 @@ pub struct PkiConfig {
     pub dir: PathBuf,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The Kube configuration
 pub struct KubeConfig {
@@ -74,7 +75,7 @@ pub struct KubeConfig {
     pub cluster_dns: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The CRI-O configuration
 pub struct CrioConfig {

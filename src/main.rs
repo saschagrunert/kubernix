@@ -13,7 +13,7 @@ use std::{
 
 pub fn main() {
     if let Err(e) = run() {
-        error!("{}", e);
+        println!("{}", e);
         exit(1);
     }
 }
@@ -28,8 +28,6 @@ fn run() -> Fallible<()> {
         .value_of("config")
         .ok_or_else(|| format_err!("No 'config' provided"))?;
     let config = Config::from_file(config_filename)?;
-
-    // Setup logging
     set_var("RUST_LOG", format!("kubernix={}", config.log.level));
     env_logger::init();
 
