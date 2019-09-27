@@ -1,7 +1,7 @@
 use clap::{crate_version, load_yaml, App};
 use failure::{format_err, Fallible};
 use kubernix::{Config, Kubernix};
-use log::{error, info};
+use log::info;
 use std::{
     env::set_var,
     process::exit,
