@@ -69,6 +69,9 @@ pub struct KubeConfig {
 
     /// Service CIDR
     pub service_cidr: String,
+
+    /// Cluster wide DNS address
+    pub cluster_dns: String,
 }
 
 #[derive(Deserialize)]
