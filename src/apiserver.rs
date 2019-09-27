@@ -64,7 +64,10 @@ impl APIServer {
                     "--service-account-key-file={}",
                     pki.service_account_cert.display()
                 ),
-                format!("--service-cluster-ip-range={}", config.kube.serviceCidr),
+                format!(
+                    "--service-cluster-ip-range={}",
+                    config.kube.service_cidr
+                ),
                 format!("--tls-cert-file={}", pki.apiserver_cert.display()),
                 format!(
                     "--tls-private-key-file={}",

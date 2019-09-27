@@ -65,10 +65,10 @@ pub struct KubeConfig {
     pub dir: PathBuf,
 
     /// Cluster CIDR
-    pub clusterCidr: String,
+    pub cluster_cidr: String,
 
     /// Service CIDR
-    pub serviceCidr: String,
+    pub service_cidr: String,
 }
 
 #[derive(Deserialize)]

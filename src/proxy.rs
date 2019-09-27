@@ -24,7 +24,7 @@ mode: "iptables"
 clusterCIDR: "{}"
 "#,
             kubeconfig.proxy.display(),
-            config.kube.clusterCidr,
+            config.kube.cluster_cidr,
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
@@ -37,7 +37,7 @@ clusterCIDR: "{}"
             ],
         )?;
 
-        process.wait_ready("Caches are synched")?;
+        process.wait_ready("Caches are synced")?;
         info!("Proxy is ready");
         Ok(Proxy { process })
     }
