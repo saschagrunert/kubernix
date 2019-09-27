@@ -22,5 +22,6 @@ pkgs.stdenv.mkDerivation {
   ];
 
   LANG = "en_US.UTF-8";
+  KUBECONFIG="run/kube/admin.kubeconfig";
   name = "shell";
 }

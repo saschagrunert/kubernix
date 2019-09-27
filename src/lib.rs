@@ -1,6 +1,7 @@
 mod apiserver;
 mod config;
 mod controllermanager;
+mod coredns;
 mod crio;
 mod encryptionconfig;
 mod etcd;
@@ -15,10 +16,10 @@ pub use config::Config;
 
 use apiserver::APIServer;
 use controllermanager::ControllerManager;
+use coredns::CoreDNS;
 use crio::Crio;
 use encryptionconfig::EncryptionConfig;
 use etcd::Etcd;
-use failure::{bail, Fallible};
 use kubeconfig::KubeConfig;
 use kubelet::Kubelet;
 use pki::Pki;
@@ -26,7 +27,7 @@ use process::Stoppable;
 use proxy::Proxy;
 use scheduler::Scheduler;
 
-use failure::format_err;
+use failure::{bail, format_err, Fallible};
 use log::info;
 use rayon::scope;
 use std::{fs::create_dir_all, process::Command};
@@ -113,6 +114,8 @@ impl Kubernix {
                 Some(Ok(kubelet)),
                 Some(Ok(proxy)),
             ) => {
+                CoreDNS::apply(&config, &kubeconfig)?;
+
                 info!("Everything is up and running");
                 Ok(Kubernix {
                     processes: vec![
@@ -126,26 +129,34 @@ impl Kubernix {
                     ],
                 })
             }
-            (a, b, c, d, e, f, g) => {
-                if let Some(Ok(mut x)) = a {
+            (
+                crio,
+                etcd,
+                apiserver,
+                controllermanager,
+                scheduler,
+                kubelet,
+                proxy,
+            ) => {
+                if let Some(Ok(mut x)) = crio {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = b {
+                if let Some(Ok(mut x)) = etcd {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = c {
+                if let Some(Ok(mut x)) = apiserver {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = d {
+                if let Some(Ok(mut x)) = controllermanager {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = e {
+                if let Some(Ok(mut x)) = scheduler {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = f {
+                if let Some(Ok(mut x)) = kubelet {
                     x.stop();
                 }
-                if let Some(Ok(mut x)) = g {
+                if let Some(Ok(mut x)) = proxy {
                     x.stop();
                 }
 
