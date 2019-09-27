@@ -2,7 +2,7 @@
 use failure::Fallible;
 use serde::Deserialize;
 use std::{
-    fs::{canonicalize, create_dir_all, read_to_string},
+    fs::{canonicalize, create_dir_all, read_to_string, remove_dir_all},
     path::PathBuf,
 };
 use toml;
@@ -33,6 +33,9 @@ impl Config {
     /// invalid, an `Error` will be returned.
     pub fn from_file(filename: &str) -> Fallible<Self> {
         let mut config: Self = toml::from_str(&read_to_string(filename)?)?;
+        if config.root.exists() {
+            remove_dir_all(&config.root)?;
+        }
         create_dir_all(&config.root)?;
         config.root = canonicalize(config.root)?;
         Ok(config)
