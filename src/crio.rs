@@ -66,6 +66,7 @@ impl Crio {
                 format!("--runroot={}", dir.join("run").display()),
                 format!("--cni-config-dir={}", cni_config.display()),
                 format!("--cni-plugin-dir={}", cni.display()),
+                "--registry=docker.io".to_owned(),
             ],
         )?;
 
