@@ -54,7 +54,6 @@ impl Crio {
             ),
         )?;
 
-        let policy = Path::new(ASSETS_DIR).join("policy.json");
         let mut process = Process::new(
             config,
             &[
@@ -68,7 +67,10 @@ impl Crio {
                 format!("--cni-config-dir={}", cni_config.display()),
                 format!("--cni-plugin-dir={}", cni.display()),
                 "--registry=docker.io".to_owned(),
-                format!("--signature-policy={}", policy),
+                format!(
+                    "--signature-policy={}",
+                    Path::new(ASSETS_DIR).join("policy.json").display()
+                ),
             ],
         )?;
 
