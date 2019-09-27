@@ -33,9 +33,6 @@ use std::{fs::create_dir_all, process::Command};
 const ASSETS_DIR: &str = "assets";
 
 pub struct Kubernix {
-    pki: Pki,
-    kubeconfig: KubeConfig,
-    encryptionconfig: EncryptionConfig,
     etcd: Etcd,
     crio: Crio,
     apiserver: APIServer,
@@ -123,9 +120,6 @@ impl Kubernix {
             ) => {
                 info!("Everything is up and running");
                 Ok(Kubernix {
-                    pki,
-                    kubeconfig,
-                    encryptionconfig,
                     crio,
                     etcd,
                     apiserver,
@@ -135,7 +129,31 @@ impl Kubernix {
                     proxy,
                 })
             }
-            _ => bail!("Unable to spawn processes"),
+            (a, b, c, d, e, f, g) => {
+                if let Some(Ok(mut x)) = a {
+                    x.stop()?;
+                }
+                if let Some(Ok(mut x)) = b {
+                    x.stop()?;
+                }
+                if let Some(Ok(mut x)) = c {
+                    x.stop()?;
+                }
+                if let Some(Ok(mut x)) = d {
+                    x.stop()?;
+                }
+                if let Some(Ok(mut x)) = e {
+                    x.stop()?;
+                }
+                if let Some(Ok(mut x)) = f {
+                    x.stop()?;
+                }
+                if let Some(Ok(mut x)) = g {
+                    x.stop()?;
+                }
+
+                bail!("Unable to spawn processes")
+            }
         }
     }
 
