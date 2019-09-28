@@ -3,16 +3,21 @@ use crate::{
     Config,
 };
 use failure::{format_err, Fallible};
-use log::info;
+use log::{debug, info, warn};
+use nix::mount::umount;
 use serde_json::{json, to_string_pretty};
 use std::{
     env,
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
 };
+use walkdir::WalkDir;
 
 pub struct Crio {
     process: Process,
+    storage_driver: String,
+    storage_root: PathBuf,
+    run_root: PathBuf,
 }
 
 impl Crio {
@@ -63,16 +68,19 @@ impl Crio {
 
         let runc = Self::find_executable("runc")
             .ok_or_else(|| format_err!("Unable to find runc in $PATH"))?;
+        let storage_driver = "overlay".to_owned();
+        let storage_root = dir.join("storage");
+        let run_root = dir.join("run");
         let mut process = Process::new(
             config,
             &[
                 "crio".to_owned(),
                 "--log-level=debug".to_owned(),
-                "--storage-driver=overlay".to_owned(),
+                format!("--storage-driver={}", &storage_driver),
                 format!("--conmon={}", conmon.display()),
                 format!("--listen={}", &socket.display()),
-                format!("--root={}", dir.join("storage").display()),
-                format!("--runroot={}", dir.join("run").display()),
+                format!("--root={}", &storage_root.display()),
+                format!("--runroot={}", &run_root.display()),
                 format!("--cni-config-dir={}", cni_config.display()),
                 format!("--cni-plugin-dir={}", cni.display()),
                 "--registry=docker.io".to_owned(),
@@ -88,7 +96,12 @@ impl Crio {
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready");
-        Ok(Crio { process })
+        Ok(Crio {
+            process,
+            run_root,
+            storage_driver,
+            storage_root,
+        })
     }
 
     fn find_executable<P>(name: P) -> Option<PathBuf>
@@ -113,5 +126,25 @@ impl Crio {
 impl Stoppable for Crio {
     fn stop(&mut self) {
         self.process.stop();
+        for entry in WalkDir::new(&self.run_root)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|x| {
+                x.path()
+                    .to_str()
+                    .map(|e| e.contains("shm"))
+                    .unwrap_or(false)
+            })
+        {
+            debug!("Umounting: {}", entry.path().display());
+            if let Err(e) = umount(entry.path()) {
+                warn!("Unable to umount '{}': {}", entry.path().display(), e)
+            }
+        }
+        let storage = self.storage_root.join(&self.storage_driver);
+        debug!("Umounting: {}", storage.display());
+        if let Err(e) = umount(&storage) {
+            warn!("Unable to umount '{}': {}", storage.display(), e)
+        }
     }
 }
