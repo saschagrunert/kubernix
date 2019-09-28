@@ -28,18 +28,18 @@ impl ControllerManager {
                 "--cluster-name=kubernetes".to_owned(),
                 format!(
                     "--cluster-signing-cert-file={}",
-                    pki.ca_cert.display()
+                    pki.ca.cert().display()
                 ),
-                format!("--cluster-signing-key-file={}", pki.ca_key.display()),
+                format!("--cluster-signing-key-file={}", pki.ca.key().display()),
                 format!(
                     "--kubeconfig={}",
                     kubeconfig.controller_manager.display()
                 ),
                 "--leader-elect=true".to_owned(),
-                format!("--root-ca-file={}", pki.ca_cert.display()),
+                format!("--root-ca-file={}", pki.ca.cert().display()),
                 format!(
                     "--service-account-private-key-file={}",
-                    pki.service_account_key.display()
+                    pki.service_account.key().display()
                 ),
                 format!(
                     "--service-cluster-ip-range={}",
