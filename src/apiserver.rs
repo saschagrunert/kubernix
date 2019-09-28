@@ -43,10 +43,10 @@ impl APIServer {
                 format!("--audit-log-path={}", dir.join("audit.log").display()),
                 "--authorization-mode=Node,RBAC".to_owned(),
                 "--bind-address=0.0.0.0".to_owned(),
-                format!("--client-ca-file={}", pki.ca_cert.display()),
-                format!("--etcd-cafile={}", pki.ca_cert.display()),
-                format!("--etcd-certfile={}", pki.apiserver_cert.display()),
-                format!("--etcd-keyfile={}", pki.apiserver_key.display()),
+                format!("--client-ca-file={}", pki.ca.cert().display()),
+                format!("--etcd-cafile={}", pki.ca.cert().display()),
+                format!("--etcd-certfile={}", pki.apiserver.cert().display()),
+                format!("--etcd-keyfile={}", pki.apiserver.key().display()),
                 format!("--etcd-servers=https://{}:2379", LOCALHOST),
                 "--event-ttl=1h".to_owned(),
                 format!(
@@ -55,18 +55,18 @@ impl APIServer {
                 ),
                 format!(
                     "--kubelet-certificate-authority={}",
-                    pki.ca_cert.display()
+                    pki.ca.cert().display()
                 ),
                 format!(
                     "--kubelet-client-certificate={}",
-                    pki.apiserver_cert.display()
+                    pki.apiserver.cert().display()
                 ),
-                format!("--kubelet-client-key={}", pki.apiserver_key.display()),
+                format!("--kubelet-client-key={}", pki.apiserver.key().display()),
                 "--kubelet-https=true".to_owned(),
                 "--runtime-config=api/all".to_owned(),
                 format!(
                     "--service-account-key-file={}",
-                    pki.service_account_cert.display()
+                    pki.service_account.cert().display()
                 ),
                 format!(
                     "--service-cluster-ip-range={}",
@@ -75,7 +75,7 @@ impl APIServer {
                 format!("--tls-cert-file={}", pki.apiserver_cert.display()),
                 format!(
                     "--tls-private-key-file={}",
-                    pki.apiserver_key.display()
+                    pki.apiserver.key().display()
                 ),
                 "--v=2".to_owned(),
             ],
