@@ -61,6 +61,8 @@ impl Crio {
             }))?,
         )?;
 
+        let runc = Self::find_executable("runc")
+            .ok_or_else(|| format_err!("Unable to find runc in $PATH"))?;
         let mut process = Process::new(
             config,
             &[
@@ -75,6 +77,12 @@ impl Crio {
                 format!("--cni-plugin-dir={}", cni.display()),
                 "--registry=docker.io".to_owned(),
                 format!("--signature-policy={}", policy_json.display()),
+                format!(
+                    "--runtimes=local-runc:{}:{}",
+                    runc.display(),
+                    dir.join("runc").display()
+                ),
+                "--default-runtime=local-runc".to_owned(),
             ],
         )?;
 
