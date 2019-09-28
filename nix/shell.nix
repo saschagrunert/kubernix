@@ -23,7 +23,11 @@ pkgs.stdenv.mkDerivation {
   ];
 
   LANG = "en_US.UTF-8";
-  KUBECONFIG = "run/kube/admin.kubeconfig";
-  CONTAINER_RUNTIME_ENDPOINT = "run/crio/crio.sock";
+
+  shellHook = ''
+    export CONTAINER_RUNTIME_ENDPOINT="unix://$PWD/run/crio/crio.sock"
+    export KUBECONFIG="run/kube/admin.kubeconfig"
+  '';
+
   name = "shell";
 }
