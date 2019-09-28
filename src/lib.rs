@@ -32,8 +32,6 @@ use log::info;
 use rayon::scope;
 use std::{fs::create_dir_all, process::Command};
 
-const ASSETS_DIR: &str = "assets";
-
 pub struct Kubernix {
     processes: Vec<Box<dyn Stoppable>>,
 }

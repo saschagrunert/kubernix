@@ -1,4 +1,4 @@
-use crate::{Config, ASSETS_DIR};
+use crate::Config;
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
@@ -26,6 +26,7 @@ pub struct Pki {
     pub admin_key: PathBuf,
     pub ca_cert: PathBuf,
     pub ca_key: PathBuf,
+    ca_config: PathBuf,
     ip: String,
     hostname: String,
 }
@@ -56,10 +57,15 @@ impl Pki {
     fn setup_ca(&mut self, dir: &Path) -> Fallible<()> {
         const PREFIX: &str = "ca";
         debug!("Creating CA certificates");
+        self.write_ca_config(dir)?;
+        const CN: &str = "Kubernetes";
+        let csr = dir.join("ca-csr.json");
+        self.write_csr(CN, CN, &csr)?;
+
         let mut cfssl = Command::new("cfssl")
             .arg("gencert")
             .arg("-initca")
-            .arg(Path::new(ASSETS_DIR).join("ca-csr.json"))
+            .arg(csr)
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()?;
@@ -86,27 +92,10 @@ impl Pki {
 
     fn setup_kubelet(&mut self, dir: &Path) -> Fallible<()> {
         let prefix = format!("system:node:{}", self.hostname);
-        let csr = json!({
-          "CN": prefix,
-          "key": {
-            "algo": "rsa",
-            "size": 2048
-          },
-          "names": [
-            {
-              "C": "US",
-              "L": "Portland",
-              "O": "system:nodes",
-              "OU": "Kubernetes",
-              "ST": "Oregon"
-            }
-          ]
-        });
         let csr_file = dir.join("node-csr.json");
-        fs::write(&csr_file, to_string_pretty(&csr)?)?;
+        self.write_csr(&prefix, "system:nodes", &csr_file)?;
 
-        let (c, k) =
-            self.generate(dir, &prefix, &format!("{}", csr_file.display()))?;
+        let (c, k) = self.generate(dir, &prefix, &csr_file)?;
         self.kubelet_cert = c;
         self.kubelet_key = k;
         Ok(())
@@ -114,7 +103,10 @@ impl Pki {
 
     fn setup_admin(&mut self, dir: &Path) -> Fallible<()> {
         const PREFIX: &str = "admin";
-        let (c, k) = self.generate(dir, PREFIX, "assets/admin-csr.json")?;
+        let csr_file = dir.join("admin-csr.json");
+        self.write_csr(PREFIX, "system:masters", &csr_file)?;
+
+        let (c, k) = self.generate(dir, PREFIX, &csr_file)?;
         self.admin_cert = c;
         self.admin_key = k;
         Ok(())
@@ -122,11 +114,11 @@ impl Pki {
 
     fn setup_controller_manager(&mut self, dir: &Path) -> Fallible<()> {
         const PREFIX: &str = "kube-controller-manager";
-        let (c, k) = self.generate(
-            dir,
-            PREFIX,
-            "assets/kube-controller-manager-csr.json",
-        )?;
+        const CN: &str = "system:kube-controller-manager";
+        let csr_file = dir.join("kube-controller-manager-csr.json");
+        self.write_csr(CN, CN, &csr_file)?;
+
+        let (c, k) = self.generate(dir, PREFIX, &csr_file)?;
         self.controller_manager_cert = c;
         self.controller_manager_key = k;
         Ok(())
@@ -134,8 +126,10 @@ impl Pki {
 
     fn setup_proxy(&mut self, dir: &Path) -> Fallible<()> {
         const PREFIX: &str = "kube-proxy";
-        let (c, k) =
-            self.generate(dir, PREFIX, "assets/kube-proxy-csr.json")?;
+        let csr_file = dir.join("admin-csr.json");
+        self.write_csr("system:kube-proxy", "system:node-proxier", &csr_file)?;
+
+        let (c, k) = self.generate(dir, PREFIX, &csr_file)?;
         self.proxy_cert = c;
         self.proxy_key = k;
         Ok(())
@@ -143,8 +137,11 @@ impl Pki {
 
     fn setup_scheduler(&mut self, dir: &Path) -> Fallible<()> {
         const PREFIX: &str = "kube-scheduler";
-        let (c, k) =
-            self.generate(dir, PREFIX, "assets/kube-scheduler-csr.json")?;
+        let csr_file = dir.join("kube-scheduler-csr.json");
+        const CN: &str = "system:kube-scheduler";
+        self.write_csr(CN, CN, &csr_file)?;
+
+        let (c, k) = self.generate(dir, PREFIX, &csr_file)?;
         self.scheduler_cert = c;
         self.scheduler_key = k;
         Ok(())
@@ -152,8 +149,10 @@ impl Pki {
 
     fn setup_apiserver(&mut self, dir: &Path) -> Fallible<()> {
         const PREFIX: &str = "kubernetes";
-        let (c, k) =
-            self.generate(dir, PREFIX, "assets/kubernetes-csr.json")?;
+        let csr_file = dir.join("kubernetes-csr.json");
+        self.write_csr(PREFIX, PREFIX, &csr_file)?;
+
+        let (c, k) = self.generate(dir, PREFIX, &csr_file)?;
         self.apiserver_cert = c;
         self.apiserver_key = k;
         Ok(())
@@ -161,8 +160,10 @@ impl Pki {
 
     fn setup_service_account(&mut self, dir: &Path) -> Fallible<()> {
         const PREFIX: &str = "service-account";
-        let (c, k) =
-            self.generate(dir, PREFIX, "assets/service-account-csr.json")?;
+        let csr_file = dir.join("service-account-csr.json");
+        self.write_csr("service-accounts", "Kubernetes", &csr_file)?;
+
+        let (c, k) = self.generate(dir, PREFIX, &csr_file)?;
         self.service_account_cert = c;
         self.service_account_key = k;
         Ok(())
@@ -172,7 +173,7 @@ impl Pki {
         &mut self,
         dir: &Path,
         name: &str,
-        csr: &str,
+        csr: &Path,
     ) -> Fallible<(PathBuf, PathBuf)> {
         debug!("Creating certificate for {}", name);
         let hostnames = &[
@@ -187,9 +188,9 @@ impl Pki {
         ];
         let mut cfssl = Command::new("cfssl")
             .arg("gencert")
-            .arg(format!("-ca={}", dir.join("ca.pem").display()))
-            .arg(format!("-ca-key={}", dir.join("ca-key.pem").display()))
-            .arg("-config=assets/ca-config.json")
+            .arg(format!("-ca={}", self.ca_cert.display()))
+            .arg(format!("-ca-key={}", self.ca_key.display()))
+            .arg(format!("-config={}", self.ca_config.display()))
             .arg("-profile=kubernetes")
             .arg(format!("-hostname={}", hostnames.join(",")))
             .arg(csr)
@@ -217,5 +218,46 @@ impl Pki {
             dir.join(format!("{}.pem", name)),
             dir.join(format!("{}-key.pem", name)),
         ))
+    }
+
+    fn write_csr(&self, cn: &str, o: &str, dest: &Path) -> Fallible<()> {
+        let csr = json!({
+          "CN": cn,
+          "key": {
+            "algo": "rsa",
+            "size": 2048
+          },
+          "names": [
+            {
+              "C": "US",
+              "L": "Portland",
+              "O": o,
+              "OU": "Kubernetes",
+              "ST": "Oregon"
+            }
+          ]
+        });
+        fs::write(dest, to_string_pretty(&csr)?)?;
+        Ok(())
+    }
+
+    fn write_ca_config(&mut self, dir: &Path) -> Fallible<()> {
+        let cfg = json!({
+            "signing": {
+                "default": {
+                    "expiry": "8760h"
+                },
+                "profiles": {
+                    "kubernetes": {
+                    "usages": ["signing", "key encipherment", "server auth", "client auth"],
+                    "expiry": "8760h"
+                    }
+                }
+            }
+        });
+        let dest = dir.join("ca-config.json");
+        fs::write(&dest, to_string_pretty(&cfg)?)?;
+        self.ca_config = dest;
+        Ok(())
     }
 }
