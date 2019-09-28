@@ -4,6 +4,7 @@ use crate::{
     process::{Process, Stoppable},
 };
 use failure::Fallible;
+use incdoc::incdoc;
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -18,7 +19,7 @@ impl Proxy {
         let dir = config.root.join("proxy");
         create_dir_all(&dir)?;
 
-        let yml = format!(
+        let yml = incdoc!(format!(
             r#"---
 kind: KubeProxyConfiguration
 apiVersion: kubeproxy.config.k8s.io/v1alpha1
@@ -29,7 +30,7 @@ clusterCIDR: "{}"
 "#,
             kubeconfig.proxy.display(),
             config.kube.cluster_cidr,
-        );
+        ));
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
 
