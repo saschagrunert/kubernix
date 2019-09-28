@@ -1,4 +1,4 @@
-use crate::Config;
+use crate::{Config, LOCALHOST};
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
@@ -178,7 +178,7 @@ impl Pki {
         debug!("Creating certificate for {}", name);
         let hostnames = &[
             &self.ip,
-            "127.0.0.1",
+            LOCALHOST,
             &self.hostname,
             "kubernetes",
             "kubernetes.default",

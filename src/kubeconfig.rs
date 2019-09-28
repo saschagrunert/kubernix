@@ -1,4 +1,4 @@
-use crate::{pki::Pki, Config};
+use crate::{pki::Pki, Config, LOCALHOST};
 use failure::{bail, Fallible};
 use log::{debug, info};
 use std::{
@@ -30,7 +30,6 @@ impl KubeConfig {
         create_dir_all(kube_dir)?;
 
         let mut kube = KubeConfig::default();
-        const LOCALHOST: &str = "127.0.0.1";
         kube.setup_kubelet(kube_dir, &pki, ip, hostname)?;
         kube.setup_proxy(kube_dir, &pki, ip)?;
         kube.setup_controller_manager(kube_dir, &pki, LOCALHOST)?;

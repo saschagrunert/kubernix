@@ -33,6 +33,11 @@ shell:
 run:
 	$(call nix-shell-pure-run,sudo,cargo run)
 
-.PHONY: lint
-lint:
+.PHONY: lint-clippy
+lint-clippy:
 	$(call nix-shell-pure-run,,cargo clippy)
+
+.PHONY: lint-rustfmt
+lint-rustfmt:
+	$(call nix-shell-pure-run,,cargo fmt)
+	$(call nix-shell-pure-run,,git diff --exit-code)

@@ -4,6 +4,7 @@ use crate::{
     kubeconfig::KubeConfig,
     pki::Pki,
     process::{Process, Stoppable},
+    LOCALHOST,
 };
 use failure::{bail, Fallible};
 use log::{debug, info};
@@ -46,7 +47,7 @@ impl APIServer {
                 format!("--etcd-cafile={}", pki.ca_cert.display()),
                 format!("--etcd-certfile={}", pki.apiserver_cert.display()),
                 format!("--etcd-keyfile={}", pki.apiserver_key.display()),
-                "--etcd-servers=https://127.0.0.1:2379".to_owned(),
+                format!("--etcd-servers=https://{}:2379", LOCALHOST),
                 "--event-ttl=1h".to_owned(),
                 format!(
                     "--encryption-provider-config={}",

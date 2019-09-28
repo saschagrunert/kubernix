@@ -18,6 +18,7 @@ pkgs.stdenv.mkDerivation {
     runc
     socat
     rustPackages.clippy
+    rustPackages.rustfmt
     utillinux
   ];
 

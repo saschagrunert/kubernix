@@ -2,6 +2,7 @@ use crate::{
     config::Config,
     pki::Pki,
     process::{Process, Stoppable},
+    LOCALHOST,
 };
 use failure::Fallible;
 use log::info;
@@ -13,20 +14,26 @@ pub struct Etcd {
 impl Etcd {
     pub fn new(config: &Config, pki: &Pki) -> Fallible<Etcd> {
         info!("Starting etcd");
+
+        let etcd_localhost = format!("https://{}:2379", LOCALHOST);
+        let etcd_localhost_peer = format!("https://{}:2380", LOCALHOST);
+
         let mut process = Process::new(
             config,
             &[
                 "etcd".to_owned(),
-                "--advertise-client-urls=https://127.0.0.1:2379".to_owned(),
+                format!("--advertise-client-urls={}", etcd_localhost),
                 "--client-cert-auth".to_owned(),
                 format!("--data-dir={}", config.root.join("etcd").display()),
-                "--initial-advertise-peer-urls=https://127.0.0.1:2380"
-                    .to_owned(),
+                format!(
+                    "--initial-advertise-peer-urls={}",
+                    etcd_localhost_peer
+                ),
                 "--initial-cluster-state=new".to_owned(),
                 "--initial-cluster-token=etcd-cluster".to_owned(),
-                "--initial-cluster=etcd=https://127.0.0.1:2380".to_owned(),
-                "--listen-client-urls=https://127.0.0.1:2379".to_owned(),
-                "--listen-peer-urls=https://127.0.0.1:2380".to_owned(),
+                format!("--initial-cluster=etcd={}", etcd_localhost_peer),
+                format!("--listen-client-urls={}", etcd_localhost),
+                format!("--listen-peer-urls={}", etcd_localhost_peer),
                 "--name=etcd".to_owned(),
                 "--peer-client-cert-auth".to_owned(),
                 format!("--cert-file={}", pki.apiserver_cert.display()),

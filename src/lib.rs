@@ -32,6 +32,8 @@ use log::info;
 use rayon::scope;
 use std::{fs::create_dir_all, process::Command};
 
+const LOCALHOST: &str = "127.0.0.1";
+
 pub struct Kubernix {
     processes: Vec<Box<dyn Stoppable>>,
 }
