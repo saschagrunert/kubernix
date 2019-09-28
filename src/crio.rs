@@ -1,9 +1,10 @@
 use crate::{
     process::{Process, Stoppable},
-    Config, ASSETS_DIR,
+    Config,
 };
 use failure::{format_err, Fallible};
 use log::info;
+use serde_json::{json, to_string_pretty};
 use std::{
     env,
     fs::{self, create_dir_all},
@@ -34,24 +35,30 @@ impl Crio {
         let bridge_json = cni_config.join("bridge.json");
         fs::write(
             bridge_json,
-            format!(
-                r#"{{
-  "cniVersion": "0.3.1",
-  "name": "crio-bridge",
-  "type": "bridge",
-  "bridge": "cni0",
-  "isGateway": true,
-  "ipMasq": true,
-  "hairpinMode": true,
-  "ipam": {{
-    "type": "host-local",
-    "routes": [{{ "dst": "0.0.0.0/0" }}],
-    "ranges": [[{{ "subnet": "{}" }}]]
-  }}
-}}
-"#,
-                config.crio.cidr
-            ),
+            to_string_pretty(&json!({
+              "cniVersion": "0.3.1",
+              "name": "crio-bridge",
+              "type": "bridge",
+              "bridge": "cni0",
+              "isGateway": true,
+              "ipMasq": true,
+              "hairpinMode": true,
+              "ipam": {
+                "type": "host-local",
+                "routes": [{ "dst": "0.0.0.0/0" }],
+                "ranges": [[{ "subnet": config.crio.cidr }]]
+              }
+            }))?,
+        )?;
+
+        let policy_json = dir.join("policy.json");
+        fs::write(
+            &policy_json,
+            to_string_pretty(&json!({
+              "default": [{
+                  "type": "insecureAcceptAnything"
+              }]
+            }))?,
         )?;
 
         let mut process = Process::new(
@@ -67,10 +74,7 @@ impl Crio {
                 format!("--cni-config-dir={}", cni_config.display()),
                 format!("--cni-plugin-dir={}", cni.display()),
                 "--registry=docker.io".to_owned(),
-                format!(
-                    "--signature-policy={}",
-                    Path::new(ASSETS_DIR).join("policy.json").display()
-                ),
+                format!("--signature-policy={}", policy_json.display()),
             ],
         )?;
 

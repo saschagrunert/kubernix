@@ -1,6 +1,7 @@
 use crate::{Config, ASSETS_DIR};
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
+use serde_json::{json, to_string_pretty};
 use std::{
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
@@ -85,27 +86,24 @@ impl Pki {
 
     fn setup_kubelet(&mut self, dir: &Path) -> Fallible<()> {
         let prefix = format!("system:node:{}", self.hostname);
-        let csr = format!(
-            r#"{{
-  "CN": "system:node:{}",
-  "key": {{
-    "algo": "rsa",
-    "size": 2048
-  }},
-  "names": [
-    {{
-      "C": "US",
-      "L": "Portland",
-      "O": "system:nodes",
-      "OU": "Kubernetes",
-      "ST": "Oregon"
-    }}
-  ]
-}}"#,
-            self.hostname
-        );
+        let csr = json!({
+          "CN": prefix,
+          "key": {
+            "algo": "rsa",
+            "size": 2048
+          },
+          "names": [
+            {
+              "C": "US",
+              "L": "Portland",
+              "O": "system:nodes",
+              "OU": "Kubernetes",
+              "ST": "Oregon"
+            }
+          ]
+        });
         let csr_file = dir.join("node-csr.json");
-        fs::write(&csr_file, csr)?;
+        fs::write(&csr_file, to_string_pretty(&csr)?)?;
 
         let (c, k) =
             self.generate(dir, &prefix, &format!("{}", csr_file.display()))?;
