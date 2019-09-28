@@ -1,5 +1,6 @@
 use crate::{config::Config, kubeconfig::KubeConfig};
 use failure::{bail, Fallible};
+use incdoc::incdoc;
 use log::info;
 use std::{
     fs::{self, create_dir_all},
@@ -15,7 +16,7 @@ impl CoreDNS {
         let dir = config.root.join("coredns");
         create_dir_all(&dir)?;
 
-        let yml = format!(
+        let yml = incdoc!(format!(
             r#"---
 apiVersion: v1
 kind: ServiceAccount
@@ -198,7 +199,7 @@ spec:
     port: 9153
     protocol: TCP"#,
             config.kube.cluster_dns
-        );
+        ));
         let yml_file = dir.join("coredns.yml");
         fs::write(&yml_file, yml)?;
 
