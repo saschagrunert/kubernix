@@ -36,12 +36,12 @@ impl Etcd {
                 format!("--listen-peer-urls={}", etcd_localhost_peer),
                 "--name=etcd".to_owned(),
                 "--peer-client-cert-auth".to_owned(),
-                format!("--cert-file={}", pki.apiserver_cert.display()),
-                format!("--key-file={}", pki.apiserver_key.display()),
-                format!("--peer-cert-file={}", pki.apiserver_cert.display()),
-                format!("--peer-key-file={}", pki.apiserver_key.display()),
-                format!("--peer-trusted-ca-file={}", pki.ca_cert.display()),
-                format!("--trusted-ca-file={}", pki.ca_cert.display()),
+                format!("--cert-file={}", pki.apiserver.cert().display()),
+                format!("--key-file={}", pki.apiserver.key().display()),
+                format!("--peer-cert-file={}", pki.apiserver.cert().display()),
+                format!("--peer-key-file={}", pki.apiserver.key().display()),
+                format!("--peer-trusted-ca-file={}", pki.ca.cert().display()),
+                format!("--trusted-ca-file={}", pki.ca.cert().display()),
             ],
         )?;
 
