@@ -51,9 +51,9 @@ impl KubeConfig {
             ip,
             hostname,
             &format!("system:node:{}", hostname),
-            &pki.ca_cert,
-            &pki.kubelet_cert,
-            &pki.kubelet_key,
+            pki.ca.cert(),
+            pki.kubelet.cert(),
+            pki.kubelet.key(),
         )?;
         self.kubelet = target;
         Ok(())
@@ -66,9 +66,9 @@ impl KubeConfig {
             ip,
             NAME,
             &format!("system:{}", NAME),
-            &pki.ca_cert,
-            &pki.proxy_cert,
-            &pki.proxy_key,
+            pki.ca.cert(),
+            pki.proxy.cert(),
+            pki.proxy.key(),
         )?;
         self.proxy = target;
         Ok(())
@@ -86,9 +86,9 @@ impl KubeConfig {
             ip,
             NAME,
             &format!("system:{}", NAME),
-            &pki.ca_cert,
-            &pki.controller_manager_cert,
-            &pki.controller_manager_key,
+            pki.ca.cert(),
+            pki.controller_manager.cert(),
+            pki.controller_manager.key(),
         )?;
         self.controller_manager = target;
         Ok(())
@@ -106,9 +106,9 @@ impl KubeConfig {
             ip,
             NAME,
             &format!("system:{}", NAME),
-            &pki.ca_cert,
-            &pki.scheduler_cert,
-            &pki.scheduler_key,
+            pki.ca.cert(),
+            pki.scheduler.cert(),
+            pki.scheduler.key(),
         )?;
         self.scheduler = target;
         Ok(())
@@ -121,9 +121,9 @@ impl KubeConfig {
             ip,
             NAME,
             NAME,
-            &pki.ca_cert,
-            &pki.admin_cert,
-            &pki.admin_key,
+            pki.ca.cert(),
+            pki.admin.cert(),
+            pki.admin.key(),
         )?;
         self.admin = target;
         Ok(())
