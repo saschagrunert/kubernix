@@ -120,13 +120,13 @@ impl Kubernix {
                 info!("Everything is up and running");
                 Ok(Kubernix {
                     processes: vec![
-                        Box::new(crio),
-                        Box::new(etcd),
+                        Box::new(kubelet),
+                        Box::new(proxy),
                         Box::new(apiserver),
                         Box::new(controllermanager),
                         Box::new(scheduler),
-                        Box::new(kubelet),
-                        Box::new(proxy),
+                        Box::new(etcd),
+                        Box::new(crio),
                     ],
                 })
             }
