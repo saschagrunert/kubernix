@@ -4,6 +4,7 @@ use crate::{
     pki::Pki,
     process::{Process, Stoppable},
 };
+use incdoc::incdoc;
 use failure::Fallible;
 use log::info;
 use std::{
@@ -27,7 +28,7 @@ impl Kubelet {
         let dir = config.root.join("kubelet");
         create_dir_all(&dir)?;
 
-        let yml = format!(
+        let yml = incdoc!(format!(
             r#"---
 kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
@@ -53,7 +54,7 @@ tlsPrivateKeyFile: "{}"
             config.crio.cidr,
             pki.kubelet.cert().display(),
             pki.kubelet.key().display()
-        );
+        ));
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
 
