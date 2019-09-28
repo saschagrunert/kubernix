@@ -48,11 +48,11 @@ runtimeRequestTimeout: "15m"
 tlsCertFile: "{}"
 tlsPrivateKeyFile: "{}"
 "#,
-            pki.ca_cert.display(),
+            pki.ca.cert().display(),
             config.kube.cluster_dns,
             config.crio.cidr,
-            pki.kubelet_cert.display(),
-            pki.kubelet_key.display()
+            pki.kubelet.cert().display(),
+            pki.kubelet.key().display()
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
