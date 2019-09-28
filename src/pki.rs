@@ -243,17 +243,22 @@ impl Pki {
 
     fn write_ca_config(&mut self, dir: &Path) -> Fallible<()> {
         let cfg = json!({
-            "signing": {
-                "default": {
-                    "expiry": "8760h"
-                },
-                "profiles": {
-                    "kubernetes": {
-                    "usages": ["signing", "key encipherment", "server auth", "client auth"],
-                    "expiry": "8760h"
-                    }
-                }
+          "signing": {
+            "default": {
+              "expiry": "8760h"
+            },
+            "profiles": {
+              "kubernetes": {
+              "usages": [
+                "signing",
+                "key encipherment",
+                "server auth",
+                "client auth"
+              ],
+              "expiry": "8760h"
+              }
             }
+          }
         });
         let dest = dir.join("ca-config.json");
         fs::write(&dest, to_string_pretty(&cfg)?)?;
