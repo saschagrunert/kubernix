@@ -30,7 +30,10 @@ impl ControllerManager {
                     "--cluster-signing-cert-file={}",
                     pki.ca.cert().display()
                 ),
-                format!("--cluster-signing-key-file={}", pki.ca.key().display()),
+                format!(
+                    "--cluster-signing-key-file={}",
+                    pki.ca.key().display()
+                ),
                 format!(
                     "--kubeconfig={}",
                     kubeconfig.controller_manager.display()

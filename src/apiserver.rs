@@ -61,7 +61,10 @@ impl APIServer {
                     "--kubelet-client-certificate={}",
                     pki.apiserver.cert().display()
                 ),
-                format!("--kubelet-client-key={}", pki.apiserver.key().display()),
+                format!(
+                    "--kubelet-client-key={}",
+                    pki.apiserver.key().display()
+                ),
                 "--kubelet-https=true".to_owned(),
                 "--runtime-config=api/all".to_owned(),
                 format!(
@@ -72,7 +75,7 @@ impl APIServer {
                     "--service-cluster-ip-range={}",
                     config.kube.service_cidr
                 ),
-                format!("--tls-cert-file={}", pki.apiserver_cert.display()),
+                format!("--tls-cert-file={}", pki.apiserver.cert().display()),
                 format!(
                     "--tls-private-key-file={}",
                     pki.apiserver.key().display()

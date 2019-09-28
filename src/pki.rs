@@ -188,8 +188,8 @@ impl Pki {
         ];
         let mut cfssl = Command::new("cfssl")
             .arg("gencert")
-            .arg(format!("-ca={}", self.ca_cert.display()))
-            .arg(format!("-ca-key={}", self.ca_key.display()))
+            .arg(format!("-ca={}", self.ca.cert().display()))
+            .arg(format!("-ca-key={}", self.ca.key().display()))
             .arg(format!("-config={}", self.ca_config.display()))
             .arg("-profile=kubernetes")
             .arg(format!("-hostname={}", hostnames.join(",")))
