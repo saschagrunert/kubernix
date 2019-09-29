@@ -125,6 +125,7 @@ impl Crio {
 
 impl Stoppable for Crio {
     fn stop(&mut self) {
+        // Stop the process
         self.process.stop();
 
         // Wait until the process exited
@@ -133,7 +134,7 @@ impl Stoppable for Crio {
             return;
         }
 
-        // Unmount everything needed
+        // Umount every shared memory (SHM)
         for entry in WalkDir::new(&self.run_root)
             .into_iter()
             .filter_map(|e| e.ok())
@@ -150,8 +151,9 @@ impl Stoppable for Crio {
             }
         }
 
-        let dir = self.storage_root.join(&self.storage_driver);
-        if let Err(e) = umount(&dir) {
+        // Umount the storage dir
+        let storage = self.storage_root.join(&self.storage_driver);
+        if let Err(e) = umount(&storage) {
             debug!("Unable to umount '{}': {}", dir.display(), e);
         }
     }
