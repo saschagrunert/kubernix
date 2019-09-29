@@ -20,14 +20,15 @@ impl Proxy {
         create_dir_all(&dir)?;
 
         let yml = incdoc!(format!(
-            r#"---
-kind: KubeProxyConfiguration
-apiVersion: kubeproxy.config.k8s.io/v1alpha1
-clientConnection:
-  kubeconfig: "{}"
-mode: "iptables"
-clusterCIDR: "{}"
-"#,
+            r#"
+               ---
+               kind: KubeProxyConfiguration
+               apiVersion: kubeproxy.config.k8s.io/v1alpha1
+               clientConnection:
+                 kubeconfig: "{}"
+               mode: "iptables"
+               clusterCIDR: "{}"
+            "#,
             kubeconfig.proxy.display(),
             config.kube.cluster_cidr,
         ));
