@@ -1,0 +1,38 @@
+---
+version: 2.1
+
+executors:
+  container:
+    docker:
+      - image: nixos/nix
+
+workflows:
+  version: 2
+  pipeline:
+    jobs:
+      - lint-rustfmt
+
+prepare-env: &prepare-env
+  run:
+    name: Install dependencies
+    command: apk add bash ca-certificates curl findutils git make openssh
+
+jobs:
+  lint-rustfmt:
+    executor: container
+    steps:
+      - <<: *prepare-env
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-lint-rustfmt-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: rustfmt
+          command: make lint-rustfmt
+      - save_cache:
+          key: v1-lint-rustfmt-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - /nix
+            - target
+            - ~/.cargo
+            
