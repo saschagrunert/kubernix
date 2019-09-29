@@ -3,16 +3,21 @@ use crate::{
     Config,
 };
 use failure::{format_err, Fallible};
-use log::info;
+use log::{debug, info};
+use nix::mount::umount;
 use serde_json::{json, to_string_pretty};
 use std::{
     env,
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
 };
+use walkdir::WalkDir;
 
 pub struct Crio {
     process: Process,
+    run_root: PathBuf,
+    storage_driver: String,
+    storage_root: PathBuf,
 }
 
 impl Crio {
@@ -91,7 +96,12 @@ impl Crio {
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready");
-        Ok(Crio { process })
+        Ok(Crio {
+            process,
+            run_root,
+            storage_driver,
+            storage_root,
+        })
     }
 
     fn find_executable<P>(name: P) -> Option<PathBuf>
@@ -116,5 +126,27 @@ impl Crio {
 impl Stoppable for Crio {
     fn stop(&mut self) {
         self.process.stop();
+
+        // Unmount everything needed
+        for entry in WalkDir::new(&self.run_root)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|x| {
+                x.path()
+                    .to_str()
+                    .map(|e| e.contains("shm"))
+                    .unwrap_or(false)
+            })
+        {
+            debug!("Umounting: {}", entry.path().display());
+            if let Err(e) = umount(entry.path()) {
+                debug!("Unable to umount '{}': {}", entry.path().display(), e)
+            }
+        }
+
+        let dir = self.storage_root.join(&self.storage_driver);
+        if let Err(e) = umount(&dir) {
+            debug!("Unable to umount '{}': {}", dir.display(), e);
+        }
     }
 }
