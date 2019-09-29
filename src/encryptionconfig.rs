@@ -1,7 +1,6 @@
 use crate::Config;
 use base64::encode;
 use failure::Fallible;
-use incdoc::incdoc;
 use log::info;
 use rand::{thread_rng, Rng};
 use std::{fs, path::PathBuf};
@@ -16,7 +15,7 @@ impl EncryptionConfig {
 
         let rnd = thread_rng().gen::<[u8; 32]>();
         let b64 = encode(&rnd);
-        let yml = incdoc!(format!(
+        let yml = format!(
             "---
 kind: EncryptionConfig
 apiVersion: v1
@@ -30,7 +29,7 @@ resources:
               secret: {}
       - identity: {{}}",
             b64
-        ));
+        );
         let config = &config.root.join("encryption-config.yml");
         fs::write(config, yml)?;
         Ok(EncryptionConfig {

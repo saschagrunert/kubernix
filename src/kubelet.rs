@@ -5,7 +5,6 @@ use crate::{
     process::{Process, Stoppable},
 };
 use failure::Fallible;
-use incdoc::incdoc;
 use log::info;
 use std::{
     fs::{self, create_dir_all},
@@ -28,34 +27,33 @@ impl Kubelet {
         let dir = config.root.join("kubelet");
         create_dir_all(&dir)?;
 
-        let yml = incdoc!(format!(
-            r#"
-               ---
-               kind: KubeletConfiguration
-               apiVersion: kubelet.config.k8s.io/v1beta1
-               authentication:
-                 anonymous:
-                   enabled: false
-                 webhook:
-                   enabled: true
-                 x509:
-                   clientCAFile: "{}"
-               authorization:
-                 mode: Webhook
-               clusterDomain: "cluster.local"
-               clusterDNS:
-                 - "{}"
-               podCIDR: "{}"
-               runtimeRequestTimeout: "15m"
-               tlsCertFile: "{}"
-               tlsPrivateKeyFile: "{}"
-               "#,
+        let yml = format!(
+            r#"---
+kind: KubeletConfiguration
+apiVersion: kubelet.config.k8s.io/v1beta1
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+  x509:
+    clientCAFile: "{}"
+authorization:
+  mode: Webhook
+clusterDomain: "cluster.local"
+clusterDNS:
+  - "{}"
+podCIDR: "{}"
+runtimeRequestTimeout: "15m"
+tlsCertFile: "{}"
+tlsPrivateKeyFile: "{}"
+"#,
             pki.ca.cert().display(),
             config.kube.cluster_dns,
             config.crio.cidr,
             pki.kubelet.cert().display(),
             pki.kubelet.key().display()
-        ));
+        );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
 

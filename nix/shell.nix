@@ -1,10 +1,21 @@
 let
-  pkgs = import ./nixpkgs.nix {};
+  moz_overlay = import (
+    builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/master.tar.gz
+  );
+  pkgs = import ./nixpkgs.nix {
+    overlays = [ moz_overlay ];
+  };
+  ruststable = (pkgs.latest.rustChannels.stable.rust.override {
+    extensions = [
+      "clippy-preview"
+      "rustfmt-preview"
+    ];
+  });
 in
 pkgs.stdenv.mkDerivation {
   buildInputs = with pkgs; [
     bash
-    cargo
+    cacert
     cfssl
     conmon
     conntrack-tools
@@ -12,13 +23,13 @@ pkgs.stdenv.mkDerivation {
     cri-o
     cri-tools
     etcd
+    git
     iproute
     iptables
     kubernetes
     runc
+    ruststable
     socat
-    rustPackages.clippy
-    rustPackages.rustfmt
     utillinux
   ];
 

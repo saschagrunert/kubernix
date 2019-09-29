@@ -4,7 +4,6 @@ use crate::{
     process::{Process, Stoppable},
 };
 use failure::Fallible;
-use incdoc::incdoc;
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -22,18 +21,18 @@ impl Scheduler {
         let dir = config.root.join("scheduler");
         create_dir_all(&dir)?;
 
-        let yml = incdoc!(format!(
+        let yml = format!(
             r#"
-               ---
-               apiVersion: kubescheduler.config.k8s.io/v1alpha1
-               kind: KubeSchedulerConfiguration
-               clientConnection:
-                 kubeconfig: "{}"
-               leaderElection:
-                 leaderElect: true
-               "#,
+---
+apiVersion: kubescheduler.config.k8s.io/v1alpha1
+kind: KubeSchedulerConfiguration
+clientConnection:
+  kubeconfig: "{}"
+leaderElection:
+  leaderElect: true
+"#,
             kubeconfig.scheduler.display()
-        ));
+        );
         let cfg = &dir.join("config.yml");
         fs::write(cfg, yml)?;
 
