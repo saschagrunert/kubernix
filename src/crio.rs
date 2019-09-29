@@ -3,7 +3,7 @@ use crate::{
     Config,
 };
 use failure::{format_err, Fallible};
-use log::{debug, info};
+use log::{debug, info, error};
 use nix::mount::umount;
 use serde_json::{json, to_string_pretty};
 use std::{
@@ -126,6 +126,12 @@ impl Crio {
 impl Stoppable for Crio {
     fn stop(&mut self) {
         self.process.stop();
+
+        // Wait until the process exited
+        if self.process.dead().recv().is_err() {
+            error!("Unable to wait for CRI-O process to be exited");
+            return;
+        }
 
         // Unmount everything needed
         for entry in WalkDir::new(&self.run_root)
