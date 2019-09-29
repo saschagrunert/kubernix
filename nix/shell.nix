@@ -1,9 +1,9 @@
 let
-  moz_overlay = import (
+  overlay = import (
     builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/master.tar.gz
   );
   pkgs = import ./nixpkgs.nix {
-    overlays = [ moz_overlay ];
+    overlays = [ overlay ];
   };
   ruststable = (pkgs.latest.rustChannels.stable.rust.override {
     extensions = [
