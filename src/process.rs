@@ -95,7 +95,7 @@ impl Process {
         });
 
         Ok(Process {
-            command: format!("{} {}", cmd, args.join(" ")),
+            command: cmd,
             kill: kill_tx,
             dead: dead_rx,
             log_file: log_file.clone(),
