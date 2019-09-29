@@ -60,7 +60,7 @@ impl Kubernix {
 
         // Spawn the processes
         info!("Starting processes");
-        let mut processes :Stoppables = vec![];
+        let mut processes: Stoppables = vec![];
 
         let mut crio_result: Fallible<Crio> = Err(format_err!("Not started"));
         let mut etcd_result: Fallible<Etcd> = Err(format_err!("Not started"));

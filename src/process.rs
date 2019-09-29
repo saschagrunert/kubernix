@@ -79,11 +79,11 @@ impl Process {
                 match child.kill() {
                     Ok(_) => {
                         check_dead = true;
-                    },
+                    }
                     Err(e) => {
                         error!("Unable to kill process '{}': {}", c, e);
                         break;
-                    },
+                    }
                 }
             }
         });

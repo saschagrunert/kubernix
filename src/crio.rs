@@ -3,7 +3,7 @@ use crate::{
     Config,
 };
 use failure::{format_err, Fallible};
-use log::{debug, info, error};
+use log::{debug, error, info};
 use nix::mount::umount;
 use serde_json::{json, to_string_pretty};
 use std::{
@@ -154,7 +154,7 @@ impl Stoppable for Crio {
         // Umount the storage dir
         let storage = self.storage_root.join(&self.storage_driver);
         if let Err(e) = umount(&storage) {
-            debug!("Unable to umount '{}': {}", dir.display(), e);
+            debug!("Unable to umount '{}': {}", storage.display(), e);
         }
     }
 }
