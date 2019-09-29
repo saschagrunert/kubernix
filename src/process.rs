@@ -42,8 +42,7 @@ impl Process {
             .ok_or_else(|| format_err!("No valid command provided"))?;
         let args: Vec<String> = command.iter().map(|x| x.to_owned()).skip(1).collect();
 
-        let mut log_file = config.root.join(&config.log.dir);
-        log_file.set_file_name(&cmd);
+        let mut log_file = config.root.join(&config.log.dir).join(&cmd);
         log_file.set_extension("log");
 
         let out_file = File::create(&log_file)?;
@@ -137,5 +136,6 @@ impl Stoppable for Process {
         if self.dead.recv().is_err() {
             warn!("Unable to wait for process '{}' to be exited", self.command);
         }
+        debug!("Process '{}' stopped", self.command)
     }
 }
