@@ -78,7 +78,7 @@ impl Kubernix {
         let socket = config.root.join(&config.crio.dir).join("crio.sock");
 
         scope(|s| {
-            s.spawn(|_| running.push(Crio::new(config, &socket)));
+            s.spawn(|_| processes.push(Crio::new(config, &socket)));
             s.spawn(|_| {
                 etcd_result = Etcd::new(config, &pki);
                 apiserver_result = APIServer::new(
