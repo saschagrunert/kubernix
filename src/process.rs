@@ -102,11 +102,6 @@ impl Process {
         })
     }
 
-    /// Retrieve an instance to the dead indication channel
-    pub fn dead(&self) -> &Receiver<()> {
-        &self.dead
-    }
-
     // Wait for the process to become ready, by searching for the pattern in
     // every line of its output.
     pub fn wait_ready(&mut self, pattern: &str) -> Fallible<()> {
@@ -139,6 +134,9 @@ impl Stoppable for Process {
     fn stop(&mut self) {
         if self.kill.send(()).is_err() {
             warn!("Unable to kill process '{}'", self.command);
+        }
+        if self.dead.recv().is_err() {
+            warn!("Unable to wait for process '{}' to be exited", self.command);
         }
     }
 }
