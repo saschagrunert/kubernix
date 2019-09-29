@@ -34,8 +34,10 @@ use std::{fs::create_dir_all, process::Command};
 
 const LOCALHOST: &str = "127.0.0.1";
 
+type Stoppables = Vec<Box<dyn Stoppable>>;
+
 pub struct Kubernix {
-    processes: Vec<Box<dyn Stoppable>>,
+    processes: Stoppables,
 }
 
 impl Kubernix {
@@ -58,6 +60,8 @@ impl Kubernix {
 
         // Spawn the processes
         info!("Starting processes");
+        let mut processes :Stoppables = vec![];
+
         let mut crio_result: Fallible<Crio> = Err(format_err!("Not started"));
         let mut etcd_result: Fallible<Etcd> = Err(format_err!("Not started"));
         let mut apiserver_result: Fallible<APIServer> =
@@ -74,7 +78,7 @@ impl Kubernix {
         let socket = config.root.join(&config.crio.dir).join("crio.sock");
 
         scope(|s| {
-            s.spawn(|_| crio_result = Crio::new(config, &socket));
+            s.spawn(|_| running.push(Crio::new(config, &socket)));
             s.spawn(|_| {
                 etcd_result = Etcd::new(config, &pki);
                 apiserver_result = APIServer::new(
