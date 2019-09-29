@@ -1,4 +1,4 @@
-root = "run"
+root = "target/run"
 
 [log]
 dir = "log"
