@@ -3,7 +3,7 @@ use crate::{
     encryptionconfig::EncryptionConfig,
     kubeconfig::KubeConfig,
     pki::Pki,
-    process::{Process, Stoppable},
+    process::{Process, Startable, Stoppable},
     LOCALHOST,
 };
 use failure::{bail, Fallible};
@@ -19,13 +19,13 @@ pub struct APIServer {
 }
 
 impl APIServer {
-    pub fn new(
+    pub fn start(
         config: &Config,
         ip: &str,
         pki: &Pki,
         encryptionconfig: &EncryptionConfig,
         kubeconfig: &KubeConfig,
-    ) -> Fallible<APIServer> {
+    ) -> Startable {
         info!("Starting API Server");
 
         let dir = config.root.join("apiserver");
@@ -87,7 +87,7 @@ impl APIServer {
         process.wait_ready("etcd ok")?;
         Self::setup_rbac(&dir, &kubeconfig.admin)?;
         info!("API Server is ready");
-        Ok(APIServer { process })
+        Ok(Box::new(APIServer { process }))
     }
 
     fn setup_rbac(dir: &Path, admin_config: &Path) -> Fallible<()> {

@@ -1,10 +1,9 @@
 use crate::{
     config::Config,
     pki::Pki,
-    process::{Process, Stoppable},
+    process::{Process, Startable, Stoppable},
     LOCALHOST,
 };
-use failure::Fallible;
 use log::info;
 
 pub struct Etcd {
@@ -12,7 +11,7 @@ pub struct Etcd {
 }
 
 impl Etcd {
-    pub fn new(config: &Config, pki: &Pki) -> Fallible<Etcd> {
+    pub fn start(config: &Config, pki: &Pki) -> Startable {
         info!("Starting etcd");
 
         let etcd_localhost = format!("https://{}:2379", LOCALHOST);
@@ -47,7 +46,7 @@ impl Etcd {
 
         process.wait_ready("ready to serve client requests")?;
         info!("etcd is ready");
-        Ok(Etcd { process })
+        Ok(Box::new(Etcd { process }))
     }
 }
 

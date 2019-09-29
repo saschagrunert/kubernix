@@ -34,7 +34,7 @@ use std::{fs::create_dir_all, process::Command};
 
 const LOCALHOST: &str = "127.0.0.1";
 
-type Stoppables = Vec<Box<dyn Stoppable>>;
+type Stoppables = Vec<Box<dyn Stoppable + Send>>;
 
 pub struct Kubernix {
     processes: Stoppables,
@@ -60,113 +60,62 @@ impl Kubernix {
 
         // Spawn the processes
         info!("Starting processes");
-        let mut processes: Stoppables = vec![];
-
-        let mut crio_result: Fallible<Crio> = Err(format_err!("Not started"));
-        let mut etcd_result: Fallible<Etcd> = Err(format_err!("Not started"));
-        let mut apiserver_result: Fallible<APIServer> =
-            Err(format_err!("Not started"));
-        let mut controllermanager_result: Fallible<ControllerManager> =
-            Err(format_err!("Not started"));
-        let mut scheduler_result: Fallible<Scheduler> =
-            Err(format_err!("Not started"));
-        let mut kubelet_result: Fallible<Kubelet> =
-            Err(format_err!("Not started"));
-        let mut proxy_result: Fallible<Proxy> = Err(format_err!("Not started"));
 
         // Full path to the CRI socket
         let socket = config.root.join(&config.crio.dir).join("crio.sock");
 
+        let mut crio = Self::stopped();
+        let mut etcd = Self::stopped();
+        let mut apis = Self::stopped();
+        let mut cont = Self::stopped();
+        let mut sche = Self::stopped();
+        let mut kube = Self::stopped();
+        let mut prox = Self::stopped();
+
         scope(|s| {
-            s.spawn(|_| processes.push(Crio::new(config, &socket)));
+            s.spawn(|_| crio = Crio::start(config, &socket));
             s.spawn(|_| {
-                etcd_result = Etcd::new(config, &pki);
-                apiserver_result = APIServer::new(
+                etcd = Etcd::start(config, &pki);
+                apis = APIServer::start(
                     config,
                     &ip,
                     &pki,
                     &encryptionconfig,
                     &kubeconfig,
-                );
+                )
             });
             s.spawn(|_| {
-                controllermanager_result =
-                    ControllerManager::new(config, &pki, &kubeconfig)
+                cont = ControllerManager::start(config, &pki, &kubeconfig)
             });
-            s.spawn(|_| scheduler_result = Scheduler::new(config, &kubeconfig));
+            s.spawn(|_| sche = Scheduler::start(config, &kubeconfig));
             s.spawn(|_| {
-                kubelet_result =
-                    Kubelet::new(config, &pki, &kubeconfig, &socket)
+                kube = Kubelet::start(config, &pki, &kubeconfig, &socket)
             });
-            s.spawn(|_| proxy_result = Proxy::new(config, &kubeconfig));
+            s.spawn(|_| prox = Proxy::start(config, &kubeconfig));
         });
 
-        match (
-            crio_result,
-            etcd_result,
-            apiserver_result,
-            controllermanager_result,
-            scheduler_result,
-            kubelet_result,
-            proxy_result,
-        ) {
-            (
-                Ok(crio),
-                Ok(etcd),
-                Ok(apiserver),
-                Ok(controllermanager),
-                Ok(scheduler),
-                Ok(kubelet),
-                Ok(proxy),
-            ) => {
-                CoreDNS::apply(&config, &kubeconfig)?;
-
-                info!("Everything is up and running");
-                Ok(Kubernix {
-                    processes: vec![
-                        Box::new(kubelet),
-                        Box::new(proxy),
-                        Box::new(apiserver),
-                        Box::new(controllermanager),
-                        Box::new(scheduler),
-                        Box::new(etcd),
-                        Box::new(crio),
-                    ],
-                })
+        // Wait for `drain_filter()` to be stable
+        let mut started = vec![];
+        let mut dead = vec![];
+        for x in vec![crio, etcd, apis, cont, sche, kube, prox] {
+            if x.is_ok() {
+                started.push(x?)
+            } else {
+                dead.push(x?)
             }
-            (
-                crio,
-                etcd,
-                apiserver,
-                controllermanager,
-                scheduler,
-                kubelet,
-                proxy,
-            ) => {
-                if let Ok(mut x) = crio {
-                    x.stop();
-                }
-                if let Ok(mut x) = etcd {
-                    x.stop();
-                }
-                if let Ok(mut x) = apiserver {
-                    x.stop();
-                }
-                if let Ok(mut x) = controllermanager {
-                    x.stop();
-                }
-                if let Ok(mut x) = scheduler {
-                    x.stop();
-                }
-                if let Ok(mut x) = kubelet {
-                    x.stop();
-                }
-                if let Ok(mut x) = proxy {
-                    x.stop();
-                }
+        }
+        let mut kubernix = Kubernix { processes: started };
 
-                bail!("Unable to spawn processes")
-            }
+        // No dead processes
+        if dead.is_empty() {
+            CoreDNS::apply(&config, &kubeconfig)?;
+
+            info!("Everything is up and running");
+            Ok(kubernix)
+        } else {
+            // Cleanup started processes and exit
+            kubernix.stop();
+            bail!("Unable to start all processes")
         }
     }
 
@@ -174,6 +123,10 @@ impl Kubernix {
         for x in &mut self.processes {
             x.stop();
         }
+    }
+
+    fn stopped<T>() -> Fallible<T> {
+        Err(format_err!("Stopped"))
     }
 
     fn local_ip() -> Fallible<String> {

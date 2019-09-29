@@ -2,9 +2,8 @@ use crate::{
     config::Config,
     kubeconfig::KubeConfig,
     pki::Pki,
-    process::{Process, Stoppable},
+    process::{Process, Startable, Stoppable},
 };
-use failure::Fallible;
 use log::info;
 use std::{
     fs::{self, create_dir_all},
@@ -16,12 +15,12 @@ pub struct Kubelet {
 }
 
 impl Kubelet {
-    pub fn new(
+    pub fn start(
         config: &Config,
         pki: &Pki,
         kubeconfig: &KubeConfig,
         socket: &Path,
-    ) -> Fallible<Kubelet> {
+    ) -> Startable {
         info!("Starting Kubelet");
 
         let dir = config.root.join("kubelet");
@@ -77,7 +76,7 @@ tlsPrivateKeyFile: "{}"
 
         process.wait_ready("Successfully registered node")?;
         info!("Kubelet is ready");
-        Ok(Kubelet { process })
+        Ok(Box::new(Kubelet { process }))
     }
 }
 

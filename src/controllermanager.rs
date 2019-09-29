@@ -2,9 +2,8 @@ use crate::{
     config::Config,
     kubeconfig::KubeConfig,
     pki::Pki,
-    process::{Process, Stoppable},
+    process::{Process, Startable, Stoppable},
 };
-use failure::Fallible;
 use log::info;
 
 pub struct ControllerManager {
@@ -12,11 +11,11 @@ pub struct ControllerManager {
 }
 
 impl ControllerManager {
-    pub fn new(
+    pub fn start(
         config: &Config,
         pki: &Pki,
         kubeconfig: &KubeConfig,
-    ) -> Fallible<ControllerManager> {
+    ) -> Startable {
         info!("Starting Controller Manager");
 
         let mut process = Process::new(
@@ -55,7 +54,7 @@ impl ControllerManager {
 
         process.wait_ready("Serving securely")?;
         info!("Controller Manager is ready");
-        Ok(ControllerManager { process })
+        Ok(Box::new(ControllerManager { process }))
     }
 }
 

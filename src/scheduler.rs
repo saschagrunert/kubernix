@@ -1,9 +1,8 @@
 use crate::{
     config::Config,
     kubeconfig::KubeConfig,
-    process::{Process, Stoppable},
+    process::{Process, Startable, Stoppable},
 };
-use failure::Fallible;
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -12,10 +11,7 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    pub fn new(
-        config: &Config,
-        kubeconfig: &KubeConfig,
-    ) -> Fallible<Scheduler> {
+    pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Startable {
         info!("Starting Scheduler");
 
         let dir = config.root.join("scheduler");
@@ -47,7 +43,7 @@ leaderElection:
 
         process.wait_ready("Serving securely")?;
         info!("Scheduler is ready");
-        Ok(Scheduler { process })
+        Ok(Box::new(Scheduler { process }))
     }
 }
 

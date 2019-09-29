@@ -27,6 +27,9 @@ pub trait Stoppable {
     fn stop(&mut self);
 }
 
+/// Starable process type
+pub type Startable = Fallible<Box<dyn Stoppable + Send>>;
+
 impl Process {
     /// Creates a new `Process` instance by spawning the provided command `cmd`.
     /// If the process creation fails, an `Error` will be returned.
@@ -55,34 +58,37 @@ impl Process {
         let (kill_tx, kill_rx) = channel();
         let (dead_tx, dead_rx) = channel();
         let c = cmd.clone();
-        thread::spawn(move || loop {
+        thread::spawn(move || {
             let mut check_dead = false;
-
-            // Verify that the process is still running
-            match child.try_wait() {
-                Ok(Some(s)) => {
-                    if dead_tx.send(()).is_err() {
-                        error!("Unable to send dead notification to channel");
-                    }
-                    if !check_dead {
-                        error!("Process '{}' died unexpectedly: {}", c, s);
-                    }
-                    break;
-                }
-                Err(e) => error!("Unable to wait for process: {}", e),
-                Ok(None) => {} // process still running
-            }
-
-            // Kill the process if requested
-            if !check_dead && kill_rx.try_recv().is_ok() {
-                debug!("Stopping process '{}'", c);
-                match child.kill() {
-                    Ok(_) => {
-                        check_dead = true;
-                    }
-                    Err(e) => {
-                        error!("Unable to kill process '{}': {}", c, e);
+            loop {
+                // Verify that the process is still running
+                match child.try_wait() {
+                    Ok(Some(s)) => {
+                        if dead_tx.send(()).is_err() {
+                            error!(
+                                "Unable to send dead notification to channel"
+                            );
+                        }
+                        if !check_dead {
+                            error!("Process '{}' died unexpectedly: {}", c, s);
+                        }
                         break;
+                    }
+                    Err(e) => error!("Unable to wait for process: {}", e),
+                    Ok(None) => {} // process still running
+                }
+
+                // Kill the process if requested
+                if !check_dead && kill_rx.try_recv().is_ok() {
+                    debug!("Stopping process '{}'", c);
+                    match child.kill() {
+                        Ok(_) => {
+                            check_dead = true;
+                        }
+                        Err(e) => {
+                            error!("Unable to kill process '{}': {}", c, e);
+                            break;
+                        }
                     }
                 }
             }

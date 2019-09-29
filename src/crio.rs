@@ -1,8 +1,8 @@
 use crate::{
-    process::{Process, Stoppable},
+    process::{Process, Startable, Stoppable},
     Config,
 };
-use failure::{format_err, Fallible};
+use failure::format_err;
 use log::{debug, error, info};
 use nix::mount::umount;
 use serde_json::{json, to_string_pretty};
@@ -21,7 +21,7 @@ pub struct Crio {
 }
 
 impl Crio {
-    pub fn new(config: &Config, socket: &Path) -> Fallible<Crio> {
+    pub fn start(config: &Config, socket: &Path) -> Startable {
         info!("Starting CRI-O");
         let conmon = Self::find_executable("conmon")
             .ok_or_else(|| format_err!("Unable to find conmon in $PATH"))?;
@@ -96,12 +96,12 @@ impl Crio {
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready");
-        Ok(Crio {
+        Ok(Box::new(Crio {
             process,
             run_root,
             storage_driver,
             storage_root,
-        })
+        }))
     }
 
     fn find_executable<P>(name: P) -> Option<PathBuf>

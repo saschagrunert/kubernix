@@ -1,9 +1,8 @@
 use crate::{
     config::Config,
     kubeconfig::KubeConfig,
-    process::{Process, Stoppable},
+    process::{Process, Startable, Stoppable},
 };
-use failure::Fallible;
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -12,7 +11,7 @@ pub struct Proxy {
 }
 
 impl Proxy {
-    pub fn new(config: &Config, kubeconfig: &KubeConfig) -> Fallible<Proxy> {
+    pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Startable {
         info!("Starting Proxy");
 
         let dir = config.root.join("proxy");
@@ -43,7 +42,7 @@ clusterCIDR: "{}"
 
         process.wait_ready("Caches are synced")?;
         info!("Proxy is ready");
-        Ok(Proxy { process })
+        Ok(Box::new(Proxy { process }))
     }
 }
 
