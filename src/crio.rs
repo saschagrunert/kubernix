@@ -128,12 +128,6 @@ impl Stoppable for Crio {
         // Stop the process
         self.process.stop();
 
-        // Wait until the process exited
-        if self.process.dead().recv().is_err() {
-            error!("Unable to wait for CRI-O process to be exited");
-            return;
-        }
-
         // Umount every shared memory (SHM)
         for entry in WalkDir::new(&self.run_root)
             .into_iter()
