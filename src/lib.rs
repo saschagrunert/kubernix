@@ -96,18 +96,18 @@ impl Kubernix {
 
         // Wait for `drain_filter()` to be stable
         let mut started = vec![];
-        let mut dead = vec![];
-        for x in vec![crio, etcd, apis, cont, sche, kube, prox] {
+        let mut found_dead = false;
+        for x in vec![prox, kube, sche, cont, apis, etcd, crio] {
             if x.is_ok() {
                 started.push(x?)
             } else {
-                dead.push(x?)
+                found_dead = true
             }
         }
         let mut kubernix = Kubernix { processes: started };
 
         // No dead processes
-        if dead.is_empty() {
+        if !found_dead {
             CoreDNS::apply(&config, &kubeconfig)?;
 
             info!("Everything is up and running");
