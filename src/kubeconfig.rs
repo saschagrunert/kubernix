@@ -17,12 +17,7 @@ pub struct KubeConfig {
 }
 
 impl KubeConfig {
-    pub fn new(
-        config: &Config,
-        pki: &Pki,
-        ip: &str,
-        hostname: &str,
-    ) -> Fallible<KubeConfig> {
+    pub fn new(config: &Config, pki: &Pki, ip: &str, hostname: &str) -> Fallible<KubeConfig> {
         info!("Creating kubeconfigs");
 
         // Create the target dir
@@ -39,13 +34,7 @@ impl KubeConfig {
         Ok(kube)
     }
 
-    fn setup_kubelet(
-        &mut self,
-        dir: &Path,
-        pki: &Pki,
-        ip: &str,
-        hostname: &str,
-    ) -> Fallible<()> {
+    fn setup_kubelet(&mut self, dir: &Path, pki: &Pki, ip: &str, hostname: &str) -> Fallible<()> {
         let target = self.setup_kubeconfig(
             dir,
             ip,
@@ -74,12 +63,7 @@ impl KubeConfig {
         Ok(())
     }
 
-    fn setup_controller_manager(
-        &mut self,
-        dir: &Path,
-        pki: &Pki,
-        ip: &str,
-    ) -> Fallible<()> {
+    fn setup_controller_manager(&mut self, dir: &Path, pki: &Pki, ip: &str) -> Fallible<()> {
         const NAME: &str = "kube-controller-manager";
         let target = self.setup_kubeconfig(
             dir,
@@ -94,12 +78,7 @@ impl KubeConfig {
         Ok(())
     }
 
-    fn setup_scheduler(
-        &mut self,
-        dir: &Path,
-        pki: &Pki,
-        ip: &str,
-    ) -> Fallible<()> {
+    fn setup_scheduler(&mut self, dir: &Path, pki: &Pki, ip: &str) -> Fallible<()> {
         const NAME: &str = "kube-scheduler";
         let target = self.setup_kubeconfig(
             dir,

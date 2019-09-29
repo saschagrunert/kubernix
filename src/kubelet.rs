@@ -15,12 +15,7 @@ pub struct Kubelet {
 }
 
 impl Kubelet {
-    pub fn start(
-        config: &Config,
-        pki: &Pki,
-        kubeconfig: &KubeConfig,
-        socket: &Path,
-    ) -> Startable {
+    pub fn start(config: &Config, pki: &Pki, kubeconfig: &KubeConfig, socket: &Path) -> Startable {
         info!("Starting Kubelet");
 
         let dir = config.root.join("kubelet");
@@ -62,10 +57,7 @@ tlsPrivateKeyFile: "{}"
                 "kubelet".to_owned(),
                 format!("--config={}", yml_file.display()),
                 "--container-runtime=remote".to_owned(),
-                format!(
-                    "--container-runtime-endpoint=unix://{}",
-                    socket.display()
-                ),
+                format!("--container-runtime-endpoint=unix://{}", socket.display()),
                 format!("--kubeconfig={}", kubeconfig.kubelet.display()),
                 "--image-pull-progress-deadline=2m".to_owned(),
                 "--network-plugin=cni".to_owned(),

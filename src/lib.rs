@@ -44,8 +44,8 @@ impl Kubernix {
     pub fn new(config: &Config) -> Fallible<Kubernix> {
         // Retrieve the local IP
         let ip = Self::local_ip()?;
-        let hostname = hostname::get_hostname()
-            .ok_or_else(|| format_err!("Unable to retrieve hostname"))?;
+        let hostname =
+            hostname::get_hostname().ok_or_else(|| format_err!("Unable to retrieve hostname"))?;
         info!("Using local IP {}", ip);
 
         // Setup the PKI
@@ -76,21 +76,11 @@ impl Kubernix {
             s.spawn(|_| crio = Crio::start(config, &socket));
             s.spawn(|_| {
                 etcd = Etcd::start(config, &pki);
-                apis = APIServer::start(
-                    config,
-                    &ip,
-                    &pki,
-                    &encryptionconfig,
-                    &kubeconfig,
-                )
+                apis = APIServer::start(config, &ip, &pki, &encryptionconfig, &kubeconfig)
             });
-            s.spawn(|_| {
-                cont = ControllerManager::start(config, &pki, &kubeconfig)
-            });
+            s.spawn(|_| cont = ControllerManager::start(config, &pki, &kubeconfig));
             s.spawn(|_| sche = Scheduler::start(config, &kubeconfig));
-            s.spawn(|_| {
-                kube = Kubelet::start(config, &pki, &kubeconfig, &socket)
-            });
+            s.spawn(|_| kube = Kubelet::start(config, &pki, &kubeconfig, &socket));
             s.spawn(|_| prox = Proxy::start(config, &kubeconfig));
         });
 
@@ -139,9 +129,10 @@ impl Kubernix {
             bail!("unable to retrieve local IP")
         }
         let out = String::from_utf8(cmd.stdout)?;
-        let ip = out.split_whitespace().nth(6).ok_or_else(|| {
-            format_err!("Different `ip` command output expected")
-        })?;
+        let ip = out
+            .split_whitespace()
+            .nth(6)
+            .ok_or_else(|| format_err!("Different `ip` command output expected"))?;
         Ok(ip.to_owned())
     }
 }

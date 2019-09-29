@@ -3,7 +3,7 @@ use crate::{
     Config,
 };
 use failure::format_err;
-use log::{debug, error, info};
+use log::{debug, info};
 use nix::mount::umount;
 use serde_json::{json, to_string_pretty};
 use std::{

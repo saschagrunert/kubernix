@@ -169,12 +169,7 @@ impl Pki {
         Ok(())
     }
 
-    fn generate(
-        &mut self,
-        dir: &Path,
-        name: &str,
-        csr: &Path,
-    ) -> Fallible<Pair> {
+    fn generate(&mut self, dir: &Path, name: &str, csr: &Path) -> Fallible<Pair> {
         debug!("Creating certificate for {}", name);
         let hostnames = &[
             &self.ip,

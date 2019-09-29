@@ -24,6 +24,7 @@ pub struct Process {
 
 /// The trait to stop something
 pub trait Stoppable {
+    /// Stop the process
     fn stop(&mut self);
 }
 
@@ -39,20 +40,17 @@ impl Process {
             .get(0)
             .map(String::to_owned)
             .ok_or_else(|| format_err!("No valid command provided"))?;
-        let args: Vec<String> =
-            command.iter().map(|x| x.to_owned()).skip(1).collect();
+        let args: Vec<String> = command.iter().map(|x| x.to_owned()).skip(1).collect();
 
-        let mut log_file = &config
-            .root
-            .join(config.log.dir);
-        log_file.set_file_name(cmd);
+        let mut log_file = config.root.join(&config.log.dir);
+        log_file.set_file_name(&cmd);
         log_file.set_extension("log");
 
         let out_file = File::create(&log_file)?;
         let err_file = out_file.try_clone()?;
 
         // Spawn the process child
-        let mut child = Command::new(cmd.clone())
+        let mut child = Command::new(&cmd)
             .args(&args)
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file))
@@ -68,9 +66,7 @@ impl Process {
                 match child.try_wait() {
                     Ok(Some(s)) => {
                         if dead_tx.send(()).is_err() {
-                            error!(
-                                "Unable to send dead notification to channel"
-                            );
+                            error!("Unable to send dead notification to channel");
                         }
                         if !check_dead {
                             error!("Process '{}' died unexpectedly: {}", c, s);
@@ -101,7 +97,7 @@ impl Process {
             command: cmd,
             kill: kill_tx,
             dead: dead_rx,
-            log_file: log_file.clone(),
+            log_file,
         })
     }
 
