@@ -6,7 +6,7 @@ use std::{
     io::{BufRead, BufReader},
     path::PathBuf,
     process::{Command, Stdio},
-    sync::mpsc::{channel, Sender},
+    sync::mpsc::{channel, Receiver, Sender},
     thread,
     time::Instant,
 };
@@ -18,6 +18,7 @@ const READYNESS_TIMEOUT: u64 = 30;
 pub struct Process {
     command: String,
     kill: Sender<()>,
+    dead: Receiver<()>,
     log_file: PathBuf,
 }
 
@@ -52,12 +53,20 @@ impl Process {
             .spawn()?;
 
         let (kill_tx, kill_rx) = channel();
+        let (dead_tx, dead_rx) = channel();
         let c = cmd.clone();
         thread::spawn(move || loop {
+            let mut check_dead = false;
+
             // Verify that the process is still running
             match child.try_wait() {
                 Ok(Some(s)) => {
-                    error!("Process '{}' died: {}", c, s);
+                    if dead_tx.send(()).is_err() {
+                        error!("Unable to send dead notification to channel");
+                    }
+                    if !check_dead {
+                        error!("Process '{}' died unexpectedly: {}", c, s);
+                    }
                     break;
                 }
                 Err(e) => error!("Unable to wait for process: {}", e),
@@ -65,20 +74,31 @@ impl Process {
             }
 
             // Kill the process if requested
-            if kill_rx.try_recv().is_ok() {
+            if !check_dead && kill_rx.try_recv().is_ok() {
                 debug!("Stopping process '{}'", c);
-                if child.kill().is_err() {
-                    error!("Unable to kill process '{}'", c)
+                match child.kill() {
+                    Ok(_) => {
+                        check_dead = true;
+                    },
+                    Err(e) => {
+                        error!("Unable to kill process '{}': {}", c, e);
+                        break;
+                    },
                 }
-                break;
             }
         });
 
         Ok(Process {
             command: format!("{} {}", cmd, args.join(" ")),
             kill: kill_tx,
+            dead: dead_rx,
             log_file: log_file.clone(),
         })
+    }
+
+    /// Retrieve an instance to the dead indication channel
+    pub fn dead(&self) -> &Receiver<()> {
+        &self.dead
     }
 
     // Wait for the process to become ready, by searching for the pattern in
