@@ -23,6 +23,7 @@ pkgs.stdenv.mkDerivation {
     cri-o
     cri-tools
     etcd
+    fish
     git
     iproute
     iptables
@@ -36,6 +37,7 @@ pkgs.stdenv.mkDerivation {
   LANG = "en_US.UTF-8";
 
   shellHook = ''
+    export PS1="> "
     export CONTAINER_RUNTIME_ENDPOINT="unix://$PWD/target/run/crio/crio.sock"
     export KUBECONFIG="target/run/kube/admin.kubeconfig"
   '';
