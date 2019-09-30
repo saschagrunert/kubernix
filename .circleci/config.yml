@@ -17,7 +17,10 @@ workflows:
 prepare-env: &prepare-env
   run:
     name: Install dependencies
-    command: apk add bash ca-certificates curl findutils git make openssh
+    command: |
+      apk add bash ca-certificates curl findutils git make openssh
+      eval 'ssh-agent -s'
+      env
 
 jobs:
   build:
