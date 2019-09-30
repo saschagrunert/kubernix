@@ -120,7 +120,9 @@ impl Process {
 impl Stoppable for Process {
     /// Stopping the process by killing it
     fn stop(&mut self) -> Fallible<()> {
-        self.kill.send(())?;
+        if let Err(e) = self.kill.send(()) {
+            bail!("Unable to kill '{}': {}", self.command, e)
+        }
         if let Some(handle) = self.watch.take() {
             if handle.join().is_err() {
                 bail!("Unable to stop process '{}'", self.command);
