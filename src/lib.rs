@@ -37,11 +37,12 @@ const LOCALHOST: &str = "127.0.0.1";
 type Stoppables = Vec<Startable>;
 
 pub struct Kubernix {
+    config: Config,
     processes: Stoppables,
 }
 
 impl Kubernix {
-    pub fn new(config: &Config) -> Fallible<Kubernix> {
+    pub fn new(config: Config) -> Fallible<Kubernix> {
         // Retrieve the local IP
         let ip = Self::local_ip()?;
         let hostname =
@@ -49,11 +50,11 @@ impl Kubernix {
         info!("Using local IP {}", ip);
 
         // Setup the PKI
-        let pki = Pki::new(config, &ip, &hostname)?;
+        let pki = Pki::new(&config, &ip, &hostname)?;
 
         // Setup the configs
-        let kubeconfig = KubeConfig::new(config, &pki, &ip, &hostname)?;
-        let encryptionconfig = EncryptionConfig::new(config)?;
+        let kubeconfig = KubeConfig::new(&config, &pki, &ip, &hostname)?;
+        let encryptionconfig = EncryptionConfig::new(&config)?;
 
         // Create the log dir
         create_dir_all(config.root.join(&config.log.dir))?;
@@ -73,15 +74,15 @@ impl Kubernix {
         let mut prox = Self::stopped();
 
         scope(|s| {
-            s.spawn(|_| crio = Crio::start(config, &socket));
+            s.spawn(|_| crio = Crio::start(&config, &socket));
             s.spawn(|_| {
-                etcd = Etcd::start(config, &pki);
-                apis = APIServer::start(config, &ip, &pki, &encryptionconfig, &kubeconfig)
+                etcd = Etcd::start(&config, &pki);
+                apis = APIServer::start(&config, &ip, &pki, &encryptionconfig, &kubeconfig)
             });
-            s.spawn(|_| cont = ControllerManager::start(config, &pki, &kubeconfig));
-            s.spawn(|_| sche = Scheduler::start(config, &kubeconfig));
-            s.spawn(|_| kube = Kubelet::start(config, &pki, &kubeconfig, &socket));
-            s.spawn(|_| prox = Proxy::start(config, &kubeconfig));
+            s.spawn(|_| cont = ControllerManager::start(&config, &pki, &kubeconfig));
+            s.spawn(|_| sche = Scheduler::start(&config, &kubeconfig));
+            s.spawn(|_| kube = Kubelet::start(&config, &pki, &kubeconfig, &socket));
+            s.spawn(|_| prox = Proxy::start(&config, &kubeconfig));
         });
 
         // Wait for `drain_filter()` to be stable
@@ -96,7 +97,10 @@ impl Kubernix {
                 found_dead = true
             }
         }
-        let mut kubernix = Kubernix { processes: started };
+        let mut kubernix = Kubernix {
+            config: config.clone(),
+            processes: started,
+        };
 
         // No dead processes
         if !found_dead {
@@ -112,7 +116,10 @@ impl Kubernix {
     }
 
     pub fn shell(&self) {
-        if let Err(e) = Command::new("bash").status() {
+        if let Err(e) = Command::new("bash")
+            .current_dir(&self.config.root.join(&self.config.log.dir))
+            .status()
+        {
             error!("Unable to spawn shell: {}", e);
         }
     }

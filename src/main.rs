@@ -26,7 +26,7 @@ fn run() -> Fallible<()> {
 
     // Run kubernix
     info!("Starting kubernix");
-    let mut kube = Kubernix::new(&config)?;
+    let mut kube = Kubernix::new(config)?;
 
     info!("Welcome to kubernix");
     kube.shell();

@@ -7,7 +7,7 @@ use std::{
 };
 use toml;
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The global configuration
 pub struct Config {
@@ -42,7 +42,7 @@ impl Config {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The logger configuration
 pub struct LogConfig {
@@ -53,7 +53,7 @@ pub struct LogConfig {
     pub dir: PathBuf,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The PKI configuration
 pub struct PkiConfig {
@@ -61,7 +61,7 @@ pub struct PkiConfig {
     pub dir: PathBuf,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The Kube configuration
 pub struct KubeConfig {
@@ -78,7 +78,7 @@ pub struct KubeConfig {
     pub cluster_dns: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 #[serde(rename_all = "kebab-case")]
 /// The CRI-O configuration
 pub struct CrioConfig {
