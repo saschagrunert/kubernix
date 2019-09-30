@@ -14,6 +14,7 @@ workflows:
       - build-release
       - lint-clippy
       - lint-rustfmt
+      - test
 
 prepare-env: &prepare-env
   run:
@@ -89,6 +90,24 @@ jobs:
           command: make lint-rustfmt
       - save_cache:
           key: v1-lint-rustfmt-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - /nix
+            - target
+            - ~/.cargo
+
+  test:
+    executor: container
+    steps:
+      - <<: *prepare-env
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: test
+          command: make test
+      - save_cache:
+          key: v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:
             - /nix
             - target
