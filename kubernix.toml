@@ -1,4 +1,5 @@
 root = "target/run"
+shell = true
 
 [log]
 dir = "log"
