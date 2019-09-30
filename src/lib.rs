@@ -30,7 +30,7 @@ use scheduler::Scheduler;
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
 use rayon::scope;
-use std::{fs::create_dir_all, process::Command};
+use std::{fs::create_dir_all, process::Command, net::IpAddr};
 
 const LOCALHOST: &str = "127.0.0.1";
 
@@ -144,13 +144,16 @@ impl Kubernix {
             .arg("1.2.3.4")
             .output()?;
         if !cmd.status.success() {
-            bail!("unable to retrieve local IP")
+            bail!("Unable to obtain `ip` output")
         }
         let out = String::from_utf8(cmd.stdout)?;
         let ip = out
             .split_whitespace()
             .nth(6)
             .ok_or_else(|| format_err!("Different `ip` command output expected"))?;
+        if let Err(e) = ip.parse::<IpAddr>() {
+            bail!("Unable to parse IP '{}': {}", ip, e);
+        }
         Ok(ip.to_owned())
     }
 }
