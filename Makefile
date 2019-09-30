@@ -33,6 +33,10 @@ nixpkgs:
 shell:
 	$(call nix-shell-pure,sudo)
 
+.PHONY: test
+test:
+	$(call nix-shell-run,,cargo test)
+
 .PHONY: run
 run:
 	$(call nix-shell-pure-run,sudo,cargo run --release)
