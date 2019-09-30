@@ -30,7 +30,7 @@ use scheduler::Scheduler;
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
 use rayon::scope;
-use std::{fs::create_dir_all, process::Command, net::IpAddr};
+use std::{fs::create_dir_all, net::IpAddr, process::Command};
 
 const LOCALHOST: &str = "127.0.0.1";
 
