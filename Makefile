@@ -3,7 +3,7 @@ define nix-shell
 endef
 
 define nix-shell-pure
-	$(call nix-shell,$(1),--pure --keep-env=SSH_AUTH_SOCK $(2))
+	$(call nix-shell,$(1),--keep SSH_AUTH_SOCK --pure $(2))
 endef
 
 define nix-shell-run
