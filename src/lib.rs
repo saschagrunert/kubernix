@@ -42,7 +42,7 @@ pub struct Kubernix {
 }
 
 impl Kubernix {
-    pub fn new(config: Config) -> Fallible<Kubernix> {
+    pub fn start(config: Config) -> Fallible<Kubernix> {
         // Retrieve the local IP
         let ip = Self::local_ip()?;
         let hostname =
@@ -107,6 +107,9 @@ impl Kubernix {
             CoreDNS::apply(&config, &kubeconfig)?;
 
             info!("Everything is up and running");
+            if config.shell {
+                kubernix.shell();
+            }
             Ok(kubernix)
         } else {
             // Cleanup started processes and exit
@@ -115,7 +118,7 @@ impl Kubernix {
         }
     }
 
-    pub fn shell(&self) {
+    fn shell(&self) {
         if let Err(e) = Command::new("bash")
             .current_dir(&self.config.root.join(&self.config.log.dir))
             .status()
