@@ -31,8 +31,10 @@ pub struct Pair {
 
 impl Pair {
     pub fn new(dir: &Path, name: &str) -> Pair {
-        let cert = dir.join(format!("{}.pem", name));
-        let key = dir.join(format!("{}-key.pem", name));
+        let mut cert = dir.join(name);
+        cert.set_extension("pem");
+        let mut key = dir.join(format!("{}-key", name));
+        key.set_extension("pem");
         Pair { cert, key }
     }
 
