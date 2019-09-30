@@ -11,6 +11,7 @@ workflows:
   pipeline:
     jobs:
       - build
+      - build-release
       - lint-clippy
       - lint-rustfmt
 
@@ -34,6 +35,24 @@ jobs:
           command: make
       - save_cache:
           key: v1-build-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - /nix
+            - target
+            - ~/.cargo
+
+  build-release:
+    executor: container
+    steps:
+      - <<: *prepare-env
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-build-release-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: build release
+          command: make build-release
+      - save_cache:
+          key: v1-build-release-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:
             - /nix
             - target
