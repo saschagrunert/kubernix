@@ -3,7 +3,7 @@ define nix-shell
 endef
 
 define nix-shell-pure
-	$(call nix-shell,$(1),--pure $(2))
+	$(call nix-shell,$(1),--pure --keep-env=SSH_AUTH_SOCK $(2))
 endef
 
 define nix-shell-run
@@ -18,11 +18,11 @@ all: build
 
 .PHONY: build
 build:
-	$(call nix-shell-run,,cargo build)
+	$(call nix-shell-pure-run,,cargo build)
 
 .PHONY: build-release
 build-release:
-	$(call nix-shell-run,,cargo build --release)
+	$(call nix-shell-pure-run,,cargo build --release)
 
 .PHONY: nixpkgs
 nixpkgs:
@@ -35,7 +35,7 @@ shell:
 
 .PHONY: test
 test:
-	$(call nix-shell-run,,cargo test)
+	$(call nix-shell-pure-run,,cargo test)
 
 .PHONY: run
 run:
@@ -43,9 +43,9 @@ run:
 
 .PHONY: lint-clippy
 lint-clippy:
-	$(call nix-shell-run,,cargo clippy)
+	$(call nix-shell-pure-run,,cargo clippy)
 
 .PHONY: lint-rustfmt
 lint-rustfmt:
-	$(call nix-shell-run,,cargo fmt)
-	$(call nix-shell-run,,git diff --exit-code)
+	$(call nix-shell-pure-run,,cargo fmt)
+	$(call nix-shell-pure-run,,git diff --exit-code)
