@@ -1,6 +1,8 @@
 use crate::Config;
 use failure::{bail, format_err, Fallible};
 use log::debug;
+use nix::sys::signal::{kill, Signal};
+use nix::unistd::Pid;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
@@ -58,25 +60,22 @@ impl Process {
         let (kill_tx, kill_rx) = channel();
         let c = cmd.clone();
         let watch = spawn(move || {
-            let mut shutting_down = false;
             loop {
                 // Verify that the process is still running
-                if shutting_down {
-                    debug!("Waiting for '{}' to exit", c);
-                    child.wait()?;
-                } else {
-                    if let Some(s) = child.try_wait()? {
-                        bail!("Process '{}' died unexpectedly: {}", c, s);
-                    }
+                if let Some(s) = child.try_wait()? {
+                    bail!("Process '{}' died unexpectedly: {}", c, s);
+                }
 
-                    // Kill the process if requested
-                    if kill_rx.try_recv().is_ok() {
-                        debug!("Stopping process '{}'", c);
-                        match child.kill() {
-                            Ok(_) => shutting_down = true,
-                            Err(e) => {
-                                bail!("Unable to kill process '{}': {}", c, e);
-                            }
+                // Kill the process if requested
+                if kill_rx.try_recv().is_ok() {
+                    debug!("Stopping process '{}'", c);
+                    match kill(Pid::from_raw(child.id() as i32), Signal::SIGTERM) {
+                        Ok(_) => {
+                            debug!("Waiting for '{}' to exit", c);
+                            child.wait()?;
+                        }
+                        Err(e) => {
+                            bail!("Unable to kill process '{}': {}", c, e);
                         }
                     }
                 }
