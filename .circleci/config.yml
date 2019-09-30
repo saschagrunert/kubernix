@@ -19,8 +19,6 @@ prepare-env: &prepare-env
     name: Install dependencies
     command: |
       apk add bash ca-certificates curl findutils git make openssh
-      eval 'ssh-agent -s'
-      env
 
 jobs:
   build:
