@@ -90,7 +90,7 @@ impl Kubernix {
         let mut found_dead = false;
 
         // This order is important since we will shut down the processes in its reverse order
-        for x in vec![sche, prox, cont, apis, etcd, crio] {
+        for x in vec![kube, sche, prox, cont, apis, etcd, crio] {
             if x.is_ok() {
                 started.push(x?)
             } else {
