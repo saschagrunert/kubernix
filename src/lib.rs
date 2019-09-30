@@ -146,7 +146,8 @@ impl Kubernix {
         if !cmd.status.success() {
             bail!("Unable to obtain `ip` output")
         }
-        let ip = String::from_utf8(cmd.stdout)?
+        let output = String::from_utf8(cmd.stdout)?;
+        let ip = output
             .split_whitespace()
             .nth(6)
             .ok_or_else(|| format_err!("Different `ip` command output expected"))?;
