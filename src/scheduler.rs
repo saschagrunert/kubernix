@@ -25,7 +25,7 @@ kind: KubeSchedulerConfiguration
 clientConnection:
   kubeconfig: "{}"
 leaderElection:
-  leaderElect: true
+  leaderElect: false
 "#,
             kubeconfig.scheduler.display()
         );

@@ -24,7 +24,7 @@ impl ControllerManager {
                 format!("--cluster-signing-cert-file={}", pki.ca.cert().display()),
                 format!("--cluster-signing-key-file={}", pki.ca.key().display()),
                 format!("--kubeconfig={}", kubeconfig.controller_manager.display()),
-                "--leader-elect=true".to_owned(),
+                "--leader-elect=false".to_owned(),
                 format!("--root-ca-file={}", pki.ca.cert().display()),
                 format!(
                     "--service-account-private-key-file={}",
