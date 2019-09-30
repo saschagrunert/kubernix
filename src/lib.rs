@@ -107,9 +107,7 @@ impl Kubernix {
             CoreDNS::apply(&config, &kubeconfig)?;
 
             info!("Everything is up and running");
-            if config.shell {
-                kubernix.shell();
-            }
+            kubernix.shell();
             Ok(kubernix)
         } else {
             // Cleanup started processes and exit
