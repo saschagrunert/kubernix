@@ -11,7 +11,7 @@ pub struct EncryptionConfig {
 
 impl EncryptionConfig {
     pub fn new(config: &Config) -> Fallible<EncryptionConfig> {
-        info!("Creating encryptionconfig");
+        info!("Creating encryption config");
 
         let rnd = thread_rng().gen::<[u8; 32]>();
         let b64 = encode(&rnd);
@@ -30,10 +30,8 @@ resources:
       - identity: {{}}",
             b64
         );
-        let config = &config.root.join("encryption-config.yml");
-        fs::write(config, yml)?;
-        Ok(EncryptionConfig {
-            path: config.clone(),
-        })
+        let path = config.root.join("encryption-config.yml");
+        fs::write(&path, yml)?;
+        Ok(EncryptionConfig { path })
     }
 }
