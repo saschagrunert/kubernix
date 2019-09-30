@@ -1,3 +1,5 @@
+# The root directory where all the
+# runtime data goes in.
 root = "target/run"
 
 [log]
