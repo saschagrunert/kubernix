@@ -87,7 +87,9 @@ impl Kubernix {
         // Wait for `drain_filter()` to be stable
         let mut started = vec![];
         let mut found_dead = false;
-        for x in vec![prox, kube, sche, cont, apis, etcd, crio] {
+
+        // This order is important since we will shut down the processes in its reverse order
+        for x in vec![sche, prox, cont, etcd, apis, crio] {
             if x.is_ok() {
                 started.push(x?)
             } else {
