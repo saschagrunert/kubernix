@@ -3,10 +3,10 @@ use base64::encode;
 use failure::Fallible;
 use log::info;
 use rand::{thread_rng, Rng};
-use std::{fs, path::PathBuf};
+use std::{fs, path::{Path, PathBuf}};
 
 pub struct EncryptionConfig {
-    pub path: PathBuf,
+    path: PathBuf,
 }
 
 impl EncryptionConfig {
@@ -33,5 +33,9 @@ resources:
         let path = config.root.join("encryption-config.yml");
         fs::write(&path, yml)?;
         Ok(EncryptionConfig { path })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
