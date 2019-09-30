@@ -14,7 +14,7 @@ use std::{
 };
 
 /// The maximum wait time for processes to become ready
-const READYNESS_TIMEOUT: u64 = 30;
+const READYNESS_TIMEOUT: u64 = 10;
 
 /// A general process abstraction
 pub struct Process {
