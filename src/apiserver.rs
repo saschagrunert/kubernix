@@ -51,7 +51,7 @@ impl APIServer {
                 "--event-ttl=1h".to_owned(),
                 format!(
                     "--encryption-provider-config={}",
-                    encryptionconfig.path.display()
+                    encryptionconfig.path().display()
                 ),
                 format!(
                     "--kubelet-certificate-authority={}",
