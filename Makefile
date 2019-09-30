@@ -20,6 +20,10 @@ all: build
 build:
 	$(call nix-shell-run,,cargo build)
 
+.PHONY: build-release
+build-release:
+	$(call nix-shell-run,,cargo build --release)
+
 .PHONY: nixpkgs
 nixpkgs:
 	nix-shell -p nix-prefetch-git --run "nix-prefetch-git --no-deepClone \
@@ -31,7 +35,7 @@ shell:
 
 .PHONY: run
 run:
-	$(call nix-shell-pure-run,sudo,cargo run)
+	$(call nix-shell-pure-run,sudo,cargo run --release)
 
 .PHONY: lint-clippy
 lint-clippy:
