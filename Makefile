@@ -18,7 +18,7 @@ all: build
 
 .PHONY: build
 build:
-	$(call nix-shell-pure-run,,cargo build)
+	$(call nix-shell-run,,cargo build)
 
 .PHONY: nixpkgs
 nixpkgs:
@@ -35,9 +35,9 @@ run:
 
 .PHONY: lint-clippy
 lint-clippy:
-	$(call nix-shell-pure-run,,cargo clippy)
+	$(call nix-shell-run,,cargo clippy)
 
 .PHONY: lint-rustfmt
 lint-rustfmt:
-	$(call nix-shell-pure-run,,cargo fmt)
-	$(call nix-shell-pure-run,,git diff --exit-code)
+	$(call nix-shell-run,,cargo fmt)
+	$(call nix-shell-run,,git diff --exit-code)
