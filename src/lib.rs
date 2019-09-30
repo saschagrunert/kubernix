@@ -23,18 +23,18 @@ use etcd::Etcd;
 use kubeconfig::KubeConfig;
 use kubelet::Kubelet;
 use pki::Pki;
-use process::Stoppable;
+use process::Startable;
 use proxy::Proxy;
 use scheduler::Scheduler;
 
 use failure::{bail, format_err, Fallible};
-use log::info;
+use log::{error, info};
 use rayon::scope;
 use std::{fs::create_dir_all, process::Command};
 
 const LOCALHOST: &str = "127.0.0.1";
 
-type Stoppables = Vec<Box<dyn Stoppable + Send>>;
+type Stoppables = Vec<Startable>;
 
 pub struct Kubernix {
     processes: Stoppables,
@@ -111,7 +111,9 @@ impl Kubernix {
 
     pub fn stop(&mut self) {
         for x in &mut self.processes {
-            x.stop();
+            if let Err(e) = x.stop() {
+                error!("{}", e)
+            }
         }
     }
 

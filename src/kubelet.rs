@@ -4,6 +4,7 @@ use crate::{
     pki::Pki,
     process::{Process, Startable, Stoppable},
 };
+use failure::Fallible;
 use log::info;
 use std::{
     fs::{self, create_dir_all},
@@ -15,7 +16,12 @@ pub struct Kubelet {
 }
 
 impl Kubelet {
-    pub fn start(config: &Config, pki: &Pki, kubeconfig: &KubeConfig, socket: &Path) -> Startable {
+    pub fn start(
+        config: &Config,
+        pki: &Pki,
+        kubeconfig: &KubeConfig,
+        socket: &Path,
+    ) -> Fallible<Startable> {
         info!("Starting Kubelet");
 
         let dir = config.root.join("kubelet");
@@ -51,7 +57,7 @@ tlsPrivateKeyFile: "{}"
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
 
-        let mut process = Process::new(
+        let mut process = Process::start(
             config,
             &[
                 "kubelet".to_owned(),
@@ -73,7 +79,7 @@ tlsPrivateKeyFile: "{}"
 }
 
 impl Stoppable for Kubelet {
-    fn stop(&mut self) {
-        self.process.stop();
+    fn stop(&mut self) -> Fallible<()> {
+        self.process.stop()
     }
 }

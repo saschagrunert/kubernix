@@ -1,13 +1,13 @@
 use crate::Config;
 use failure::{bail, format_err, Fallible};
-use log::{debug, error, warn};
+use log::debug;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::PathBuf,
     process::{Command, Stdio},
-    sync::mpsc::{channel, Receiver, Sender},
-    thread,
+    sync::mpsc::{channel, Sender},
+    thread::{spawn, JoinHandle},
     time::Instant,
 };
 
@@ -18,23 +18,23 @@ const READYNESS_TIMEOUT: u64 = 30;
 pub struct Process {
     command: String,
     kill: Sender<()>,
-    dead: Receiver<()>,
     log_file: PathBuf,
+    watch: Option<JoinHandle<Fallible<()>>>,
 }
 
 /// The trait to stop something
 pub trait Stoppable {
     /// Stop the process
-    fn stop(&mut self);
+    fn stop(&mut self) -> Fallible<()>;
 }
 
 /// Starable process type
-pub type Startable = Fallible<Box<dyn Stoppable + Send>>;
+pub type Startable = Box<dyn Stoppable + Send>;
 
 impl Process {
     /// Creates a new `Process` instance by spawning the provided command `cmd`.
     /// If the process creation fails, an `Error` will be returned.
-    pub fn new(config: &Config, command: &[String]) -> Fallible<Process> {
+    pub fn start(config: &Config, command: &[String]) -> Fallible<Process> {
         // Prepare the commands
         let cmd = command
             .get(0)
@@ -56,36 +56,26 @@ impl Process {
             .spawn()?;
 
         let (kill_tx, kill_rx) = channel();
-        let (dead_tx, dead_rx) = channel();
         let c = cmd.clone();
-        thread::spawn(move || {
-            let mut check_dead = false;
+        let watch = spawn(move || {
+            let mut shutting_down = false;
             loop {
                 // Verify that the process is still running
-                match child.try_wait() {
-                    Ok(Some(s)) => {
-                        if dead_tx.send(()).is_err() {
-                            error!("Unable to send dead notification to channel");
-                        }
-                        if !check_dead {
-                            error!("Process '{}' died unexpectedly: {}", c, s);
-                        }
-                        break;
+                if shutting_down {
+                    child.wait()?;
+                } else {
+                    if let Some(s) = child.try_wait()? {
+                        bail!("Process '{}' died unexpectedly: {}", c, s);
                     }
-                    Err(e) => error!("Unable to wait for process: {}", e),
-                    Ok(None) => {} // process still running
-                }
 
-                // Kill the process if requested
-                if !check_dead && kill_rx.try_recv().is_ok() {
-                    debug!("Stopping process '{}'", c);
-                    match child.kill() {
-                        Ok(_) => {
-                            check_dead = true;
-                        }
-                        Err(e) => {
-                            error!("Unable to kill process '{}': {}", c, e);
-                            break;
+                    // Kill the process if requested
+                    if kill_rx.try_recv().is_ok() {
+                        debug!("Stopping process '{}'", c);
+                        match child.kill() {
+                            Ok(_) => shutting_down = true,
+                            Err(e) => {
+                                bail!("Unable to kill process '{}': {}", c, e);
+                            }
                         }
                     }
                 }
@@ -95,8 +85,8 @@ impl Process {
         Ok(Process {
             command: cmd,
             kill: kill_tx,
-            dead: dead_rx,
             log_file,
+            watch: Some(watch),
         })
     }
 
@@ -122,20 +112,21 @@ impl Process {
         }
 
         // Cleanup since process is not ready
-        self.stop();
+        self.kill.send(())?;
         bail!("Timed out waiting for process to become ready")
     }
 }
 
 impl Stoppable for Process {
     /// Stopping the process by killing it
-    fn stop(&mut self) {
-        if self.kill.send(()).is_err() {
-            warn!("Unable to kill process '{}'", self.command);
+    fn stop(&mut self) -> Fallible<()> {
+        self.kill.send(())?;
+        if let Some(handle) = self.watch.take() {
+            if handle.join().is_err() {
+                bail!("Unable to stop process '{}'", self.command);
+            }
         }
-        if self.dead.recv().is_err() {
-            warn!("Unable to wait for process '{}' to be exited", self.command);
-        }
-        debug!("Process '{}' stopped", self.command)
+        debug!("Process '{}' stopped", self.command);
+        Ok(())
     }
 }

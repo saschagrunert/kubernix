@@ -3,6 +3,7 @@ use crate::{
     kubeconfig::KubeConfig,
     process::{Process, Startable, Stoppable},
 };
+use failure::Fallible;
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -11,7 +12,7 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Startable {
+    pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Fallible<Startable> {
         info!("Starting Scheduler");
 
         let dir = config.root.join("scheduler");
@@ -32,7 +33,7 @@ leaderElection:
         let cfg = &dir.join("config.yml");
         fs::write(cfg, yml)?;
 
-        let mut process = Process::new(
+        let mut process = Process::start(
             config,
             &[
                 "kube-scheduler".to_owned(),
@@ -48,7 +49,7 @@ leaderElection:
 }
 
 impl Stoppable for Scheduler {
-    fn stop(&mut self) {
-        self.process.stop();
+    fn stop(&mut self) -> Fallible<()> {
+        self.process.stop()
     }
 }

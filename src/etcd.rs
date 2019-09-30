@@ -4,6 +4,7 @@ use crate::{
     process::{Process, Startable, Stoppable},
     LOCALHOST,
 };
+use failure::Fallible;
 use log::info;
 
 pub struct Etcd {
@@ -11,13 +12,13 @@ pub struct Etcd {
 }
 
 impl Etcd {
-    pub fn start(config: &Config, pki: &Pki) -> Startable {
+    pub fn start(config: &Config, pki: &Pki) -> Fallible<Startable> {
         info!("Starting etcd");
 
         let etcd_localhost = format!("https://{}:2379", LOCALHOST);
         let etcd_localhost_peer = format!("https://{}:2380", LOCALHOST);
 
-        let mut process = Process::new(
+        let mut process = Process::start(
             config,
             &[
                 "etcd".to_owned(),
@@ -48,7 +49,7 @@ impl Etcd {
 }
 
 impl Stoppable for Etcd {
-    fn stop(&mut self) {
-        self.process.stop();
+    fn stop(&mut self) -> Fallible<()> {
+        self.process.stop()
     }
 }

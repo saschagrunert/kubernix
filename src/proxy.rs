@@ -3,6 +3,7 @@ use crate::{
     kubeconfig::KubeConfig,
     process::{Process, Startable, Stoppable},
 };
+use failure::Fallible;
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -11,7 +12,7 @@ pub struct Proxy {
 }
 
 impl Proxy {
-    pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Startable {
+    pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Fallible<Startable> {
         info!("Starting Proxy");
 
         let dir = config.root.join("proxy");
@@ -32,7 +33,7 @@ clusterCIDR: "{}"
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
 
-        let mut process = Process::new(
+        let mut process = Process::start(
             config,
             &[
                 "kube-proxy".to_owned(),
@@ -47,7 +48,7 @@ clusterCIDR: "{}"
 }
 
 impl Stoppable for Proxy {
-    fn stop(&mut self) {
-        self.process.stop();
+    fn stop(&mut self) -> Fallible<()> {
+        self.process.stop()
     }
 }

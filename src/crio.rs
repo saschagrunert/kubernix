@@ -2,8 +2,8 @@ use crate::{
     process::{Process, Startable, Stoppable},
     Config,
 };
-use failure::format_err;
-use log::{debug, info};
+use failure::{format_err, Fallible};
+use log::info;
 use serde_json::{json, to_string_pretty};
 use std::{
     env,
@@ -13,13 +13,10 @@ use std::{
 
 pub struct Crio {
     process: Process,
-    run_root: PathBuf,
-    storage_driver: String,
-    storage_root: PathBuf,
 }
 
 impl Crio {
-    pub fn start(config: &Config, socket: &Path) -> Startable {
+    pub fn start(config: &Config, socket: &Path) -> Fallible<Startable> {
         info!("Starting CRI-O");
         let conmon = Self::find_executable("conmon")
             .ok_or_else(|| format_err!("Unable to find conmon in $PATH"))?;
@@ -69,7 +66,7 @@ impl Crio {
         let storage_driver = "overlay".to_owned();
         let storage_root = dir.join("storage");
         let run_root = dir.join("run");
-        let mut process = Process::new(
+        let mut process = Process::start(
             config,
             &[
                 "crio".to_owned(),
@@ -94,12 +91,7 @@ impl Crio {
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready");
-        Ok(Box::new(Crio {
-            process,
-            run_root,
-            storage_driver,
-            storage_root,
-        }))
+        Ok(Box::new(Crio { process }))
     }
 
     fn find_executable<P>(name: P) -> Option<PathBuf>
@@ -122,10 +114,10 @@ impl Crio {
 }
 
 impl Stoppable for Crio {
-    fn stop(&mut self) {
+    fn stop(&mut self) -> Fallible<()> {
         // Remove all running containers
 
         // Stop the process
-        self.process.stop();
+        self.process.stop()
     }
 }

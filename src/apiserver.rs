@@ -25,13 +25,13 @@ impl APIServer {
         pki: &Pki,
         encryptionconfig: &EncryptionConfig,
         kubeconfig: &KubeConfig,
-    ) -> Startable {
+    ) -> Fallible<Startable> {
         info!("Starting API Server");
 
         let dir = config.root.join("apiserver");
         create_dir_all(&dir)?;
 
-        let mut process = Process::new(
+        let mut process = Process::start(
             config,
             &[
                 "kube-apiserver".to_owned(),
@@ -139,7 +139,7 @@ subjects:
 }
 
 impl Stoppable for APIServer {
-    fn stop(&mut self) {
-        self.process.stop();
+    fn stop(&mut self) -> Fallible<()> {
+        self.process.stop()
     }
 }
