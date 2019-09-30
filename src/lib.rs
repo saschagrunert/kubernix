@@ -28,7 +28,7 @@ use proxy::Proxy;
 use scheduler::Scheduler;
 
 use failure::{bail, format_err, Fallible};
-use log::{debug, info};
+use log::{debug, error, info};
 use rayon::scope;
 use std::{fs::create_dir_all, process::Command};
 
@@ -108,6 +108,12 @@ impl Kubernix {
             // Cleanup started processes and exit
             kubernix.stop();
             bail!("Unable to start all processes")
+        }
+    }
+
+    pub fn shell(&self) {
+        if let Err(e) = Command::new("bash").status() {
+            error!("Unable to spawn shell: {}", e);
         }
     }
 

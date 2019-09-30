@@ -2,14 +2,7 @@ use clap::{crate_version, load_yaml, App};
 use failure::{format_err, Fallible};
 use kubernix::{Config, Kubernix};
 use log::info;
-use std::{
-    env::set_var,
-    process::exit,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-};
+use std::{env::set_var, process::exit};
 
 pub fn main() {
     if let Err(e) = run() {
@@ -31,19 +24,13 @@ fn run() -> Fallible<()> {
     set_var("RUST_LOG", format!("kubernix={}", config.log.level));
     env_logger::init();
 
-    // Setup signal handler
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })?;
-
     // Run kubernix
     info!("Starting kubernix");
     let mut kube = Kubernix::new(&config)?;
 
-    // Cleanup on sigint
-    while running.load(Ordering::SeqCst) {}
+    info!("Welcome to kubernix");
+    kube.shell();
+
     info!("Cleaning up");
     kube.stop();
     Ok(())
