@@ -1,6 +1,6 @@
 use crate::Config;
 use failure::{bail, format_err, Fallible};
-use log::debug;
+use log::{debug, info};
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 use std::{
@@ -68,7 +68,7 @@ impl Process {
 
                 // Kill the process if requested
                 if kill_rx.try_recv().is_ok() {
-                    debug!("Stopping process '{}'", c);
+                    info!("Stopping process '{}'", c);
                     match kill(Pid::from_raw(child.id() as i32), Signal::SIGTERM) {
                         Ok(_) => {
                             debug!("Waiting for '{}' to exit", c);

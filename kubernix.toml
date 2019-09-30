@@ -2,7 +2,7 @@ root = "target/run"
 
 [log]
 dir = "log"
-level = "debug"
+level = "info"
 
 [pki]
 dir = "pki"

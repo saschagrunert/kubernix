@@ -28,7 +28,7 @@ use proxy::Proxy;
 use scheduler::Scheduler;
 
 use failure::{bail, format_err, Fallible};
-use log::{error, info};
+use log::{debug, info};
 use rayon::scope;
 use std::{fs::create_dir_all, process::Command};
 
@@ -89,7 +89,7 @@ impl Kubernix {
         let mut found_dead = false;
 
         // This order is important since we will shut down the processes in its reverse order
-        for x in vec![sche, prox, cont, etcd, apis, crio] {
+        for x in vec![sche, prox, cont, apis, etcd, crio] {
             if x.is_ok() {
                 started.push(x?)
             } else {
@@ -114,7 +114,7 @@ impl Kubernix {
     pub fn stop(&mut self) {
         for x in &mut self.processes {
             if let Err(e) = x.stop() {
-                error!("{}", e)
+                debug!("{}", e)
             }
         }
     }
