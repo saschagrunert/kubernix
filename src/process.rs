@@ -62,6 +62,7 @@ impl Process {
             loop {
                 // Verify that the process is still running
                 if shutting_down {
+                    debug!("Waiting for '{}' to exit", c);
                     child.wait()?;
                 } else {
                     if let Some(s) = child.try_wait()? {
