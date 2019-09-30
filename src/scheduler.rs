@@ -19,8 +19,7 @@ impl Scheduler {
         create_dir_all(&dir)?;
 
         let yml = format!(
-            r#"
----
+            r#"---
 apiVersion: kubescheduler.config.k8s.io/v1alpha1
 kind: KubeSchedulerConfiguration
 clientConnection:
