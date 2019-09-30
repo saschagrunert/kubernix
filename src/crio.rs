@@ -4,14 +4,12 @@ use crate::{
 };
 use failure::format_err;
 use log::{debug, info};
-use nix::mount::umount;
 use serde_json::{json, to_string_pretty};
 use std::{
     env,
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
 };
-use walkdir::WalkDir;
 
 pub struct Crio {
     process: Process,
@@ -125,30 +123,9 @@ impl Crio {
 
 impl Stoppable for Crio {
     fn stop(&mut self) {
+        // Remove all running containers
+
         // Stop the process
         self.process.stop();
-
-        // Umount every shared memory (SHM)
-        for entry in WalkDir::new(&self.run_root)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|x| {
-                x.path()
-                    .to_str()
-                    .map(|e| e.contains("shm"))
-                    .unwrap_or(false)
-            })
-        {
-            debug!("Umounting: {}", entry.path().display());
-            if let Err(e) = umount(entry.path()) {
-                debug!("Unable to umount '{}': {}", entry.path().display(), e)
-            }
-        }
-
-        // Umount the storage dir
-        let storage = self.storage_root.join(&self.storage_driver);
-        if let Err(e) = umount(&storage) {
-            debug!("Unable to umount '{}': {}", storage.display(), e);
-        }
     }
 }
