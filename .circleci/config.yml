@@ -16,8 +16,8 @@ workflows:
       - build
       - build-release
       - build-static
-      - doc
-      - doc-publish:
+      - docs
+      - docs-publish:
           requires:
             - doc
           filters:
@@ -88,7 +88,7 @@ jobs:
       - store_artifacts:
           path: target/x86_64-unknown-linux-musl/release/kubernix
 
-  doc:
+  docs:
     executor: container
     steps:
       - <<: *prepare-env
@@ -98,7 +98,7 @@ jobs:
             - v1-doc-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
       - run:
           name: documentation
-          command: make build-doc
+          command: make docs
       - save_cache:
           key: v1-doc-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:
@@ -108,7 +108,7 @@ jobs:
           paths:
             - target/doc
 
-  doc-publish:
+  docs-publish:
     executor: container
     steps:
       - <<: *prepare-env
