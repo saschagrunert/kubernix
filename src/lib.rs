@@ -30,10 +30,18 @@ use scheduler::Scheduler;
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
 use rayon::scope;
-use std::{fs::create_dir_all, net::IpAddr, path::PathBuf, process::Command};
+use std::{
+    env::{current_exe, split_paths, var, var_os},
+    fmt::Display,
+    fs::{self, create_dir_all},
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::{exit, Command},
+};
 
 const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 const KUBECONFIG_ENV: &str = "KUBECONFIG";
+const NIX_SHELL_ENV: &str = "IN_NIX_SHELL";
 
 type Stoppables = Vec<Startable>;
 
@@ -46,6 +54,26 @@ pub struct Kubernix {
 
 impl Kubernix {
     pub fn start(config: Config) -> Fallible<Kubernix> {
+        // Bootstrap if we're not inside a nix shell
+        if var(NIX_SHELL_ENV).is_err() {
+            info!("Nix environment not found, bootstrapping one");
+            Self::bootstrap_nix(config)?;
+            exit(0);
+        } else {
+            info!("Bootstrapping cluster inside nix environment");
+            Self::bootstrap_cluster(config)
+        }
+    }
+
+    pub fn stop(&mut self) {
+        for x in &mut self.processes {
+            if let Err(e) = x.stop() {
+                debug!("{}", e)
+            }
+        }
+    }
+
+    fn bootstrap_cluster(config: Config) -> Fallible<Kubernix> {
         // Retrieve the local IP
         let ip = Self::local_ip()?;
         let hostname =
@@ -112,7 +140,7 @@ impl Kubernix {
             CoreDNS::apply(&config, &kubeconfig)?;
 
             info!("Everything is up and running");
-            kubernix.shell();
+            kubernix.spawn_shell();
             Ok(kubernix)
         } else {
             // Cleanup started processes and exit
@@ -121,7 +149,38 @@ impl Kubernix {
         }
     }
 
-    fn shell(&self) {
+    fn bootstrap_nix(config: Config) -> Fallible<()> {
+        // Prepare the nix dir
+        let nix_dir = config.root.join("nix");
+        create_dir_all(&nix_dir)?;
+
+        // Write the configuration
+        fs::write(
+            nix_dir.join("nixpkgs.json"),
+            include_str!("../nix/nixpkgs.json"),
+        )?;
+        fs::write(
+            nix_dir.join("nixpkgs.nix"),
+            include_str!("../nix/nixpkgs.nix"),
+        )?;
+        fs::write(
+            nix_dir.join("default.nix"),
+            include_str!("../nix/shell.nix"),
+        )?;
+
+        // Run the shell
+        let status = Command::new(Self::find_executable("nix-shell")?)
+            .arg(nix_dir)
+            .arg("--run")
+            .arg(current_exe()?)
+            .status()?;
+        if !status.success() {
+            bail!("nix-shell command failed");
+        }
+        Ok(())
+    }
+
+    fn spawn_shell(&self) {
         if let Err(e) = Command::new("bash")
             .current_dir(&self.config.root.join(&self.config.log.dir))
             .env("PS1", "> ")
@@ -130,14 +189,6 @@ impl Kubernix {
             .status()
         {
             error!("Unable to spawn shell: {}", e);
-        }
-    }
-
-    pub fn stop(&mut self) {
-        for x in &mut self.processes {
-            if let Err(e) = x.stop() {
-                debug!("{}", e)
-            }
         }
     }
 
@@ -163,5 +214,25 @@ impl Kubernix {
             bail!("Unable to parse IP '{}': {}", ip, e);
         }
         Ok(ip.to_owned())
+    }
+
+    fn find_executable<P>(name: P) -> Fallible<PathBuf>
+    where
+        P: AsRef<Path> + Display,
+    {
+        var_os("PATH")
+            .and_then(|paths| {
+                split_paths(&paths)
+                    .filter_map(|dir| {
+                        let full_path = dir.join(&name);
+                        if full_path.is_file() {
+                            Some(full_path)
+                        } else {
+                            None
+                        }
+                    })
+                    .next()
+            })
+            .ok_or_else(|| format_err!("Unable to find {} in $PATH", name))
     }
 }

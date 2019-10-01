@@ -35,5 +35,10 @@ pkgs.stdenv.mkDerivation {
   ];
 
   LANG = "en_US.UTF-8";
+
+  shellHook = ''
+    export PS1="> "
+  '';
+
   name = "shell";
 }

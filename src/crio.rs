@@ -1,12 +1,11 @@
 use crate::{
     process::{Process, Startable, Stoppable},
-    Config, RUNTIME_ENV,
+    Config, Kubernix, RUNTIME_ENV,
 };
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
 use std::{
-    env,
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
     process::Command,
@@ -20,11 +19,8 @@ pub struct Crio {
 impl Crio {
     pub fn start(config: &Config, socket: &Path) -> Fallible<Startable> {
         info!("Starting CRI-O");
-        let conmon = Self::find_executable("conmon")
-            .ok_or_else(|| format_err!("Unable to find conmon in $PATH"))?;
-
-        let bridge = Self::find_executable("bridge")
-            .ok_or_else(|| format_err!("Unable to find CNI bridge in $PATH"))?;
+        let conmon = Kubernix::find_executable("conmon")?;
+        let bridge = Kubernix::find_executable("bridge")?;
         let cni = bridge
             .parent()
             .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
@@ -63,8 +59,7 @@ impl Crio {
             }))?,
         )?;
 
-        let runc = Self::find_executable("runc")
-            .ok_or_else(|| format_err!("Unable to find runc in $PATH"))?;
+        let runc = Kubernix::find_executable("runc")?;
         let storage_driver = "overlay".to_owned();
         let storage_root = dir.join("storage");
         let run_root = dir.join("run");
@@ -97,24 +92,6 @@ impl Crio {
             process,
             socket: socket.to_path_buf(),
         }))
-    }
-
-    fn find_executable<P>(name: P) -> Option<PathBuf>
-    where
-        P: AsRef<Path>,
-    {
-        env::var_os("PATH").and_then(|paths| {
-            env::split_paths(&paths)
-                .filter_map(|dir| {
-                    let full_path = dir.join(&name);
-                    if full_path.is_file() {
-                        Some(full_path)
-                    } else {
-                        None
-                    }
-                })
-                .next()
-        })
     }
 
     fn remove_all_containers(&self) -> Fallible<()> {

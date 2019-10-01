@@ -11,7 +11,7 @@ use std::{
     fs::{self, create_dir_all},
     net::Ipv4Addr,
     path::Path,
-    process::{Command, Stdio},
+    process::Command,
 };
 
 pub struct APIServer {

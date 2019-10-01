@@ -14,3 +14,8 @@ args:
       long: config-file
       short: c
       value_name: PATH
+  - verbose:
+      help: Enable verbose logging
+      long: verbose
+      short: v
+      takes_value: false

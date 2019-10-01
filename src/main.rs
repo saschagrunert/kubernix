@@ -20,14 +20,18 @@ fn run() -> Fallible<()> {
     let config_filename = matches
         .value_of("config")
         .ok_or_else(|| format_err!("No 'config' provided"))?;
-    let config = Config::from_file_or_default(config_filename)?;
+    let mut config = Config::from_file_or_default(config_filename)?;
+
+    // Give the CLI values precedence
+    if matches.is_present("verbose") {
+        config.log.level = "debug".to_owned();
+    }
 
     // Setup the logger
     set_var("RUST_LOG", format!("kubernix={}", config.log.level));
     env_logger::init();
 
     // Run kubernix
-    info!("Starting kubernix");
     let mut kube = Kubernix::start(config)?;
 
     info!("Cleaning up");
