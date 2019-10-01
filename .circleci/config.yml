@@ -93,7 +93,7 @@ jobs:
       - store_artifacts:
           path: target/x86_64-unknown-linux-musl/release/kubernix
 
-  test:
+  coverage:
     executor: machine
     steps:
       - checkout
