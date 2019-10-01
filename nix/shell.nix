@@ -33,6 +33,7 @@ pkgs.stdenv.mkDerivation {
     ruststable
     socat
     utillinux
+    watch
   ];
 
   LANG = "en_US.UTF-8";
