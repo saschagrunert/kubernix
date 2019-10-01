@@ -144,8 +144,8 @@ impl Kubernix {
         // No dead processes
         if !found_dead {
             CoreDNS::apply(&config, &kubeconfig)?;
-
             info!("Everything is up and running");
+
             kubernix.spawn_shell();
             Ok(kubernix)
         } else {
@@ -187,8 +187,10 @@ impl Kubernix {
     }
 
     fn spawn_shell(&self) {
+        info!("Spawning interactive shell");
         if let Err(e) = Command::new("bash")
             .current_dir(&self.config.root.join(&self.config.log.dir))
+            .arg("--norc")
             .env("PS1", "> ")
             .env(
                 RUNTIME_ENV,

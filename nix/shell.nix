@@ -17,11 +17,12 @@ pkgs.stdenv.mkDerivation {
     bash
     cacert
     cfssl
+    cni-plugins
     conmon
     conntrack-tools
-    cni-plugins
     cri-o
     cri-tools
+    curl
     etcd
     fish
     git
