@@ -32,7 +32,6 @@ use log::{debug, error, info};
 use rayon::scope;
 use std::{fs::create_dir_all, net::IpAddr, path::PathBuf, process::Command};
 
-const LOCALHOST: &str = "127.0.0.1";
 const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 const KUBECONFIG_ENV: &str = "KUBECONFIG";
 

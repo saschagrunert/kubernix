@@ -1,9 +1,11 @@
-use crate::{Config, LOCALHOST};
+use crate::Config;
 use failure::{bail, format_err, Fallible};
+use ipnetwork::IpNetwork;
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
 use std::{
     fs::{self, create_dir_all},
+    net::Ipv4Addr,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -19,8 +21,7 @@ pub struct Pki {
     pub admin: Pair,
     pub ca: Pair,
     ca_config: PathBuf,
-    ip: String,
-    hostname: String,
+    hostnames: String,
 }
 
 #[derive(Default)]
@@ -54,11 +55,32 @@ impl Pki {
         create_dir_all(pki_dir)?;
 
         let mut pki = Pki::default();
-        pki.ip = ip.to_owned();
-        pki.hostname = hostname.to_owned();
+
+        let service_addr = match config.kube.service_cidr {
+            IpNetwork::V4(n) => n.nth(1).ok_or_else(|| {
+                format_err!(
+                    "Unable to retrieve first IP from service CIDR: {}",
+                    config.kube.service_cidr
+                )
+            })?,
+            _ => Ipv4Addr::LOCALHOST,
+        };
+
+        let hostnames = &[
+            ip,
+            &service_addr.to_string(),
+            &Ipv4Addr::LOCALHOST.to_string(),
+            hostname,
+            "kubernetes",
+            "kubernetes.default",
+            "kubernetes.default.svc",
+            "kubernetes.default.svc.cluster",
+            "kubernetes.svc.cluster.local",
+        ];
+        pki.hostnames = hostnames.join(",");
 
         pki.setup_ca(pki_dir)?;
-        pki.setup_kubelet(pki_dir)?;
+        pki.setup_kubelet(pki_dir, hostname)?;
         pki.setup_admin(pki_dir)?;
         pki.setup_controller_manager(pki_dir)?;
         pki.setup_proxy(pki_dir)?;
@@ -104,12 +126,12 @@ impl Pki {
         Ok(())
     }
 
-    fn setup_kubelet(&mut self, dir: &Path) -> Fallible<()> {
-        let name = format!("system:node:{}", self.hostname);
+    fn setup_kubelet(&mut self, dir: &Path, hostname: &str) -> Fallible<()> {
+        let name = format!("system:node:{}", hostname);
         let csr_file = dir.join("node-csr.json");
         self.write_csr(&name, "system:nodes", &csr_file)?;
 
-        self.kubelet = self.generate(dir, &self.hostname.to_owned(), &csr_file)?;
+        self.kubelet = self.generate(dir, hostname, &csr_file)?;
         Ok(())
     }
 
@@ -171,23 +193,14 @@ impl Pki {
 
     fn generate(&mut self, dir: &Path, name: &str, csr: &Path) -> Fallible<Pair> {
         debug!("Creating certificate for {}", name);
-        let hostnames = &[
-            &self.ip,
-            LOCALHOST,
-            &self.hostname,
-            "kubernetes",
-            "kubernetes.default",
-            "kubernetes.default.svc",
-            "kubernetes.default.svc.cluster",
-            "kubernetes.svc.cluster.local",
-        ];
+
         let mut cfssl = Command::new("cfssl")
             .arg("gencert")
             .arg(format!("-ca={}", self.ca.cert().display()))
             .arg(format!("-ca-key={}", self.ca.key().display()))
             .arg(format!("-config={}", self.ca_config.display()))
             .arg("-profile=kubernetes")
-            .arg(format!("-hostname={}", hostnames.join(",")))
+            .arg(format!("-hostname={}", self.hostnames))
             .arg(csr)
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

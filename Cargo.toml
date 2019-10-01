@@ -15,6 +15,7 @@ clap = { version = "2.33.0", features = ["yaml"] }
 env_logger = "0.7.0"
 failure = "0.1.5"
 hostname = "0.1.5"
+ipnetwork = "0.15.0"
 log = "0.4.8"
 nix = "0.15.0"
 rand = "0.7.2"

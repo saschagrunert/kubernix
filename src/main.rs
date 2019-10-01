@@ -20,7 +20,9 @@ fn run() -> Fallible<()> {
     let config_filename = matches
         .value_of("config")
         .ok_or_else(|| format_err!("No 'config' provided"))?;
-    let config = Config::from_file(config_filename)?;
+    let config = Config::from_file_or_default(config_filename)?;
+
+    // Setup the logger
     set_var("RUST_LOG", format!("kubernix={}", config.log.level));
     env_logger::init();
 

@@ -1,8 +1,9 @@
-use crate::{pki::Pki, Config, LOCALHOST};
+use crate::{pki::Pki, Config};
 use failure::{bail, Fallible};
 use log::{debug, info};
 use std::{
     fs::create_dir_all,
+    net::Ipv4Addr,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -25,11 +26,12 @@ impl KubeConfig {
         create_dir_all(kube_dir)?;
 
         let mut kube = KubeConfig::default();
+        let localhost = Ipv4Addr::LOCALHOST.to_string();
         kube.setup_kubelet(kube_dir, &pki, ip, hostname)?;
         kube.setup_proxy(kube_dir, &pki, ip)?;
-        kube.setup_controller_manager(kube_dir, &pki, LOCALHOST)?;
-        kube.setup_scheduler(kube_dir, &pki, LOCALHOST)?;
-        kube.setup_admin(kube_dir, &pki, LOCALHOST)?;
+        kube.setup_controller_manager(kube_dir, &pki, &localhost)?;
+        kube.setup_scheduler(kube_dir, &pki, &localhost)?;
+        kube.setup_admin(kube_dir, &pki, &localhost)?;
 
         Ok(kube)
     }

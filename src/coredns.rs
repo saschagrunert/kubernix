@@ -1,9 +1,9 @@
 use crate::{config::Config, kubeconfig::KubeConfig};
 use failure::{bail, Fallible};
-use log::info;
+use log::{debug, info};
 use std::{
     fs::{self, create_dir_all},
-    process::{Command, Stdio},
+    process::Command,
 };
 
 pub struct CoreDNS;
@@ -19,15 +19,21 @@ impl CoreDNS {
         let yml_file = dir.join("coredns.yml");
         fs::write(&yml_file, yml)?;
 
-        let status = Command::new("kubectl")
+        let output = Command::new("kubectl")
             .arg("apply")
             .arg(format!("--kubeconfig={}", kubeconfig.admin.display()))
             .arg("-f")
             .arg(yml_file)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() {
+            .output()?;
+        if !output.status.success() {
+            debug!(
+                "kubectl apply stdout: {}",
+                String::from_utf8(output.stdout)?
+            );
+            debug!(
+                "kubectl apply stderr: {}",
+                String::from_utf8(output.stderr)?
+            );
             bail!("kubectl apply command failed");
         }
 

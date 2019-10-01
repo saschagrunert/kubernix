@@ -2,10 +2,10 @@ use crate::{
     config::Config,
     pki::Pki,
     process::{Process, Startable, Stoppable},
-    LOCALHOST,
 };
 use failure::Fallible;
 use log::info;
+use std::net::Ipv4Addr;
 
 pub struct Etcd {
     process: Process,
@@ -15,8 +15,9 @@ impl Etcd {
     pub fn start(config: &Config, pki: &Pki) -> Fallible<Startable> {
         info!("Starting etcd");
 
-        let etcd_localhost = format!("https://{}:2379", LOCALHOST);
-        let etcd_localhost_peer = format!("https://{}:2380", LOCALHOST);
+        let localhost = Ipv4Addr::LOCALHOST.to_string();
+        let etcd_localhost = format!("https://{}:2379", localhost);
+        let etcd_localhost_peer = format!("https://{}:2380", localhost);
 
         let mut process = Process::start(
             config,
