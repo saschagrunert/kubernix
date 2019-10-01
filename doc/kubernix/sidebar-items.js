@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["Config","The global configuration"],["Kubernix",""]]});
+initSidebarItems({"struct":[["Config","The global configuration"],["Kubernix","The main structure for the application"]]});
