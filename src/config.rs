@@ -123,9 +123,9 @@ impl Default for KubeConfig {
     fn default() -> Self {
         KubeConfig {
             dir: PathBuf::from("kube"),
-            cluster_cidr: "172.200.0.0/16".parse().unwrap(),
-            service_cidr: "172.50.0.0/24".parse().unwrap(),
-            cluster_dns: "172.50.0.10".parse().unwrap(),
+            cluster_cidr: "10.200.0.0/16".parse().unwrap(),
+            service_cidr: "10.50.0.0/24".parse().unwrap(),
+            cluster_dns: "10.50.0.10".parse().unwrap(),
         }
     }
 }
@@ -145,7 +145,7 @@ impl Default for CrioConfig {
     fn default() -> Self {
         CrioConfig {
             dir: PathBuf::from("crio"),
-            cidr: "172.100.0.0/16".parse().unwrap(),
+            cidr: "10.100.0.0/16".parse().unwrap(),
         }
     }
 }
