@@ -1,6 +1,6 @@
 use crate::{
     process::{Process, Startable, Stoppable},
-    Config,
+    Config, RUNTIME_ENV,
 };
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
@@ -119,11 +119,10 @@ impl Crio {
 
     fn remove_all_containers(&self) -> Fallible<()> {
         debug!("Removing all CRI-O workloads");
-        let env_key = "CONTAINER_RUNTIME_ENDPOINT";
         let env_value = format!("unix://{}", self.socket.display());
 
         let output = Command::new("crictl")
-            .env(env_key, &env_value)
+            .env(RUNTIME_ENV, &env_value)
             .arg("pods")
             .arg("-q")
             .output()?;
@@ -137,7 +136,7 @@ impl Crio {
         for x in stdout.lines() {
             debug!("Removing pod {}", x);
             let output = Command::new("crictl")
-                .env(env_key, &env_value)
+                .env(RUNTIME_ENV, &env_value)
                 .arg("rmp")
                 .arg("-f")
                 .arg(x)

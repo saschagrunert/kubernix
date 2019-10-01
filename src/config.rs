@@ -8,7 +8,7 @@ use std::{
 use toml;
 
 #[derive(Clone, Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case")]
 /// The global configuration
 pub struct Config {
     /// The root path during runtime
@@ -27,6 +27,18 @@ pub struct Config {
     pub crio: CrioConfig,
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            root: PathBuf::from("kubernix"),
+            log: Default::default(),
+            pki: Default::default(),
+            kube: Default::default(),
+            crio: Default::default(),
+        }
+    }
+}
+
 impl Config {
     /// Creates a new `Config` instance using the parameters found in the given
     /// TOML configuration file. If the file could not be found or the file is
@@ -43,7 +55,7 @@ impl Config {
 }
 
 #[derive(Clone, Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case")]
 /// The logger configuration
 pub struct LogConfig {
     /// The logging level of the application
@@ -53,16 +65,33 @@ pub struct LogConfig {
     pub dir: PathBuf,
 }
 
+impl Default for LogConfig {
+    fn default() -> Self {
+        LogConfig {
+            level: "info".to_owned(),
+            dir: PathBuf::from("log"),
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case")]
 /// The PKI configuration
 pub struct PkiConfig {
     /// The directory for created certificates
     pub dir: PathBuf,
 }
 
+impl Default for PkiConfig {
+    fn default() -> Self {
+        PkiConfig {
+            dir: PathBuf::from("pki"),
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case")]
 /// The Kube configuration
 pub struct KubeConfig {
     /// The directory for created configs
@@ -78,8 +107,19 @@ pub struct KubeConfig {
     pub cluster_dns: String,
 }
 
+impl Default for KubeConfig {
+    fn default() -> Self {
+        KubeConfig {
+            dir: PathBuf::from("kube"),
+            cluster_cidr: "172.200.0.0/16".to_owned(),
+            service_cidr: "172.50.0.0/24".to_owned(),
+            cluster_dns: "172.50.0.10".to_owned(),
+        }
+    }
+}
+
 #[derive(Clone, Deserialize, Debug)]
-#[serde(rename_all = "kebab-case")]
+#[serde(default, rename_all = "kebab-case")]
 /// The CRI-O configuration
 pub struct CrioConfig {
     /// The directory for CRI-O
@@ -87,4 +127,13 @@ pub struct CrioConfig {
 
     /// Container Networking CIDR
     pub cidr: String,
+}
+
+impl Default for CrioConfig {
+    fn default() -> Self {
+        CrioConfig {
+            dir: PathBuf::from("crio"),
+            cidr: "172.100.0.0/16".to_owned(),
+        }
+    }
 }

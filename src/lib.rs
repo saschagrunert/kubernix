@@ -30,15 +30,19 @@ use scheduler::Scheduler;
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
 use rayon::scope;
-use std::{fs::create_dir_all, net::IpAddr, process::Command};
+use std::{fs::create_dir_all, net::IpAddr, path::PathBuf, process::Command};
 
 const LOCALHOST: &str = "127.0.0.1";
+const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
+const KUBECONFIG_ENV: &str = "KUBECONFIG";
 
 type Stoppables = Vec<Startable>;
 
 pub struct Kubernix {
     config: Config,
     processes: Stoppables,
+    socket: PathBuf,
+    kubeconfig: PathBuf,
 }
 
 impl Kubernix {
@@ -100,6 +104,8 @@ impl Kubernix {
         let mut kubernix = Kubernix {
             config: config.clone(),
             processes: started,
+            socket,
+            kubeconfig: kubeconfig.admin.to_owned(),
         };
 
         // No dead processes
@@ -119,6 +125,9 @@ impl Kubernix {
     fn shell(&self) {
         if let Err(e) = Command::new("bash")
             .current_dir(&self.config.root.join(&self.config.log.dir))
+            .env("PS1", "> ")
+            .env(RUNTIME_ENV, format!("unix://{}", self.socket.display()))
+            .env(KUBECONFIG_ENV, &self.kubeconfig)
             .status()
         {
             error!("Unable to spawn shell: {}", e);
