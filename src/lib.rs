@@ -1,3 +1,8 @@
+//! # kubernix
+//!
+//! Single dependency, single node Kubernetes clusters for local development
+#![deny(missing_docs)]
+
 mod apiserver;
 mod config;
 mod controllermanager;
