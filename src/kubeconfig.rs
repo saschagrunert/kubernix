@@ -15,6 +15,7 @@ pub struct KubeConfig {
     pub controller_manager: PathBuf,
     pub scheduler: PathBuf,
     pub admin: PathBuf,
+    dir: PathBuf,
 }
 
 impl KubeConfig {
@@ -22,23 +23,24 @@ impl KubeConfig {
         info!("Creating kubeconfigs");
 
         // Create the target dir
-        let kube_dir = &config.root.join(&config.kube.dir);
-        create_dir_all(kube_dir)?;
+        let kube_dir = config.root.join(&config.kube.dir);
+        create_dir_all(&kube_dir)?;
 
         let mut kube = KubeConfig::default();
+        kube.dir = kube_dir;
+
         let localhost = Ipv4Addr::LOCALHOST.to_string();
-        kube.setup_kubelet(kube_dir, &pki, ip, hostname)?;
-        kube.setup_proxy(kube_dir, &pki, ip)?;
-        kube.setup_controller_manager(kube_dir, &pki, &localhost)?;
-        kube.setup_scheduler(kube_dir, &pki, &localhost)?;
-        kube.setup_admin(kube_dir, &pki, &localhost)?;
+        kube.setup_kubelet(&pki, ip, hostname)?;
+        kube.setup_proxy(&pki, ip)?;
+        kube.setup_controller_manager(&pki, &localhost)?;
+        kube.setup_scheduler(&pki, &localhost)?;
+        kube.setup_admin(&pki, &localhost)?;
 
         Ok(kube)
     }
 
-    fn setup_kubelet(&mut self, dir: &Path, pki: &Pki, ip: &str, hostname: &str) -> Fallible<()> {
+    fn setup_kubelet(&mut self, pki: &Pki, ip: &str, hostname: &str) -> Fallible<()> {
         let target = self.setup_kubeconfig(
-            dir,
             ip,
             hostname,
             &format!("system:node:{}", hostname),
@@ -50,10 +52,9 @@ impl KubeConfig {
         Ok(())
     }
 
-    fn setup_proxy(&mut self, dir: &Path, pki: &Pki, ip: &str) -> Fallible<()> {
+    fn setup_proxy(&mut self, pki: &Pki, ip: &str) -> Fallible<()> {
         const NAME: &str = "kube-proxy";
         let target = self.setup_kubeconfig(
-            dir,
             ip,
             NAME,
             &format!("system:{}", NAME),
@@ -65,10 +66,9 @@ impl KubeConfig {
         Ok(())
     }
 
-    fn setup_controller_manager(&mut self, dir: &Path, pki: &Pki, ip: &str) -> Fallible<()> {
+    fn setup_controller_manager(&mut self, pki: &Pki, ip: &str) -> Fallible<()> {
         const NAME: &str = "kube-controller-manager";
         let target = self.setup_kubeconfig(
-            dir,
             ip,
             NAME,
             &format!("system:{}", NAME),
@@ -80,10 +80,9 @@ impl KubeConfig {
         Ok(())
     }
 
-    fn setup_scheduler(&mut self, dir: &Path, pki: &Pki, ip: &str) -> Fallible<()> {
+    fn setup_scheduler(&mut self, pki: &Pki, ip: &str) -> Fallible<()> {
         const NAME: &str = "kube-scheduler";
         let target = self.setup_kubeconfig(
-            dir,
             ip,
             NAME,
             &format!("system:{}", NAME),
@@ -95,10 +94,9 @@ impl KubeConfig {
         Ok(())
     }
 
-    fn setup_admin(&mut self, dir: &Path, pki: &Pki, ip: &str) -> Fallible<()> {
+    fn setup_admin(&mut self, pki: &Pki, ip: &str) -> Fallible<()> {
         const NAME: &str = "admin";
         let target = self.setup_kubeconfig(
-            dir,
             ip,
             NAME,
             NAME,
@@ -112,7 +110,6 @@ impl KubeConfig {
 
     fn setup_kubeconfig(
         &mut self,
-        dir: &Path,
         ip: &str,
         name: &str,
         user: &str,
@@ -121,7 +118,7 @@ impl KubeConfig {
         key: &Path,
     ) -> Fallible<PathBuf> {
         debug!("Creating kubeconfig for {}", name);
-        let target = Path::new(dir).join(format!("{}.kubeconfig", name));
+        let target = Path::new(&self.dir).join(format!("{}.kubeconfig", name));
         let kubeconfig_arg = format!("--kubeconfig={}", target.display());
 
         let output = Command::new("kubectl")

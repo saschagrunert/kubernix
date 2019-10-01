@@ -43,7 +43,7 @@ run:
 
 .PHONY: lint-clippy
 lint-clippy:
-	$(call nix-shell-pure-run,,cargo clippy)
+	$(call nix-shell-pure-run,,cargo clippy --all -- -D warnings)
 
 .PHONY: lint-rustfmt
 lint-rustfmt:
