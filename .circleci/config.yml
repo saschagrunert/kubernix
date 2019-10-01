@@ -114,7 +114,7 @@ jobs:
       - <<: *prepare-env
       - add_ssh_keys:
           fingerprints:
-            - 41:39:b6:90:56:40:a9:52:0b:c2:f7:77:6a:ef:1f:fc
+            - eb:6f:46:b8:ee:6f:17:76:9d:aa:91:39:e6:37:de:4c
       - checkout
       - run:
           name: Setup git
