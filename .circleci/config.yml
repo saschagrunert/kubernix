@@ -8,6 +8,10 @@ executors:
   container-musl:
     docker:
       - image: ekidd/rust-musl-builder:stable
+  machine:
+    machine:
+      docker_layer_caching: true
+      image: ubuntu-1604:201903-01
 
 workflows:
   version: 2
@@ -16,6 +20,7 @@ workflows:
       - build
       - build-release
       - build-static
+      - coverage
       - docs
       - docs-publish:
           requires:
@@ -87,6 +92,22 @@ jobs:
             - ~/.cargo
       - store_artifacts:
           path: target/x86_64-unknown-linux-musl/release/kubernix
+
+  test:
+    executor: machine
+    steps:
+      - checkout
+      - run:
+          name: test and coverage upload
+          environment:
+            IMAGE: saschagrunert/build-rust
+          command: |
+            docker pull $IMAGE
+            docker run --security-opt seccomp=unconfined -v $(pwd):/build \
+              -w /build --network=host -e CODECOV_TOKEN $IMAGE \
+              bash -c "\
+                cargo kcov && \
+                bash <(curl -s https://codecov.io/bash)"
 
   docs:
     executor: container
