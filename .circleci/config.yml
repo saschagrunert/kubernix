@@ -63,7 +63,7 @@ jobs:
             - target
             - ~/.cargo
 
-  build-release:
+  build-static:
     executor: container-musl
     steps:
       - checkout
@@ -74,7 +74,7 @@ jobs:
           name: build static release
           command: cargo build --release
       - save_cache:
-          key: v1-build-release-{{ checksum "Cargo.lock" }}
+          key: v1-build-release-static-{{ checksum "Cargo.lock" }}
           paths:
             - target
             - ~/.cargo
