@@ -106,7 +106,7 @@ impl Process {
             reader.read_line(&mut line)?;
 
             if line.contains(pattern) {
-                debug!("Found pattern '{}' in line '{}'", pattern, line);
+                debug!("Found pattern '{}' in line '{}'", pattern, line.trim());
                 return Ok(());
             }
         }

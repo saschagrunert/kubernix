@@ -2,17 +2,19 @@ use crate::{
     process::{Process, Startable, Stoppable},
     Config,
 };
-use failure::{format_err, Fallible};
-use log::info;
+use failure::{bail, format_err, Fallible};
+use log::{debug, info};
 use serde_json::{json, to_string_pretty};
 use std::{
     env,
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
+    process::Command,
 };
 
 pub struct Crio {
     process: Process,
+    socket: PathBuf,
 }
 
 impl Crio {
@@ -91,7 +93,10 @@ impl Crio {
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready");
-        Ok(Box::new(Crio { process }))
+        Ok(Box::new(Crio {
+            process,
+            socket: socket.to_path_buf(),
+        }))
     }
 
     fn find_executable<P>(name: P) -> Option<PathBuf>
@@ -111,11 +116,48 @@ impl Crio {
                 .next()
         })
     }
+
+    fn remove_all_containers(&self) -> Fallible<()> {
+        debug!("Removing all CRI-O workloads");
+        let env_key = "CONTAINER_RUNTIME_ENDPOINT";
+        let env_value = format!("unix://{}", self.socket.display());
+
+        let output = Command::new("crictl")
+            .env(env_key, &env_value)
+            .arg("pods")
+            .arg("-q")
+            .output()?;
+        let stdout = String::from_utf8(output.stdout)?;
+        if !output.status.success() {
+            debug!("critcl stdout: {}", stdout);
+            debug!("critcl stderr: {}", String::from_utf8(output.stderr)?);
+            bail!("crictl pods command failed");
+        }
+
+        for x in stdout.lines() {
+            debug!("Removing pod {}", x);
+            let output = Command::new("crictl")
+                .env(env_key, &env_value)
+                .arg("rmp")
+                .arg("-f")
+                .arg(x)
+                .output()?;
+            if !output.status.success() {
+                debug!("critcl stdout: {}", String::from_utf8(output.stdout)?);
+                debug!("critcl stderr: {}", String::from_utf8(output.stderr)?);
+                bail!("crictl rmp command failed");
+            }
+        }
+
+        debug!("All workloads removed");
+        Ok(())
+    }
 }
 
 impl Stoppable for Crio {
     fn stop(&mut self) -> Fallible<()> {
         // Remove all running containers
+        self.remove_all_containers()?;
 
         // Stop the process
         self.process.stop()

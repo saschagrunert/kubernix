@@ -4,7 +4,7 @@ root = "kubernix"
 
 [log]
 dir = "log"
-level = "info"
+level = "debug"
 
 [pki]
 dir = "pki"
