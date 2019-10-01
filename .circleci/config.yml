@@ -5,6 +5,9 @@ executors:
   container:
     docker:
       - image: nixos/nix
+  container-musl:
+    docker:
+      - image: ekidd/rust-musl-builder:stable
 
 workflows:
   version: 2
@@ -12,6 +15,7 @@ workflows:
     jobs:
       - build
       - build-release
+      - build-static
       - lint-clippy
       - lint-rustfmt
       - test
@@ -58,6 +62,24 @@ jobs:
             - /nix
             - target
             - ~/.cargo
+
+  build-release:
+    executor: container-musl
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-build-release-static-{{ checksum "Cargo.lock" }}
+      - run:
+          name: build static release
+          command: cargo build --release
+      - save_cache:
+          key: v1-build-release-{{ checksum "Cargo.lock" }}
+          paths:
+            - target
+            - ~/.cargo
+      - store_artifacts:
+          path: target/release/kubernix
 
   lint-clippy:
     executor: container
