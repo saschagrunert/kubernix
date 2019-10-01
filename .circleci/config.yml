@@ -19,7 +19,7 @@ workflows:
       - docs
       - docs-publish:
           requires:
-            - doc
+            - docs
           filters:
             branches:
               only: master
