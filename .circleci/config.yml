@@ -16,6 +16,13 @@ workflows:
       - build
       - build-release
       - build-static
+      - docs
+      - docs-publish:
+          requires:
+            - docs
+          filters:
+            branches:
+              only: master
       - lint-clippy
       - lint-rustfmt
       - test
@@ -80,6 +87,52 @@ jobs:
             - ~/.cargo
       - store_artifacts:
           path: target/x86_64-unknown-linux-musl/release/kubernix
+
+  docs:
+    executor: container
+    steps:
+      - <<: *prepare-env
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-doc-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+      - run:
+          name: documentation
+          command: make docs
+      - save_cache:
+          key: v1-doc-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - target
+      - persist_to_workspace:
+          root: .
+          paths:
+            - target/doc
+
+  docs-publish:
+    executor: container
+    steps:
+      - <<: *prepare-env
+      - add_ssh_keys:
+          fingerprints:
+            - 41:39:b6:90:56:40:a9:52:0b:c2:f7:77:6a:ef:1f:fc
+      - checkout
+      - run:
+          name: Setup git
+          command: |
+            git config --global user.email mail@saschagrunert.de
+            git config --global user.name "CircleCI"
+      - attach_workspace:
+          at: .
+      - run:
+          name: Deploy documentation
+          command: |
+            git fetch origin gh-pages
+            git checkout -f gh-pages
+            rm -rf doc
+            mv target/doc .
+            git add .
+            git diff-index --quiet HEAD || git commit -m 'Update documentation'
+            git push -f origin gh-pages
 
   lint-clippy:
     executor: container
