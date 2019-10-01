@@ -49,7 +49,7 @@ type Stoppables = Vec<Startable>;
 pub struct Kubernix {
     config: Config,
     processes: Stoppables,
-    socket: PathBuf,
+    crio_socket: PathBuf,
     kubeconfig: PathBuf,
 }
 
@@ -100,7 +100,7 @@ impl Kubernix {
         info!("Starting processes");
 
         // Full path to the CRI socket
-        let socket = config.root.join(&config.crio.dir).join("crio.sock");
+        let crio_socket = config.root.join(&config.crio.dir).join("crio.sock");
 
         let mut crio = Self::stopped();
         let mut etcd = Self::stopped();
@@ -111,14 +111,14 @@ impl Kubernix {
         let mut prox = Self::stopped();
 
         scope(|s| {
-            s.spawn(|_| crio = Crio::start(&config, &socket));
+            s.spawn(|_| crio = Crio::start(&config, &crio_socket));
             s.spawn(|_| {
                 etcd = Etcd::start(&config, &pki);
                 apis = APIServer::start(&config, &ip, &pki, &encryptionconfig, &kubeconfig)
             });
             s.spawn(|_| cont = ControllerManager::start(&config, &pki, &kubeconfig));
             s.spawn(|_| sche = Scheduler::start(&config, &kubeconfig));
-            s.spawn(|_| kube = Kubelet::start(&config, &pki, &kubeconfig, &socket));
+            s.spawn(|_| kube = Kubelet::start(&config, &pki, &kubeconfig, &crio_socket));
             s.spawn(|_| prox = Proxy::start(&config, &kubeconfig));
         });
 
@@ -137,7 +137,7 @@ impl Kubernix {
         let mut kubernix = Kubernix {
             config: config.clone(),
             processes: started,
-            socket,
+            crio_socket,
             kubeconfig: kubeconfig.admin.to_owned(),
         };
 
@@ -190,7 +190,10 @@ impl Kubernix {
         if let Err(e) = Command::new("bash")
             .current_dir(&self.config.root.join(&self.config.log.dir))
             .env("PS1", "> ")
-            .env(RUNTIME_ENV, format!("unix://{}", self.socket.display()))
+            .env(
+                RUNTIME_ENV,
+                format!("unix://{}", self.crio_socket.display()),
+            )
             .env(KUBECONFIG_ENV, &self.kubeconfig)
             .status()
         {
