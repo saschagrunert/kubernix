@@ -29,6 +29,7 @@ use scheduler::Scheduler;
 
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
+use nix::unistd::getuid;
 use rayon::scope;
 use std::{
     env::{current_exe, split_paths, var, var_os},
@@ -54,6 +55,11 @@ pub struct Kubernix {
 
 impl Kubernix {
     pub fn start(config: Config) -> Fallible<Kubernix> {
+        // Rootless is currently not supported
+        if !getuid().is_root() {
+            bail!("Please run kubernix as root")
+        }
+
         // Bootstrap if we're not inside a nix shell
         if var(NIX_SHELL_ENV).is_err() {
             info!("Nix environment not found, bootstrapping one");

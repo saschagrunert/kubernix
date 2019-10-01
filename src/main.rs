@@ -6,7 +6,7 @@ use std::{env::set_var, process::exit};
 
 pub fn main() {
     if let Err(e) = run() {
-        println!("{}", e);
+        println!("Error: {}", e);
         exit(1);
     }
 }
