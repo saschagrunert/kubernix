@@ -79,7 +79,7 @@ jobs:
             - target
             - ~/.cargo
       - store_artifacts:
-          path: target
+          path: target/x86_64-unknown-linux-musl/release/kubernix
 
   lint-clippy:
     executor: container
