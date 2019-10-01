@@ -31,10 +31,8 @@ pub struct Pair {
 
 impl Pair {
     pub fn new(dir: &Path, name: &str) -> Pair {
-        let mut cert = dir.join(name);
-        cert.set_extension("pem");
-        let mut key = dir.join(format!("{}-key", name));
-        key.set_extension("pem");
+        let cert = dir.join(format!("{}.pem", name));
+        let key = dir.join(format!("{}-key.pem", name));
         Pair { cert, key }
     }
 
@@ -91,14 +89,14 @@ impl Pki {
             .stdout
             .take()
             .ok_or_else(|| format_err!("unable to get stdout"))?;
-        let status = Command::new("cfssljson")
+        let output = Command::new("cfssljson")
             .arg("-bare")
             .arg(dir.join(NAME))
             .stdin(pipe)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() {
+            .output()?;
+        if !output.status.success() {
+            debug!("cfssl/json stdout: {}", String::from_utf8(output.stdout)?);
+            debug!("cfssl/json stderr: {}", String::from_utf8(output.stderr)?);
             bail!("CA certificate generation failed");
         }
         debug!("CA certificates created");
@@ -111,7 +109,7 @@ impl Pki {
         let csr_file = dir.join("node-csr.json");
         self.write_csr(&name, "system:nodes", &csr_file)?;
 
-        self.kubelet = self.generate(dir, &name, &csr_file)?;
+        self.kubelet = self.generate(dir, &self.hostname.to_owned(), &csr_file)?;
         Ok(())
     }
 
@@ -199,14 +197,14 @@ impl Pki {
             .stdout
             .take()
             .ok_or_else(|| format_err!("unable to get stdout"))?;
-        let status = Command::new("cfssljson")
+        let output = Command::new("cfssljson")
             .arg("-bare")
             .arg(dir.join(name))
             .stdin(pipe)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() {
+            .output()?;
+        if !output.status.success() {
+            debug!("cfssl/json stdout: {}", String::from_utf8(output.stdout)?);
+            debug!("cfssl/json stderr: {}", String::from_utf8(output.stderr)?);
             bail!("cfssl command failed");
         }
         debug!("Certificate created for {}", name);

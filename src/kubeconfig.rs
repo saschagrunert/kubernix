@@ -4,7 +4,7 @@ use log::{debug, info};
 use std::{
     fs::create_dir_all,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
 };
 
 #[derive(Default)]
@@ -122,7 +122,7 @@ impl KubeConfig {
         let target = Path::new(dir).join(format!("{}.kubeconfig", name));
         let kubeconfig_arg = format!("--kubeconfig={}", target.display());
 
-        let status = Command::new("kubectl")
+        let output = Command::new("kubectl")
             .arg("config")
             .arg("set-cluster")
             .arg("kubernetes")
@@ -130,14 +130,20 @@ impl KubeConfig {
             .arg("--embed-certs=true")
             .arg(format!("--server=https://{}:6443", ip))
             .arg(&kubeconfig_arg)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() {
+            .output()?;
+        if !output.status.success() {
+            debug!(
+                "kubectl set-cluster stdout: {}",
+                String::from_utf8(output.stdout)?
+            );
+            debug!(
+                "kubectl set-cluster stderr: {}",
+                String::from_utf8(output.stderr)?
+            );
             bail!("Kubectl set-cluster command failed");
         }
 
-        let status = Command::new("kubectl")
+        let output = Command::new("kubectl")
             .arg("config")
             .arg("set-credentials")
             .arg(user)
@@ -145,36 +151,54 @@ impl KubeConfig {
             .arg(format!("--client-key={}", key.display()))
             .arg("--embed-certs=true")
             .arg(&kubeconfig_arg)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() {
+            .output()?;
+        if !output.status.success() {
+            debug!(
+                "kubectl set-credentials stdout: {}",
+                String::from_utf8(output.stdout)?
+            );
+            debug!(
+                "kubectl set-credentials stderr: {}",
+                String::from_utf8(output.stderr)?
+            );
             bail!("Kubectl set-credentials command failed");
         }
 
-        let status = Command::new("kubectl")
+        let output = Command::new("kubectl")
             .arg("config")
             .arg("set-context")
             .arg("default")
             .arg("--cluster=kubernetes")
             .arg(format!("--user={}", user))
             .arg(&kubeconfig_arg)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() {
+            .output()?;
+        if !output.status.success() {
+            debug!(
+                "kubectl set-context stdout: {}",
+                String::from_utf8(output.stdout)?
+            );
+            debug!(
+                "kubectl set-context stderr: {}",
+                String::from_utf8(output.stderr)?
+            );
             bail!("Kubectl set-context command failed");
         }
 
-        let status = Command::new("kubectl")
+        let output = Command::new("kubectl")
             .arg("config")
             .arg("use-context")
             .arg("default")
             .arg(&kubeconfig_arg)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()?;
-        if !status.success() {
+            .output()?;
+        if !output.status.success() {
+            debug!(
+                "kubectl use-context stdout: {}",
+                String::from_utf8(output.stdout)?
+            );
+            debug!(
+                "kubectl use-context stderr: {}",
+                String::from_utf8(output.stderr)?
+            );
             bail!("Kubectl use-context command failed");
         }
 

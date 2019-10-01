@@ -28,26 +28,7 @@ impl Kubelet {
         create_dir_all(&dir)?;
 
         let yml = format!(
-            r#"---
-kind: KubeletConfiguration
-apiVersion: kubelet.config.k8s.io/v1beta1
-authentication:
-  anonymous:
-    enabled: false
-  webhook:
-    enabled: true
-  x509:
-    clientCAFile: "{}"
-authorization:
-  mode: Webhook
-clusterDomain: "cluster.local"
-clusterDNS:
-  - "{}"
-podCIDR: "{}"
-runtimeRequestTimeout: "15m"
-tlsCertFile: "{}"
-tlsPrivateKeyFile: "{}"
-"#,
+            include_str!("assets/kubelet.yml"),
             pki.ca.cert().display(),
             config.kube.cluster_dns,
             config.crio.cidr,
