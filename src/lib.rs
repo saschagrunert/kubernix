@@ -51,6 +51,7 @@ const NIX_SHELL_ENV: &str = "IN_NIX_SHELL";
 
 type Stoppables = Vec<Startable>;
 
+/// The main structure for the application
 pub struct Kubernix {
     config: Config,
     processes: Stoppables,
@@ -59,6 +60,7 @@ pub struct Kubernix {
 }
 
 impl Kubernix {
+    /// Start kubernix by consuming the provided configuration
     pub fn start(config: Config) -> Fallible<Kubernix> {
         // Rootless is currently not supported
         if !getuid().is_root() {
@@ -76,6 +78,7 @@ impl Kubernix {
         }
     }
 
+    /// Stop kubernix by cleaning up all running processes
     pub fn stop(&mut self) {
         for x in &mut self.processes {
             if let Err(e) = x.stop() {
