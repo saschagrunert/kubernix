@@ -24,6 +24,10 @@ build:
 build-release:
 	$(call nix-shell-pure-run,,cargo build --release)
 
+.PHONY: docs
+docs:
+	$(call nix-shell-pure-run,,cargo doc --no-deps)
+
 .PHONY: nixpkgs
 nixpkgs:
 	nix-shell -p nix-prefetch-git --run "nix-prefetch-git --no-deepClone \
