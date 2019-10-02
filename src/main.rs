@@ -1,7 +1,6 @@
 use clap::{crate_version, load_yaml, App};
 use failure::{format_err, Fallible};
-use kubernix::{Config, Kubernix};
-use log::info;
+use kubernix::{ConfigBuilder, Kubernix};
 use std::{env::set_var, process::exit};
 
 pub fn main() {
@@ -16,25 +15,25 @@ fn run() -> Fallible<()> {
     let yaml = load_yaml!("cli.yaml");
     let matches = App::from_yaml(yaml).version(crate_version!()).get_matches();
 
-    // Load config file
-    let config_filename = matches
-        .value_of("config")
-        .ok_or_else(|| format_err!("No 'config' provided"))?;
-    let mut config = Config::from_file_or_default(config_filename)?;
-
-    // Give the CLI values precedence
+    // Build the config
+    let mut config_builder = ConfigBuilder::default();
     if matches.is_present("verbose") {
-        config.log.level = "debug".to_owned();
+        config_builder.log_level("debug");
     }
+    if let Some(x) = matches.value_of("root") {
+        config_builder.root(x);
+    }
+    let mut config = config_builder
+        .build()
+        .map_err(|e| format_err!("Unable to build config: {}", e))?;
+    config.prepare()?;
 
     // Setup the logger
-    set_var("RUST_LOG", format!("kubernix={}", config.log.level));
+    set_var("RUST_LOG", format!("kubernix={}", config.log_level()));
     env_logger::init();
 
     // Run kubernix
-    let mut kube = Kubernix::start(config)?;
+    Kubernix::start(config)?;
 
-    info!("Cleaning up");
-    kube.stop();
     Ok(())
 }

@@ -1,3 +1,5 @@
+SUDO := sudo -E
+
 define nix-shell
 	$(1) nix-shell nix/shell.nix $(2)
 endef
@@ -35,7 +37,7 @@ nixpkgs:
 
 .PHONY: shell
 shell:
-	$(call nix-shell-pure,sudo)
+	$(call nix-shell-pure,$(SUDO))
 
 .PHONY: test
 test:
@@ -43,7 +45,7 @@ test:
 
 .PHONY: run
 run:
-	$(call nix-shell-pure-run,sudo,cargo run --release)
+	$(call nix-shell-pure-run,$(SUDO),cargo run --release)
 
 .PHONY: lint-clippy
 lint-clippy:

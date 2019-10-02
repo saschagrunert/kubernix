@@ -15,13 +15,13 @@ impl Proxy {
     pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Fallible<Startable> {
         info!("Starting Proxy");
 
-        let dir = config.root.join("proxy");
+        let dir = config.root().join("proxy");
         create_dir_all(&dir)?;
 
         let yml = format!(
             include_str!("assets/proxy.yml"),
             kubeconfig.proxy.display(),
-            config.kube.cluster_cidr,
+            config.cluster_cidr(),
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;

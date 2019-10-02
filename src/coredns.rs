@@ -12,10 +12,10 @@ impl CoreDNS {
     pub fn apply(config: &Config, kubeconfig: &KubeConfig) -> Fallible<()> {
         info!("Deploying CoreDNS");
 
-        let dir = config.root.join("coredns");
+        let dir = config.root().join("coredns");
         create_dir_all(&dir)?;
 
-        let yml = format!(include_str!("assets/coredns.yml"), config.kube.cluster_dns);
+        let yml = format!(include_str!("assets/coredns.yml"), config.cluster_dns());
         let yml_file = dir.join("coredns.yml");
         fs::write(&yml_file, yml)?;
 

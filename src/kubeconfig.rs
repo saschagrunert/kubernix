@@ -23,7 +23,7 @@ impl KubeConfig {
         info!("Creating kubeconfigs");
 
         // Create the target dir
-        let kube_dir = config.root.join(&config.kube.dir);
+        let kube_dir = config.root().join("kube");
         create_dir_all(&kube_dir)?;
 
         let mut kube = KubeConfig::default();

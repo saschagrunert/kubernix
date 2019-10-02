@@ -29,6 +29,7 @@ pkgs.stdenv.mkDerivation {
     iproute
     iptables
     kubernetes
+    kubernetes-helm
     runc
     ruststable
     socat
