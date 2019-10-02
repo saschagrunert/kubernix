@@ -71,7 +71,7 @@
             <span class="kw-2">&amp;</span>[
                 <span class="string">&quot;kube-controller-manager&quot;</span>.<span class="ident">to_owned</span>(),
                 <span class="string">&quot;--bind-address=0.0.0.0&quot;</span>.<span class="ident">to_owned</span>(),
-                <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--cluster-cidr={}&quot;</span>, <span class="ident">config</span>.<span class="ident">kube</span>.<span class="ident">cluster_cidr</span>),
+                <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--cluster-cidr={}&quot;</span>, <span class="ident">config</span>.<span class="ident">cluster_cidr</span>()),
                 <span class="string">&quot;--cluster-name=kubernetes&quot;</span>.<span class="ident">to_owned</span>(),
                 <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--cluster-signing-cert-file={}&quot;</span>, <span class="ident">pki</span>.<span class="ident">ca</span>.<span class="ident">cert</span>().<span class="ident">display</span>()),
                 <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--cluster-signing-key-file={}&quot;</span>, <span class="ident">pki</span>.<span class="ident">ca</span>.<span class="ident">key</span>().<span class="ident">display</span>()),
@@ -82,7 +82,7 @@
                     <span class="string">&quot;--service-account-private-key-file={}&quot;</span>,
                     <span class="ident">pki</span>.<span class="ident">service_account</span>.<span class="ident">key</span>().<span class="ident">display</span>()
                 ),
-                <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--service-cluster-ip-range={}&quot;</span>, <span class="ident">config</span>.<span class="ident">kube</span>.<span class="ident">service_cidr</span>),
+                <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--service-cluster-ip-range={}&quot;</span>, <span class="ident">config</span>.<span class="ident">service_cidr</span>()),
                 <span class="string">&quot;--use-service-account-credentials=true&quot;</span>.<span class="ident">to_owned</span>(),
                 <span class="string">&quot;--v=2&quot;</span>.<span class="ident">to_owned</span>(),
             ],

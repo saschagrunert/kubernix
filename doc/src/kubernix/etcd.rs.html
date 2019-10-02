@@ -82,7 +82,7 @@
                 <span class="string">&quot;etcd&quot;</span>.<span class="ident">to_owned</span>(),
                 <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--advertise-client-urls={}&quot;</span>, <span class="ident">etcd_localhost</span>),
                 <span class="string">&quot;--client-cert-auth&quot;</span>.<span class="ident">to_owned</span>(),
-                <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--data-dir={}&quot;</span>, <span class="ident">config</span>.<span class="ident">root</span>.<span class="ident">join</span>(<span class="string">&quot;etcd&quot;</span>).<span class="ident">display</span>()),
+                <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--data-dir={}&quot;</span>, <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="string">&quot;etcd&quot;</span>).<span class="ident">display</span>()),
                 <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--initial-advertise-peer-urls={}&quot;</span>, <span class="ident">etcd_localhost_peer</span>),
                 <span class="string">&quot;--initial-cluster-state=new&quot;</span>.<span class="ident">to_owned</span>(),
                 <span class="string">&quot;--initial-cluster-token=etcd-cluster&quot;</span>.<span class="ident">to_owned</span>(),
