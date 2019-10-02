@@ -15,7 +15,7 @@ impl Scheduler {
     pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Fallible<Startable> {
         info!("Starting Scheduler");
 
-        let dir = config.root.join("scheduler");
+        let dir = config.root().join("scheduler");
         create_dir_all(&dir)?;
 
         let yml = format!(

@@ -18,22 +18,8 @@ impl EncryptionConfig {
 
         let rnd = thread_rng().gen::<[u8; 32]>();
         let b64 = encode(&rnd);
-        let yml = format!(
-            "---
-kind: EncryptionConfig
-apiVersion: v1
-resources:
-  - resources:
-      - secrets
-    providers:
-      - aescbc:
-          keys:
-            - name: key1
-              secret: {}
-      - identity: {{}}",
-            b64
-        );
-        let path = config.root.join("encryption-config.yml");
+        let yml = format!(include_str!("assets/encryptionconfig.yml"), b64);
+        let path = config.root().join("encryption-config.yml");
         fs::write(&path, yml)?;
         Ok(EncryptionConfig { path })
     }

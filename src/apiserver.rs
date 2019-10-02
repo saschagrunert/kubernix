@@ -28,7 +28,7 @@ impl APIServer {
     ) -> Fallible<Startable> {
         info!("Starting API Server");
 
-        let dir = config.root.join("apiserver");
+        let dir = config.root().join("apiserver");
         create_dir_all(&dir)?;
 
         let mut process = Process::start(
@@ -71,7 +71,7 @@ impl APIServer {
                     "--service-account-key-file={}",
                     pki.service_account.cert().display()
                 ),
-                format!("--service-cluster-ip-range={}", config.kube.service_cidr),
+                format!("--service-cluster-ip-range={}", config.service_cidr()),
                 format!("--tls-cert-file={}", pki.apiserver.cert().display()),
                 format!("--tls-private-key-file={}", pki.apiserver.key().display()),
                 "--v=2".to_owned(),

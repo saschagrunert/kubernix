@@ -57,15 +57,15 @@ impl Pki {
         info!("Generating certificates");
 
         // Create the target dir
-        let pki_dir = &config.root.join(&config.pki.dir);
+        let pki_dir = &config.root().join("pki");
         create_dir_all(pki_dir)?;
 
         // Find out the first Service IP
-        let service_addr = match config.kube.service_cidr {
+        let service_addr = match config.service_cidr() {
             IpNetwork::V4(n) => n.nth(1).ok_or_else(|| {
                 format_err!(
                     "Unable to retrieve first IP from service CIDR: {}",
-                    config.kube.service_cidr
+                    config.service_cidr()
                 )
             })?,
             _ => Ipv4Addr::LOCALHOST,

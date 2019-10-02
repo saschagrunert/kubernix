@@ -7,12 +7,10 @@ global_settings:
   - ColoredHelp
 
 args:
-  - config:
-      default_value: kubernix.toml
-      env: CONFIG_FILE
-      help: File path to the configuration file
-      long: config-file
-      short: c
+  - root:
+      help: Path where all the runtime data is stored
+      long: root
+      short: r
       value_name: PATH
   - verbose:
       help: Enable verbose logging

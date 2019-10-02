@@ -1,6 +1,6 @@
 use crate::{
     process::{Process, Startable, Stoppable},
-    Config, Kubernix, RUNTIME_ENV,
+    Config, Kubernix, CRIO_DIR, RUNTIME_ENV,
 };
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
@@ -25,7 +25,7 @@ impl Crio {
             .parent()
             .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
 
-        let dir = config.root.join(&config.crio.dir);
+        let dir = config.root().join(CRIO_DIR);
         create_dir_all(&dir)?;
 
         let cni_config = dir.join("cni");
@@ -37,14 +37,14 @@ impl Crio {
               "cniVersion": "0.3.1",
               "name": "crio-bridge",
               "type": "bridge",
-              "bridge": "cni0",
+              "bridge": "kubernix1",
               "isGateway": true,
               "ipMasq": true,
               "hairpinMode": true,
               "ipam": {
                 "type": "host-local",
                 "routes": [{ "dst": "0.0.0.0/0" }],
-                "ranges": [[{ "subnet": config.crio.cidr }]]
+                "ranges": [[{ "subnet": config.crio_cidr() }]]
               }
             }))?,
         )?;

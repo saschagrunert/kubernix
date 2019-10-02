@@ -1,6 +1,6 @@
-use crate::Config;
+use crate::{Config, LOG_DIR};
 use failure::{bail, format_err, Fallible};
-use log::debug;
+use log::{debug, error, info};
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 use std::{
@@ -21,6 +21,7 @@ pub struct Process {
     command: String,
     kill: Sender<()>,
     log_file: PathBuf,
+    pid: u32,
     watch: Option<JoinHandle<Fallible<()>>>,
 }
 
@@ -30,7 +31,7 @@ pub trait Stoppable {
     fn stop(&mut self) -> Fallible<()>;
 }
 
-/// Starable process type
+/// Startable process type
 pub type Startable = Box<dyn Stoppable + Send>;
 
 impl Process {
@@ -44,7 +45,7 @@ impl Process {
             .ok_or_else(|| format_err!("No valid command provided"))?;
         let args: Vec<String> = command.iter().map(|x| x.to_owned()).skip(1).collect();
 
-        let mut log_file = config.root.join(&config.log.dir).join(&cmd);
+        let mut log_file = config.root().join(LOG_DIR).join(&cmd);
         log_file.set_extension("log");
 
         let out_file = File::create(&log_file)?;
@@ -59,33 +60,25 @@ impl Process {
 
         let (kill_tx, kill_rx) = channel();
         let c = cmd.clone();
+        let pid = child.id();
         let watch = spawn(move || {
-            loop {
-                // Verify that the process is still running
-                if let Some(s) = child.try_wait()? {
-                    bail!("Process '{}' died unexpectedly: {}", c, s);
-                }
+            // Wait for the process to exit
+            let status = child.wait()?;
 
-                // Kill the process if requested
-                if kill_rx.try_recv().is_ok() {
-                    debug!("Stopping process '{}'", c);
-                    match kill(Pid::from_raw(child.id() as i32), Signal::SIGTERM) {
-                        Ok(_) => {
-                            debug!("Waiting for '{}' to exit", c);
-                            child.wait()?;
-                        }
-                        Err(e) => {
-                            bail!("Unable to kill process '{}': {}", c, e);
-                        }
-                    }
-                }
+            // No kill send, we assume that the process died
+            if kill_rx.try_recv().is_err() {
+                error!("Process '{}' died on {}", c, status);
+            } else {
+                info!("Process '{}' exited on {}", c, status);
             }
+            Ok(())
         });
 
         Ok(Process {
             command: cmd,
             kill: kill_tx,
             log_file,
+            pid,
             watch: Some(watch),
         })
     }
@@ -112,17 +105,28 @@ impl Process {
         }
 
         // Cleanup since process is not ready
-        self.kill.send(())?;
+        self.stop()?;
         bail!("Timed out waiting for process to become ready")
+    }
+
+    /// Retrieve a pseudo state for stopped processes
+    pub fn stopped() -> Fallible<Startable> {
+        Err(format_err!("Stopped"))
     }
 }
 
 impl Stoppable for Process {
     /// Stopping the process by killing it
     fn stop(&mut self) -> Fallible<()> {
-        if let Err(e) = self.kill.send(()) {
-            bail!("Unable to kill '{}': {}", self.command, e)
-        }
+        debug!("Stopping process '{}'", self.command);
+
+        // Indicate that this shutdown is intended
+        self.kill.send(())?;
+
+        // Send SIGTERM to the process
+        kill(Pid::from_raw(self.pid as i32), Signal::SIGTERM)?;
+
+        // Join the waiting thread
         if let Some(handle) = self.watch.take() {
             if handle.join().is_err() {
                 bail!("Unable to stop process '{}'", self.command);

@@ -1,6 +1,4 @@
 //! # kubernix
-//!
-//! Single dependency, single node Kubernetes clusters for local development
 #![deny(missing_docs)]
 
 mod apiserver;
@@ -17,7 +15,7 @@ mod process;
 mod proxy;
 mod scheduler;
 
-pub use config::Config;
+pub use config::{Config, ConfigBuilder};
 
 use apiserver::APIServer;
 use controllermanager::ControllerManager;
@@ -28,7 +26,7 @@ use etcd::Etcd;
 use kubeconfig::KubeConfig;
 use kubelet::Kubelet;
 use pki::Pki;
-use process::Startable;
+use process::{Process, Startable};
 use proxy::Proxy;
 use scheduler::Scheduler;
 
@@ -42,26 +40,28 @@ use std::{
     fs::{self, create_dir_all},
     net::IpAddr,
     path::{Path, PathBuf},
-    process::{exit, Command},
+    process::Command,
 };
 
 const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 const KUBECONFIG_ENV: &str = "KUBECONFIG";
 const NIX_SHELL_ENV: &str = "IN_NIX_SHELL";
+const CRIO_DIR: &str = "crio";
+const LOG_DIR: &str = "log";
 
 type Stoppables = Vec<Startable>;
 
 /// The main structure for the application
 pub struct Kubernix {
     config: Config,
-    processes: Stoppables,
     crio_socket: PathBuf,
-    kubeconfig: PathBuf,
+    kubeconfig: KubeConfig,
+    processes: Stoppables,
 }
 
 impl Kubernix {
     /// Start kubernix by consuming the provided configuration
-    pub fn start(config: Config) -> Fallible<Kubernix> {
+    pub fn start(config: Config) -> Fallible<()> {
         // Rootless is currently not supported
         if !getuid().is_root() {
             bail!("Please run kubernix as root")
@@ -70,8 +70,7 @@ impl Kubernix {
         // Bootstrap if we're not inside a nix shell
         if var(NIX_SHELL_ENV).is_err() {
             info!("Nix environment not found, bootstrapping one");
-            Self::bootstrap_nix(config)?;
-            exit(0);
+            Self::bootstrap_nix(config)
         } else {
             info!("Bootstrapping cluster inside nix environment");
             Self::bootstrap_cluster(config)
@@ -79,7 +78,7 @@ impl Kubernix {
     }
 
     /// Stop kubernix by cleaning up all running processes
-    pub fn stop(&mut self) {
+    fn stop(&mut self) {
         for x in &mut self.processes {
             if let Err(e) = x.stop() {
                 debug!("{}", e)
@@ -87,7 +86,7 @@ impl Kubernix {
         }
     }
 
-    fn bootstrap_cluster(config: Config) -> Fallible<Kubernix> {
+    fn bootstrap_cluster(config: Config) -> Fallible<()> {
         // Retrieve the local IP
         let ip = Self::local_ip()?;
         let hostname =
@@ -102,22 +101,22 @@ impl Kubernix {
         let encryptionconfig = EncryptionConfig::new(&config)?;
 
         // Create the log dir
-        create_dir_all(config.root.join(&config.log.dir))?;
+        create_dir_all(config.root().join(LOG_DIR))?;
+
+        // Full path to the CRI socket
+        let crio_socket = config.root().join(CRIO_DIR).join("crio.sock");
+
+        // All processes
+        let mut crio = Process::stopped();
+        let mut etcd = Process::stopped();
+        let mut apis = Process::stopped();
+        let mut cont = Process::stopped();
+        let mut sche = Process::stopped();
+        let mut kube = Process::stopped();
+        let mut prox = Process::stopped();
 
         // Spawn the processes
         info!("Starting processes");
-
-        // Full path to the CRI socket
-        let crio_socket = config.root.join(&config.crio.dir).join("crio.sock");
-
-        let mut crio = Self::stopped();
-        let mut etcd = Self::stopped();
-        let mut apis = Self::stopped();
-        let mut cont = Self::stopped();
-        let mut sche = Self::stopped();
-        let mut kube = Self::stopped();
-        let mut prox = Self::stopped();
-
         scope(|s| {
             s.spawn(|_| crio = Crio::start(&config, &crio_socket));
             s.spawn(|_| {
@@ -130,42 +129,56 @@ impl Kubernix {
             s.spawn(|_| prox = Proxy::start(&config, &kubeconfig));
         });
 
-        // Wait for `drain_filter()` to be stable
-        let mut started = vec![];
-        let mut found_dead = false;
+        let mut processes = vec![];
 
-        // This order is important since we will shut down the processes in its reverse order
-        for x in vec![kube, sche, prox, cont, apis, etcd, crio] {
-            if x.is_ok() {
-                started.push(x?)
-            } else {
-                found_dead = true
+        // This order is important since we will shut down the processes in its reverse
+        let results = vec![kube, sche, prox, cont, apis, etcd, crio];
+        let all_ok = results.iter().all(|x| x.is_ok());
+
+        // Note: wait for `drain_filter()` to be stable and make it more straightforward
+        for process in results {
+            match process {
+                Ok(p) => processes.push(p),
+                Err(e) => error!("{}", e),
             }
         }
+
+        // Setup the main instance
         let mut kubernix = Kubernix {
-            config: config.clone(),
-            processes: started,
+            config,
             crio_socket,
-            kubeconfig: kubeconfig.admin.to_owned(),
+            kubeconfig,
+            processes,
         };
 
         // No dead processes
-        if !found_dead {
-            CoreDNS::apply(&config, &kubeconfig)?;
-            info!("Everything is up and running");
+        if all_ok {
+            kubernix.apply_addons()?;
 
+            info!("Everything is up and running");
             kubernix.spawn_shell();
-            Ok(kubernix)
         } else {
-            // Cleanup started processes and exit
-            kubernix.stop();
-            bail!("Unable to start all processes")
+            error!("Unable to start all processes")
         }
+
+        info!("Cleaning up");
+        kubernix.stop();
+        Ok(())
+    }
+
+    // Apply needed workloads to the running cluster. This method stops the cluster on any error.
+    fn apply_addons(&mut self) -> Fallible<()> {
+        if let Err(e) = CoreDNS::apply(&self.config, &self.kubeconfig) {
+            error!("Unable to apply CoreDNS: {}", e);
+            self.stop();
+            bail!("CoreDNS deployment failed")
+        }
+        Ok(())
     }
 
     fn bootstrap_nix(config: Config) -> Fallible<()> {
         // Prepare the nix dir
-        let nix_dir = config.root.join("nix");
+        let nix_dir = config.root().join("nix");
         create_dir_all(&nix_dir)?;
 
         // Write the configuration
@@ -197,24 +210,21 @@ impl Kubernix {
     fn spawn_shell(&self) {
         info!("Spawning interactive shell");
         if let Err(e) = Command::new("bash")
-            .current_dir(&self.config.root.join(&self.config.log.dir))
+            .current_dir(&self.config.root().join(LOG_DIR))
             .arg("--norc")
             .env("PS1", "> ")
             .env(
                 RUNTIME_ENV,
                 format!("unix://{}", self.crio_socket.display()),
             )
-            .env(KUBECONFIG_ENV, &self.kubeconfig)
+            .env(KUBECONFIG_ENV, &self.kubeconfig.admin)
             .status()
         {
             error!("Unable to spawn shell: {}", e);
         }
     }
 
-    fn stopped<T>() -> Fallible<T> {
-        Err(format_err!("Stopped"))
-    }
-
+    /// Retrieve the local hosts IP via the default route
     fn local_ip() -> Fallible<String> {
         let cmd = Command::new("ip")
             .arg("route")
@@ -235,6 +245,7 @@ impl Kubernix {
         Ok(ip.to_owned())
     }
 
+    /// Find an executable inside the current $PATH environment
     fn find_executable<P>(name: P) -> Fallible<PathBuf>
     where
         P: AsRef<Path> + Display,

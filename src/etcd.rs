@@ -25,7 +25,7 @@ impl Etcd {
                 "etcd".to_owned(),
                 format!("--advertise-client-urls={}", etcd_localhost),
                 "--client-cert-auth".to_owned(),
-                format!("--data-dir={}", config.root.join("etcd").display()),
+                format!("--data-dir={}", config.root().join("etcd").display()),
                 format!("--initial-advertise-peer-urls={}", etcd_localhost_peer),
                 "--initial-cluster-state=new".to_owned(),
                 "--initial-cluster-token=etcd-cluster".to_owned(),
