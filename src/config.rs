@@ -51,10 +51,10 @@ impl Config {
     pub fn prepare(&mut self) -> Fallible<()> {
         // Remove the root if already existing
         if self.root().exists() {
-            remove_dir_all(&self.root())?;
+            remove_dir_all(self.root())?;
         }
-        create_dir_all(&self.root())?;
-        self.root = canonicalize(&self.root).unwrap();
+        create_dir_all(self.root())?;
+        self.root = canonicalize(self.root())?;
         Ok(())
     }
 }
