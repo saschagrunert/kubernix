@@ -22,7 +22,7 @@ for this project, pinned to a dedicated and reproducible version.
 
 [2]: https://nixos.org/nix
 
-KuberNix itself is the rusty helper program, which takes care of bootstrapping
+KuberNix itself is the Rusty helper program, which takes care of bootstrapping
 the Kubernetes cluster, passing the right configuration parameters around and
 keeping track of the running processes.
 
@@ -56,7 +56,7 @@ certificate generation.
 ### Single Dependency
 
 As already mentioned, there is only one single dependency needed to run this
-project: Nix. To setup nix, simply run:
+project: **Nix**. To setup Nix, simply run:
 
 ```shell
 $ curl https://nixos.org/nix/install | sh
@@ -65,6 +65,8 @@ $ curl https://nixos.org/nix/install | sh
 Please make sure to follow the instructions output by the script.
 
 ### Getting Started
+
+#### Cluster Bootstrap
 
 To bootstrap your first cluster, download one of the latest release binaries or
 build the application via:
@@ -76,15 +78,19 @@ $ make build-release
 The binary should now be available in the `target/release/kubernix` directory of
 the project.
 
-After the successful binary retrieval, start KuberNix by running it as root:
+After the successful binary retrieval, start KuberNix by running it as `root`:
 
 ```
 $ sudo kubernix
 ```
 
 KuberNix will now take care that the Nix environment gets correctly setup,
-downloads the needed binaries and starts the cluster. If everything went fine,
-you should be dropped into a new shell session, like this:
+downloads the needed binaries and starts the cluster. Per default it will create
+a directory called `kubernix` in the current path which contains all necessary
+data for the cluster.
+
+If everything went fine, you should be dropped into a new bash-shell session,
+like this:
 
 ```
 [INFO  kubernix] Everything is up and running
@@ -115,8 +121,8 @@ kube-proxy.log
 kube-scheduler.log
 ```
 
-If you want to spawn an additional shell session, simply run in the same
-directory in another terminal:
+If you want to spawn an additional shell session, simply run `kubernix shell` in
+the same directory as the initial bootstrap.
 
 ```
 $ sudo kubernix shell
@@ -125,7 +131,7 @@ $ sudo kubernix shell
 ```
 
 This means that you can spawn as many shells as you want to, whereas the whole
-cluster gets destroyed if you exit the shell session from the initial process:
+cluster gets destroyed if you exit the bash session from the initial process:
 
 ```
 > exit
@@ -133,8 +139,9 @@ cluster gets destroyed if you exit the shell session from the initial process:
 ```
 
 Please note that the directory where all the data is stored (per default
-`$PWD/kubernix`) is not cleaned up after KuberNix exited. This means that you're
-still able to access the log and configuration files for further processing.
+`$PWD/kubernix`) is not being removed after the exit of KuberNix. This means
+that you're still able to access the log and configuration files for further
+processing.
 
 ### Configuration
 
