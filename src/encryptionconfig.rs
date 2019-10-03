@@ -4,7 +4,7 @@ use failure::Fallible;
 use log::info;
 use rand::{thread_rng, Rng};
 use std::{
-    fs,
+    fs::{self, create_dir_all},
     path::{Path, PathBuf},
 };
 
@@ -19,7 +19,11 @@ impl EncryptionConfig {
         let rnd = thread_rng().gen::<[u8; 32]>();
         let b64 = encode(&rnd);
         let yml = format!(include_str!("assets/encryptionconfig.yml"), b64);
-        let path = config.root().join("encryption-config.yml");
+
+        let encryption_dir = &config.root().join("encryption");
+        create_dir_all(encryption_dir)?;
+
+        let path = encryption_dir.join("config.yml");
         fs::write(&path, yml)?;
         Ok(EncryptionConfig { path })
     }
