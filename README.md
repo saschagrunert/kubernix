@@ -130,7 +130,7 @@ the same directory as the initial bootstrap.
 
 ```
 $ sudo kubernix shell
-[INFO  kubernix] Spawning new kubernix shell in 'kubernix'
+[INFO  kubernix] Spawning new kubernix shell in 'kubernix-run'
 > kubectl run --generator=run-pod/v1 --image=alpine -it alpine sh
 If you don't see a command prompt, try pressing enter.
 / #
@@ -148,10 +148,9 @@ the initial process:
 [INFO  kubernix] Cleaning up
 ```
 
-Please note that the directory where all the data is stored (per default
-`$PWD/kubernix`) is not being removed after the exit of KuberNix. This means
-that you're still able to access the log and configuration files for further
-processing.
+Please note that the directory where all the data is stored is not being
+removed after the exit of KuberNix. This means that you're still able to
+access the log and configuration files for further processing.
 
 ### Configuration
 
@@ -159,7 +158,7 @@ KuberNix has some configuration possibilities, which are currently:
 
 | CLI argument         | Description                               | Default         |
 | -------------------- | ----------------------------------------- | --------------- |
-| `-r, --root`         | Path where all the runtime data is stored | `kubernix`      |
+| `-r, --root`         | Path where all the runtime data is stored | `kubernix-run`  |
 | `-l, --log-level`    | Logging verbosity                         | `info`          |
 | `-c, --crio-cidr`    | CIDR used for the CRI-O CNI network       | `10.100.0.0/16` |
 | `-u, --cluster-cidr` | CIDR used for the whole cluster network   | `10.200.0.0/16` |
