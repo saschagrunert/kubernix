@@ -92,3 +92,81 @@ impl Config {
         &self.service_cidr
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn canonicalize_root_success() -> Fallible<()> {
+        let mut c = Config::default();
+        c.root = tempdir()?.into_path();
+        c.canonicalize_root()
+    }
+
+    #[test]
+    fn canonicalize_root_failure() {
+        let mut c = Config::default();
+        c.root = Path::new("/").join("proc").join("invalid");
+        assert!(c.canonicalize_root().is_err())
+    }
+
+    #[test]
+    fn to_file_success() -> Fallible<()> {
+        let mut c = Config::default();
+        c.root = tempdir()?.into_path();
+        c.to_file()
+    }
+
+    #[test]
+    fn to_file_failure() {
+        let mut c = Config::default();
+        c.root = Path::new("/").join("proc").join("invalid");
+        assert!(c.to_file().is_err())
+    }
+
+    #[test]
+    fn update_from_file_success() -> Fallible<()> {
+        let mut c = Config::default();
+        c.root = tempdir()?.into_path();
+        fs::write(
+            c.root.join(Config::FILENAME),
+            r#"
+root = "root"
+log-level = "DEBUG"
+crio-cidr = "1.1.1.1/16"
+cluster-cidr = "2.2.2.2/16"
+service-cidr = "3.3.3.3/24"
+            "#,
+        )?;
+        c.update_from_file()?;
+        assert_eq!(c.root(), Path::new("root"));
+        assert_eq!(c.log_level(), LevelFilter::Debug);
+        assert_eq!(c.crio_cidr().to_string(), "1.1.1.1/16");
+        assert_eq!(c.cluster_cidr().to_string(), "2.2.2.2/16");
+        assert_eq!(c.service_cidr().to_string(), "3.3.3.3/24");
+        Ok(())
+    }
+
+    #[test]
+    fn update_from_file_failure() -> Fallible<()> {
+        let mut c = Config::default();
+        c.root = tempdir()?.into_path();
+        fs::write(c.root.join(Config::FILENAME), "invalid")?;
+        assert!(c.update_from_file().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn builder_success() -> Fallible<()> {
+        let c = ConfigBuilder::default()
+            .root("root")
+            .log_level(LevelFilter::Warn)
+            .build()
+            .map_err(|e| format_err!("Unable to build config: {}", e))?;
+        assert_eq!(c.root(), Path::new("root"));
+        assert_eq!(c.log_level(), LevelFilter::Warn);
+        Ok(())
+    }
+}
