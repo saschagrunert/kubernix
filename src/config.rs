@@ -4,13 +4,16 @@ use failure::{format_err, Fallible};
 use ipnetwork::IpNetwork;
 use log::LevelFilter;
 use serde::{Deserialize, Serialize};
+use serde_yaml::Value;
 use std::{
+    fmt::Debug,
     fs::{self, canonicalize, create_dir_all, read_to_string},
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use toml;
 
-#[derive(Builder, Deserialize, Serialize)]
+#[derive(Builder, Debug, Deserialize, Serialize)]
 #[serde(default, rename_all = "kebab-case")]
 #[builder(default, setter(into))]
 /// The global configuration
@@ -33,17 +36,39 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
+        let yaml = serde_yaml::from_str(include_str!("cli.yaml")).unwrap();
         Config {
-            root: PathBuf::from("kubernix"),
-            log_level: "info".parse().unwrap(),
-            crio_cidr: "10.100.0.0/16".parse().unwrap(),
-            cluster_cidr: "10.200.0.0/16".parse().unwrap(),
-            service_cidr: "10.50.0.0/24".parse().unwrap(),
+            root: Self::parse_from_yaml(&yaml, "root"),
+            log_level: Self::parse_from_yaml(&yaml, "log-level"),
+            crio_cidr: Self::parse_from_yaml(&yaml, "crio-cidr"),
+            cluster_cidr: Self::parse_from_yaml(&yaml, "cluster-cidr"),
+            service_cidr: Self::parse_from_yaml(&yaml, "service-cidr"),
         }
     }
 }
 
 impl Config {
+    fn parse_from_yaml<T>(value: &Value, key: &str) -> T
+    where
+        T: FromStr,
+        <T as std::str::FromStr>::Err: Debug,
+    {
+        const DEFAULT: &str = "default_value";
+        let args = value.get("args").unwrap().as_sequence().unwrap();
+        let crio_cidr = args
+            .iter()
+            .find(|x| x.get(key).is_some())
+            .unwrap()
+            .get(key)
+            .unwrap()
+            .get(DEFAULT)
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap();
+        crio_cidr
+    }
     const FILENAME: &'static str = "kubernix.toml";
 
     /// Make the configs root path absolute
@@ -94,9 +119,24 @@ impl Config {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    pub fn test_config() -> Fallible<Config> {
+        let mut c = ConfigBuilder::default()
+            .root(tempdir()?.into_path())
+            .build()
+            .map_err(|e| format_err!("Unable to build config: {}", e))?;
+        c.canonicalize_root()?;
+        Ok(c)
+    }
+
+    pub fn test_config_wrong_root() -> Fallible<Config> {
+        let mut c = test_config()?;
+        c.root = Path::new("/").join("proc");
+        Ok(c)
+    }
 
     #[test]
     fn canonicalize_root_success() -> Fallible<()> {

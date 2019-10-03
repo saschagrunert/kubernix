@@ -4,7 +4,7 @@ use log::{debug, error, info};
 use nix::sys::signal::{kill, Signal};
 use nix::unistd::Pid;
 use std::{
-    fs::File,
+    fs::{create_dir_all, File},
     io::{BufRead, BufReader},
     path::PathBuf,
     process::{Command, Stdio},
@@ -13,9 +13,6 @@ use std::{
     time::Instant,
 };
 
-/// The maximum wait time for processes to become ready
-const READYNESS_TIMEOUT: u64 = 30;
-
 /// A general process abstraction
 pub struct Process {
     command: String,
@@ -23,6 +20,7 @@ pub struct Process {
     log_file: PathBuf,
     pid: u32,
     watch: Option<JoinHandle<Fallible<()>>>,
+    readyness_timeout: u64,
 }
 
 /// The trait to stop something
@@ -45,6 +43,8 @@ impl Process {
             .ok_or_else(|| format_err!("No valid command provided"))?;
         let args: Vec<String> = command.iter().map(|x| x.to_owned()).skip(1).collect();
 
+        // Prepare the log dir and file
+        create_dir_all(config.root().join(LOG_DIR))?;
         let mut log_file = config.root().join(LOG_DIR).join(&cmd);
         log_file.set_extension("log");
 
@@ -80,6 +80,7 @@ impl Process {
             log_file,
             pid,
             watch: Some(watch),
+            readyness_timeout: 30,
         })
     }
 
@@ -94,7 +95,7 @@ impl Process {
         let file = File::open(&self.log_file)?;
         let mut reader = BufReader::new(file);
 
-        while now.elapsed().as_secs() < READYNESS_TIMEOUT {
+        while now.elapsed().as_secs() < self.readyness_timeout {
             let mut line = String::new();
             reader.read_line(&mut line)?;
 
@@ -133,6 +134,70 @@ impl Stoppable for Process {
             }
         }
         debug!("Process '{}' stopped", self.command);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::tests::{test_config, test_config_wrong_root};
+
+    #[test]
+    fn stopped() {
+        assert!(Process::stopped().is_err())
+    }
+
+    #[test]
+    fn start_success() -> Fallible<()> {
+        let c = test_config()?;
+        Process::start(&c, &["echo".to_owned()])?;
+        Ok(())
+    }
+
+    #[test]
+    fn start_failure_wrong_root() -> Fallible<()> {
+        let c = test_config_wrong_root()?;
+        assert!(Process::start(&c, &["echo".to_owned()]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn start_failure_no_command() -> Fallible<()> {
+        let c = test_config()?;
+        assert!(Process::start(&c, &[]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn start_failure_invalid_command() -> Fallible<()> {
+        let c = test_config()?;
+        assert!(Process::start(&c, &["invalid_command".to_owned()]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn wait_ready_success() -> Fallible<()> {
+        let c = test_config()?;
+        let mut p = Process::start(&c, &["echo".to_owned(), "test".to_owned()])?;
+        p.wait_ready("test")?;
+        Ok(())
+    }
+
+    #[test]
+    fn wait_ready_failure() -> Fallible<()> {
+        let c = test_config()?;
+        let mut p = Process::start(&c, &["echo".to_owned(), "test".to_owned()])?;
+        p.readyness_timeout = 1;
+        assert!(p.wait_ready("invalid").is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn stop_success() -> Fallible<()> {
+        let c = test_config()?;
+        let mut p = Process::start(&c, &["sleep".to_owned(), "500".to_owned()])?;
+        p.stop()?;
         Ok(())
     }
 }
