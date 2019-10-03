@@ -48,10 +48,10 @@ The following technology stack is currently being used:
 [15]: https://github.com/etcd-io/etcd
 [16]: https://github.com/coredns/coredns
 
-Some other tools are not explicitly mentioned here, like [CFSSL][16] for the
+Some other tools are not explicitly mentioned here, like [CFSSL][17] for the
 certificate generation.
 
-[16]: https://github.com/cloudflare/cfssl
+[17]: https://github.com/cloudflare/cfssl
 
 ### Single Dependency
 
