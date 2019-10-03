@@ -10,7 +10,6 @@ use std::{
     process::{Command, Stdio},
 };
 
-#[derive(Default)]
 pub struct Pki {
     pub admin: Pair,
     pub apiserver: Pair,
@@ -22,7 +21,6 @@ pub struct Pki {
     pub service_account: Pair,
 }
 
-#[derive(Clone, Default)]
 pub struct Pair {
     cert: PathBuf,
     key: PathBuf,
@@ -44,11 +42,10 @@ impl Pair {
     }
 }
 
-#[derive(Clone)]
-struct PkiConfig {
-    ca: Pair,
+struct PkiConfig<'a> {
+    ca: &'a Pair,
     ca_config: PathBuf,
-    dir: PathBuf,
+    dir: &'a Path,
     hostnames: String,
 }
 
@@ -86,8 +83,8 @@ impl Pki {
 
         let ca = Self::setup_ca(pki_dir)?;
         let pki_config = PkiConfig {
-            dir: pki_dir.to_owned(),
-            ca: ca.clone(),
+            dir: pki_dir,
+            ca: &ca,
             ca_config: Self::write_ca_config(pki_dir)?,
             hostnames: hostnames.join(","),
         };
@@ -265,5 +262,25 @@ impl Pki {
         let dest = dir.join("ca-config.json");
         fs::write(&dest, to_string_pretty(&cfg)?)?;
         Ok(dest)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::tests::{test_config, test_config_wrong_root};
+
+    #[test]
+    fn new_success() -> Fallible<()> {
+        let c = test_config()?;
+        Pki::new(&c, "", "")?;
+        Ok(())
+    }
+
+    #[test]
+    fn new_failure() -> Fallible<()> {
+        let c = test_config_wrong_root()?;
+        assert!(Pki::new(&c, "", "").is_err());
+        Ok(())
     }
 }

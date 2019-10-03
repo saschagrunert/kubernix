@@ -55,7 +55,7 @@ const KUBERNIX_ENV: &str = "kubernix.env";
 
 type Stoppables = Vec<Startable>;
 
-/// The main structure for the application
+/// The main entry point for the application
 pub struct Kubernix {
     config: Config,
     crio_socket: PathBuf,
@@ -78,7 +78,7 @@ impl Kubernix {
         }
     }
 
-    /// Spawn a new shell
+    /// Spawn a new shell into the provided configuration environment
     pub fn new_shell(mut config: Config) -> Fallible<()> {
         Self::prepare_env(&mut config)?;
 
@@ -89,6 +89,8 @@ impl Kubernix {
         Command::new(Self::find_executable("nix-shell")?)
             .arg(&config.root().join(NIX_DIR))
             .arg("--pure")
+            .arg("-Q")
+            .arg(format!("-j{}", num_cpus::get()))
             .arg("--run")
             .arg(format!(
                 "bash --init-file {}",
@@ -145,9 +147,6 @@ impl Kubernix {
         // Setup the configs
         let kubeconfig = KubeConfig::new(&config, &pki, &ip, &hostname)?;
         let encryptionconfig = EncryptionConfig::new(&config)?;
-
-        // Create the log dir
-        create_dir_all(config.root().join(LOG_DIR))?;
 
         // Full path to the CRI socket
         let crio_socket = config.root().join(CRIO_DIR).join("crio.sock");
@@ -234,12 +233,16 @@ impl Kubernix {
         )?;
         fs::write(
             nix_dir.join("default.nix"),
-            include_str!("../nix/shell.nix"),
+            include_str!("../nix/default.nix"),
         )?;
+        fs::write(nix_dir.join("deps.nix"), include_str!("../nix/deps.nix"))?;
 
         // Run the shell
         let status = Command::new(Self::find_executable("nix-shell")?)
             .arg(nix_dir)
+            .arg("--pure")
+            .arg("-Q")
+            .arg(format!("-j{}", num_cpus::get()))
             .arg("--run")
             .arg(
                 &[

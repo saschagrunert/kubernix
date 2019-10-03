@@ -36,16 +36,11 @@ impl EncryptionConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ConfigBuilder;
-    use failure::format_err;
-    use tempfile::tempdir;
+    use crate::config::tests::{test_config, test_config_wrong_root};
 
     #[test]
     fn encryptionconfig_success() -> Fallible<()> {
-        let c = ConfigBuilder::default()
-            .root(tempdir()?.into_path())
-            .build()
-            .map_err(|e| format_err!("{}", e))?;
+        let c = test_config()?;
         let e = EncryptionConfig::new(&c)?;
         assert!(e.path().exists());
         Ok(())
@@ -53,10 +48,7 @@ mod tests {
 
     #[test]
     fn encryptionconfig_failure() -> Fallible<()> {
-        let c = ConfigBuilder::default()
-            .root(Path::new("/").join("proc"))
-            .build()
-            .map_err(|e| format_err!("{}", e))?;
+        let c = test_config_wrong_root()?;
         assert!(EncryptionConfig::new(&c).is_err());
         Ok(())
     }
