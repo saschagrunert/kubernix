@@ -39,9 +39,3 @@ args:
       short: s
       help: The CIDR used for the service network
       value_name: CIDR
-  - dns:
-      default_value: 10.50.0.10
-      long: dns
-      short: d
-      help: The DNS IP address used insisde the service CIDR
-      value_name: IP
