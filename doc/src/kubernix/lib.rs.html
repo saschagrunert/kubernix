@@ -266,6 +266,52 @@
 <span id="266">266</span>
 <span id="267">267</span>
 <span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! # kubernix</span>
 <span class="attribute">#![<span class="ident">deny</span>(<span class="ident">missing_docs</span>)]</span>
@@ -299,7 +345,9 @@
 <span class="kw">use</span> <span class="ident">proxy</span>::<span class="ident">Proxy</span>;
 <span class="kw">use</span> <span class="ident">scheduler</span>::<span class="ident">Scheduler</span>;
 
+<span class="kw">use</span> <span class="ident">env_logger</span>::<span class="ident">Builder</span>;
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
+<span class="kw">use</span> <span class="ident">ipnetwork</span>::<span class="ident">IpNetwork</span>;
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">error</span>, <span class="ident">info</span>};
 <span class="kw">use</span> <span class="ident">nix</span>::<span class="ident">unistd</span>::<span class="ident">getuid</span>;
 <span class="kw">use</span> <span class="ident">rayon</span>::<span class="ident">scope</span>;
@@ -307,7 +355,7 @@
     <span class="ident">env</span>::{<span class="ident">current_exe</span>, <span class="ident">split_paths</span>, <span class="ident">var</span>, <span class="ident">var_os</span>},
     <span class="ident">fmt</span>::<span class="ident">Display</span>,
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">create_dir_all</span>},
-    <span class="ident">net</span>::<span class="ident">IpAddr</span>,
+    <span class="ident">net</span>::{<span class="ident">IpAddr</span>, <span class="ident">Ipv4Addr</span>},
     <span class="ident">path</span>::{<span class="ident">Path</span>, <span class="ident">PathBuf</span>},
     <span class="ident">process</span>::<span class="ident">Command</span>,
 };
@@ -330,11 +378,26 @@
 
 <span class="kw">impl</span> <span class="ident">Kubernix</span> {
     <span class="doccomment">/// Start kubernix by consuming the provided configuration</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="kw-2">mut</span> <span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">// Rootless is currently not supported</span>
         <span class="kw">if</span> <span class="op">!</span><span class="ident">getuid</span>().<span class="ident">is_root</span>() {
             <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Please run kubernix as root&quot;</span>)
         }
+
+        <span class="comment">// Prepare the environment</span>
+        <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">exists</span>() {
+            <span class="ident">config</span>.<span class="ident">from_file</span>()<span class="question-mark">?</span>;
+        } <span class="kw">else</span> {
+            <span class="ident">config</span>.<span class="ident">to_file</span>()<span class="question-mark">?</span>;
+        }
+        <span class="ident">config</span>.<span class="ident">canonicalize_root</span>()<span class="question-mark">?</span>;
+
+        <span class="comment">// Setup the logger</span>
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">builder</span> <span class="op">=</span> <span class="ident">Builder</span>::<span class="ident">new</span>();
+        <span class="ident">builder</span>
+            .<span class="ident">format_timestamp</span>(<span class="prelude-val">None</span>)
+            .<span class="ident">filter</span>(<span class="prelude-val">None</span>, <span class="ident">config</span>.<span class="ident">log_level</span>())
+            .<span class="ident">try_init</span>()<span class="question-mark">?</span>;
 
         <span class="comment">// Bootstrap if we&#39;re not inside a nix shell</span>
         <span class="kw">if</span> <span class="ident">var</span>(<span class="ident">NIX_SHELL_ENV</span>).<span class="ident">is_err</span>() {
@@ -425,22 +488,18 @@
             <span class="ident">kubernix</span>.<span class="ident">apply_addons</span>()<span class="question-mark">?</span>;
 
             <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Everything is up and running&quot;</span>);
-            <span class="ident">kubernix</span>.<span class="ident">spawn_shell</span>();
+            <span class="ident">kubernix</span>.<span class="ident">spawn_shell</span>()<span class="question-mark">?</span>;
         } <span class="kw">else</span> {
             <span class="macro">error</span><span class="macro">!</span>(<span class="string">&quot;Unable to start all processes&quot;</span>)
         }
 
-        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Cleaning up&quot;</span>);
-        <span class="ident">kubernix</span>.<span class="ident">stop</span>();
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="comment">// Apply needed workloads to the running cluster. This method stops the cluster on any error.</span>
     <span class="kw">fn</span> <span class="ident">apply_addons</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Err</span>(<span class="ident">e</span>) <span class="op">=</span> <span class="ident">CoreDNS</span>::<span class="ident">apply</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">kubeconfig</span>) {
-            <span class="macro">error</span><span class="macro">!</span>(<span class="string">&quot;Unable to apply CoreDNS: {}&quot;</span>, <span class="ident">e</span>);
-            <span class="self">self</span>.<span class="ident">stop</span>();
-            <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;CoreDNS deployment failed&quot;</span>)
+            <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Unable to apply CoreDNS: {}&quot;</span>, <span class="ident">e</span>);
         }
         <span class="prelude-val">Ok</span>(())
     }
@@ -468,7 +527,22 @@
         <span class="kw">let</span> <span class="ident">status</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">find_executable</span>(<span class="string">&quot;nix-shell&quot;</span>)<span class="question-mark">?</span>)
             .<span class="ident">arg</span>(<span class="ident">nix_dir</span>)
             .<span class="ident">arg</span>(<span class="string">&quot;--run&quot;</span>)
-            .<span class="ident">arg</span>(<span class="ident">current_exe</span>()<span class="question-mark">?</span>)
+            .<span class="ident">arg</span>(
+                <span class="kw-2">&amp;</span>[
+                    <span class="kw-2">&amp;</span><span class="ident">current_exe</span>()<span class="question-mark">?</span>.<span class="ident">display</span>().<span class="ident">to_string</span>(),
+                    <span class="string">&quot;--root&quot;</span>,
+                    <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">display</span>().<span class="ident">to_string</span>(),
+                    <span class="string">&quot;--log-level&quot;</span>,
+                    <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">log_level</span>().<span class="ident">to_string</span>().<span class="ident">to_lowercase</span>(),
+                    <span class="string">&quot;--crio-cidr&quot;</span>,
+                    <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">crio_cidr</span>().<span class="ident">to_string</span>(),
+                    <span class="string">&quot;--cluster-cidr&quot;</span>,
+                    <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">cluster_cidr</span>().<span class="ident">to_string</span>(),
+                    <span class="string">&quot;--service-cidr&quot;</span>,
+                    <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">service_cidr</span>().<span class="ident">to_string</span>(),
+                ]
+                .<span class="ident">join</span>(<span class="string">&quot; &quot;</span>),
+            )
             .<span class="ident">status</span>()<span class="question-mark">?</span>;
         <span class="kw">if</span> <span class="op">!</span><span class="ident">status</span>.<span class="ident">success</span>() {
             <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;nix-shell command failed&quot;</span>);
@@ -476,9 +550,9 @@
         <span class="prelude-val">Ok</span>(())
     }
 
-    <span class="kw">fn</span> <span class="ident">spawn_shell</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {
+    <span class="kw">fn</span> <span class="ident">spawn_shell</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Spawning interactive shell&quot;</span>);
-        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Err</span>(<span class="ident">e</span>) <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;bash&quot;</span>)
+        <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;bash&quot;</span>)
             .<span class="ident">current_dir</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="ident">LOG_DIR</span>))
             .<span class="ident">arg</span>(<span class="string">&quot;--norc&quot;</span>)
             .<span class="ident">env</span>(<span class="string">&quot;PS1&quot;</span>, <span class="string">&quot;&gt; &quot;</span>)
@@ -487,10 +561,8 @@
                 <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;unix://{}&quot;</span>, <span class="self">self</span>.<span class="ident">crio_socket</span>.<span class="ident">display</span>()),
             )
             .<span class="ident">env</span>(<span class="ident">KUBECONFIG_ENV</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">kubeconfig</span>.<span class="ident">admin</span>)
-            .<span class="ident">status</span>()
-        {
-            <span class="macro">error</span><span class="macro">!</span>(<span class="string">&quot;Unable to spawn shell: {}&quot;</span>, <span class="ident">e</span>);
-        }
+            .<span class="ident">status</span>()<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(())
     }
 
     <span class="doccomment">/// Retrieve the local hosts IP via the default route</span>
@@ -533,6 +605,26 @@
                     .<span class="ident">next</span>()
             })
             .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to find {} in $PATH&quot;</span>, <span class="ident">name</span>))
+    }
+
+    <span class="comment">// Retrieve the DNS address from the config</span>
+    <span class="kw">fn</span> <span class="ident">dns</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Ipv4Addr</span><span class="op">&gt;</span> {
+        <span class="kw">match</span> <span class="ident">config</span>.<span class="ident">service_cidr</span>() {
+            <span class="ident">IpNetwork</span>::<span class="ident">V4</span>(<span class="ident">n</span>) <span class="op">=&gt;</span> <span class="prelude-val">Ok</span>(<span class="ident">n</span>.<span class="ident">nth</span>(<span class="number">2</span>).<span class="ident">ok_or_else</span>(<span class="op">||</span> {
+                <span class="macro">format_err</span><span class="macro">!</span>(
+                    <span class="string">&quot;Unable to retrieve second IP from service CIDR: {}&quot;</span>,
+                    <span class="ident">config</span>.<span class="ident">service_cidr</span>()
+                )
+            })<span class="question-mark">?</span>),
+            <span class="kw">_</span> <span class="op">=&gt;</span> <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Service CIDR is not for IPv4&quot;</span>),
+        }
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">Drop</span> <span class="kw">for</span> <span class="ident">Kubernix</span> {
+    <span class="kw">fn</span> <span class="ident">drop</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) {
+        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Cleaning up&quot;</span>);
+        <span class="self">self</span>.<span class="ident">stop</span>();
     }
 }
 </pre></div>
