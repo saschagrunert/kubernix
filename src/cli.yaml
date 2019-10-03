@@ -8,7 +8,7 @@ global_settings:
 
 args:
   - root:
-      default_value: kubernix
+      default_value: kubernix-run
       help: Path where all the runtime data is stored
       global: true
       long: root
