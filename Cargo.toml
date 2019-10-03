@@ -4,6 +4,13 @@ version = "0.1.0"
 authors = ["Sascha Grunert <mail@saschagrunert.de>"]
 edition = "2018"
 license = "MIT"
+categories = ["cli"]
+description = "Kubernetes development cluster bootstrapping with Nix packages"
+documentation = "https://docs.rs/kubernix"
+homepage = "https://github.com/saschagrunert/kubernix"
+keywords = ["kubernetes", "nix", "nix-shell", "crio", "kube"]
+readme = "README.md"
+repository = "https://github.com/saschagrunert/kubernix"
 
 [[bin]]
 name = "kubernix"
