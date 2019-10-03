@@ -60,7 +60,7 @@ impl Config {
     }
 
     /// Read the configuration from the internal set root path
-    pub fn from_file(&mut self) -> Fallible<()> {
+    pub fn update_from_file(&mut self) -> Fallible<()> {
         let file = self.root().join(Self::FILENAME);
         *self = toml::from_str(&read_to_string(&file)?)
             .map_err(|e| format_err!("Unable to load config file '{}': {}", file.display(), e))?;

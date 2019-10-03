@@ -107,7 +107,7 @@ impl Kubernix {
 
         // Prepare the configuration
         if config.root().exists() {
-            config.from_file()?;
+            config.update_from_file()?;
         } else {
             config.to_file()?;
         }
