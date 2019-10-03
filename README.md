@@ -1,4 +1,4 @@
-# KuberNix
+<img src=".github/logo.png" width="550px"></img>
 
 [![CircleCI](https://circleci.com/gh/saschagrunert/kubernix.svg?style=shield)](https://circleci.com/gh/saschagrunert/kubernix)
 [![Docs master](https://img.shields.io/badge/doc-master-orange.svg)](https://saschagrunert.github.io/kubernix/doc/kubernix/index.html)
