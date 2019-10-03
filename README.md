@@ -89,6 +89,8 @@ downloads the needed binaries and starts the cluster. Per default it will create
 a directory called `kubernix` in the current path which contains all necessary
 data for the cluster.
 
+#### Shell Environment
+
 If everything went fine, you should be dropped into a new bash-shell session,
 like this:
 
@@ -127,11 +129,17 @@ the same directory as the initial bootstrap.
 ```
 $ sudo kubernix shell
 [INFO  kubernix] Spawning new kubernix shell in 'kubernix'
->
+> kubectl run --generator=run-pod/v1 --image=alpine -it alpine sh
+If you don't see a command prompt, try pressing enter.
+/ #
 ```
 
-This means that you can spawn as many shells as you want to, whereas the whole
-cluster gets destroyed if you exit the bash session from the initial process:
+This means that you can spawn as many shells as you want to.
+
+#### Cleanup
+
+The whole cluster gets automatically destroyed if you exit the bash session from
+the initial process:
 
 ```
 > exit
