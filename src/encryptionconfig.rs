@@ -32,3 +32,32 @@ impl EncryptionConfig {
         &self.path
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::ConfigBuilder;
+    use failure::format_err;
+    use tempfile::tempdir;
+
+    #[test]
+    fn encryptionconfig_success() -> Fallible<()> {
+        let c = ConfigBuilder::default()
+            .root(tempdir()?.into_path())
+            .build()
+            .map_err(|e| format_err!("{}", e))?;
+        let e = EncryptionConfig::new(&c)?;
+        assert!(e.path().exists());
+        Ok(())
+    }
+
+    #[test]
+    fn encryptionconfig_failure() -> Fallible<()> {
+        let c = ConfigBuilder::default()
+            .root(Path::new("/").join("proc"))
+            .build()
+            .map_err(|e| format_err!("{}", e))?;
+        assert!(EncryptionConfig::new(&c).is_err());
+        Ok(())
+    }
+}
