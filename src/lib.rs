@@ -50,6 +50,8 @@ const KUBECONFIG_ENV: &str = "KUBECONFIG";
 const NIX_SHELL_ENV: &str = "IN_NIX_SHELL";
 const CRIO_DIR: &str = "crio";
 const LOG_DIR: &str = "log";
+const NIX_DIR: &str = "nix";
+const KUBERNIX_ENV: &str = "kubernix.env";
 
 type Stoppables = Vec<Startable>;
 
@@ -64,12 +66,46 @@ pub struct Kubernix {
 impl Kubernix {
     /// Start kubernix by consuming the provided configuration
     pub fn start(mut config: Config) -> Fallible<()> {
+        Self::prepare_env(&mut config)?;
+
+        // Bootstrap if we're not inside a nix shell
+        if var(NIX_SHELL_ENV).is_err() {
+            info!("Nix environment not found, bootstrapping one");
+            Self::bootstrap_nix(config)
+        } else {
+            info!("Bootstrapping cluster inside nix environment");
+            Self::bootstrap_cluster(config)
+        }
+    }
+
+    /// Spawn a new shell
+    pub fn new_shell(mut config: Config) -> Fallible<()> {
+        Self::prepare_env(&mut config)?;
+
+        info!(
+            "Spawning new kubernix shell in '{}'",
+            config.root().display()
+        );
+        Command::new(Self::find_executable("nix-shell")?)
+            .arg(&config.root().join(NIX_DIR))
+            .arg("--pure")
+            .arg("--run")
+            .arg(format!(
+                "bash --init-file {}",
+                config.root().join(KUBERNIX_ENV).display()
+            ))
+            .status()?;
+
+        Ok(())
+    }
+
+    fn prepare_env(config: &mut Config) -> Fallible<()> {
         // Rootless is currently not supported
         if !getuid().is_root() {
             bail!("Please run kubernix as root")
         }
 
-        // Prepare the environment
+        // Prepare the configuration
         if config.root().exists() {
             config.from_file()?;
         } else {
@@ -84,14 +120,7 @@ impl Kubernix {
             .filter(None, config.log_level())
             .try_init()?;
 
-        // Bootstrap if we're not inside a nix shell
-        if var(NIX_SHELL_ENV).is_err() {
-            info!("Nix environment not found, bootstrapping one");
-            Self::bootstrap_nix(config)
-        } else {
-            info!("Bootstrapping cluster inside nix environment");
-            Self::bootstrap_cluster(config)
-        }
+        Ok(())
     }
 
     /// Stop kubernix by cleaning up all running processes
@@ -191,7 +220,7 @@ impl Kubernix {
 
     fn bootstrap_nix(config: Config) -> Fallible<()> {
         // Prepare the nix dir
-        let nix_dir = config.root().join("nix");
+        let nix_dir = config.root().join(NIX_DIR);
         create_dir_all(&nix_dir)?;
 
         // Write the configuration
@@ -237,15 +266,23 @@ impl Kubernix {
 
     fn spawn_shell(&self) -> Fallible<()> {
         info!("Spawning interactive shell");
-        Command::new("bash")
-            .current_dir(&self.config.root().join(LOG_DIR))
-            .arg("--norc")
-            .env("PS1", "> ")
-            .env(
+        info!("Please be aware that the cluster gets destroyed if you exit the shell");
+        let env_file = self.config.root().join(KUBERNIX_ENV);
+        fs::write(
+            &env_file,
+            format!(
+                "PS1='> '\nexport {}={}\nexport {}={}",
                 RUNTIME_ENV,
                 format!("unix://{}", self.crio_socket.display()),
-            )
-            .env(KUBECONFIG_ENV, &self.kubeconfig.admin)
+                KUBECONFIG_ENV,
+                self.kubeconfig.admin.display(),
+            ),
+        )?;
+
+        Command::new("bash")
+            .current_dir(&self.config.root().join(LOG_DIR))
+            .arg("--init-file")
+            .arg(env_file)
             .status()?;
         Ok(())
     }

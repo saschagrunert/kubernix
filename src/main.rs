@@ -38,8 +38,13 @@ fn run() -> Fallible<()> {
         .build()
         .map_err(|e| format_err!("Unable to build config: {}", e))?;
 
-    // Run kubernix
-    Kubernix::start(config)?;
+    if matches.subcommand_matches("shell").is_some() {
+        // Spawn only a new shell
+        Kubernix::new_shell(config)?;
+    } else {
+        // Run kubernix
+        Kubernix::start(config)?;
+    }
 
     Ok(())
 }
