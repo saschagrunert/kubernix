@@ -48,27 +48,6 @@ impl Default for Config {
 }
 
 impl Config {
-    fn parse_from_yaml<T>(value: &Value, key: &str) -> T
-    where
-        T: FromStr,
-        <T as std::str::FromStr>::Err: Debug,
-    {
-        const DEFAULT: &str = "default_value";
-        let args = value.get("args").unwrap().as_sequence().unwrap();
-        let crio_cidr = args
-            .iter()
-            .find(|x| x.get(key).is_some())
-            .unwrap()
-            .get(key)
-            .unwrap()
-            .get(DEFAULT)
-            .unwrap()
-            .as_str()
-            .unwrap()
-            .parse()
-            .unwrap();
-        crio_cidr
-    }
     const FILENAME: &'static str = "kubernix.toml";
 
     /// Make the configs root path absolute
@@ -115,6 +94,31 @@ impl Config {
     /// Retrieve the service CIDR
     pub fn service_cidr(&self) -> &IpNetwork {
         &self.service_cidr
+    }
+
+    /// Parse an internal value from a YAML Value
+    /// This function is highly unsafe and should be used with care ;)
+    fn parse_from_yaml<T>(value: &Value, key: &str) -> T
+    where
+        T: FromStr,
+        <T as std::str::FromStr>::Err: Debug,
+    {
+        value
+            .get("args")
+            .unwrap()
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .find(|x| x.get(key).is_some())
+            .unwrap()
+            .get(key)
+            .unwrap()
+            .get("default_value")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .parse()
+            .unwrap()
     }
 }
 
