@@ -30,7 +30,9 @@ use process::{Process, Startable};
 use proxy::Proxy;
 use scheduler::Scheduler;
 
+use env_logger::Builder;
 use failure::{bail, format_err, Fallible};
+use ipnetwork::IpNetwork;
 use log::{debug, error, info};
 use nix::unistd::getuid;
 use rayon::scope;
@@ -38,7 +40,7 @@ use std::{
     env::{current_exe, split_paths, var, var_os},
     fmt::Display,
     fs::{self, create_dir_all},
-    net::IpAddr,
+    net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -61,11 +63,26 @@ pub struct Kubernix {
 
 impl Kubernix {
     /// Start kubernix by consuming the provided configuration
-    pub fn start(config: Config) -> Fallible<()> {
+    pub fn start(mut config: Config) -> Fallible<()> {
         // Rootless is currently not supported
         if !getuid().is_root() {
             bail!("Please run kubernix as root")
         }
+
+        // Prepare the environment
+        if config.root().exists() {
+            config.from_file()?;
+        } else {
+            config.to_file()?;
+        }
+        config.canonicalize_root()?;
+
+        // Setup the logger
+        let mut builder = Builder::new();
+        builder
+            .format_timestamp(None)
+            .filter(None, config.log_level())
+            .try_init()?;
 
         // Bootstrap if we're not inside a nix shell
         if var(NIX_SHELL_ENV).is_err() {
@@ -156,22 +173,18 @@ impl Kubernix {
             kubernix.apply_addons()?;
 
             info!("Everything is up and running");
-            kubernix.spawn_shell();
+            kubernix.spawn_shell()?;
         } else {
             error!("Unable to start all processes")
         }
 
-        info!("Cleaning up");
-        kubernix.stop();
         Ok(())
     }
 
     // Apply needed workloads to the running cluster. This method stops the cluster on any error.
     fn apply_addons(&mut self) -> Fallible<()> {
         if let Err(e) = CoreDNS::apply(&self.config, &self.kubeconfig) {
-            error!("Unable to apply CoreDNS: {}", e);
-            self.stop();
-            bail!("CoreDNS deployment failed")
+            bail!("Unable to apply CoreDNS: {}", e);
         }
         Ok(())
     }
@@ -199,7 +212,22 @@ impl Kubernix {
         let status = Command::new(Self::find_executable("nix-shell")?)
             .arg(nix_dir)
             .arg("--run")
-            .arg(current_exe()?)
+            .arg(
+                &[
+                    &current_exe()?.display().to_string(),
+                    "--root",
+                    &config.root().display().to_string(),
+                    "--log-level",
+                    &config.log_level().to_string().to_lowercase(),
+                    "--crio-cidr",
+                    &config.crio_cidr().to_string(),
+                    "--cluster-cidr",
+                    &config.cluster_cidr().to_string(),
+                    "--service-cidr",
+                    &config.service_cidr().to_string(),
+                ]
+                .join(" "),
+            )
             .status()?;
         if !status.success() {
             bail!("nix-shell command failed");
@@ -207,9 +235,9 @@ impl Kubernix {
         Ok(())
     }
 
-    fn spawn_shell(&self) {
+    fn spawn_shell(&self) -> Fallible<()> {
         info!("Spawning interactive shell");
-        if let Err(e) = Command::new("bash")
+        Command::new("bash")
             .current_dir(&self.config.root().join(LOG_DIR))
             .arg("--norc")
             .env("PS1", "> ")
@@ -218,10 +246,8 @@ impl Kubernix {
                 format!("unix://{}", self.crio_socket.display()),
             )
             .env(KUBECONFIG_ENV, &self.kubeconfig.admin)
-            .status()
-        {
-            error!("Unable to spawn shell: {}", e);
-        }
+            .status()?;
+        Ok(())
     }
 
     /// Retrieve the local hosts IP via the default route
@@ -264,5 +290,25 @@ impl Kubernix {
                     .next()
             })
             .ok_or_else(|| format_err!("Unable to find {} in $PATH", name))
+    }
+
+    // Retrieve the DNS address from the config
+    fn dns(config: &Config) -> Fallible<Ipv4Addr> {
+        match config.service_cidr() {
+            IpNetwork::V4(n) => Ok(n.nth(2).ok_or_else(|| {
+                format_err!(
+                    "Unable to retrieve second IP from service CIDR: {}",
+                    config.service_cidr()
+                )
+            })?),
+            _ => bail!("Service CIDR is not for IPv4"),
+        }
+    }
+}
+
+impl Drop for Kubernix {
+    fn drop(&mut self) {
+        info!("Cleaning up");
+        self.stop();
     }
 }

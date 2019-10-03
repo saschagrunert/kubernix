@@ -5,7 +5,7 @@ use crate::{
 };
 use failure::Fallible;
 use log::info;
-use std::net::Ipv4Addr;
+use std::{fs::remove_dir_all, net::Ipv4Addr};
 
 pub struct Etcd {
     process: Process,
@@ -19,13 +19,19 @@ impl Etcd {
         let etcd_localhost = format!("https://{}:2379", localhost);
         let etcd_localhost_peer = format!("https://{}:2380", localhost);
 
+        // Remove the etcd data dir if already exists (configuration re-use)
+        let data_dir = config.root().join("etcd");
+        if data_dir.exists() {
+            remove_dir_all(&data_dir)?;
+        }
+
         let mut process = Process::start(
             config,
             &[
                 "etcd".to_owned(),
                 format!("--advertise-client-urls={}", etcd_localhost),
                 "--client-cert-auth".to_owned(),
-                format!("--data-dir={}", config.root().join("etcd").display()),
+                format!("--data-dir={}", data_dir.display()),
                 format!("--initial-advertise-peer-urls={}", etcd_localhost_peer),
                 "--initial-cluster-state=new".to_owned(),
                 "--initial-cluster-token=etcd-cluster".to_owned(),
