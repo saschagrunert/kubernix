@@ -170,6 +170,50 @@
 <span id="170">170</span>
 <span id="171">171</span>
 <span id="172">172</span>
+<span id="173">173</span>
+<span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
+<span id="190">190</span>
+<span id="191">191</span>
+<span id="192">192</span>
+<span id="193">193</span>
+<span id="194">194</span>
+<span id="195">195</span>
+<span id="196">196</span>
+<span id="197">197</span>
+<span id="198">198</span>
+<span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
+<span id="202">202</span>
+<span id="203">203</span>
+<span id="204">204</span>
+<span id="205">205</span>
+<span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
+<span id="211">211</span>
+<span id="212">212</span>
+<span id="213">213</span>
+<span id="214">214</span>
+<span id="215">215</span>
+<span id="216">216</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
 <span class="kw">use</span> <span class="ident">derive_builder</span>::<span class="ident">Builder</span>;
@@ -177,13 +221,16 @@
 <span class="kw">use</span> <span class="ident">ipnetwork</span>::<span class="ident">IpNetwork</span>;
 <span class="kw">use</span> <span class="ident">log</span>::<span class="ident">LevelFilter</span>;
 <span class="kw">use</span> <span class="ident">serde</span>::{<span class="ident">Deserialize</span>, <span class="ident">Serialize</span>};
+<span class="kw">use</span> <span class="ident">serde_yaml</span>::<span class="ident">Value</span>;
 <span class="kw">use</span> <span class="ident">std</span>::{
+    <span class="ident">fmt</span>::<span class="ident">Debug</span>,
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">canonicalize</span>, <span class="ident">create_dir_all</span>, <span class="ident">read_to_string</span>},
     <span class="ident">path</span>::{<span class="ident">Path</span>, <span class="ident">PathBuf</span>},
+    <span class="ident">str</span>::<span class="ident">FromStr</span>,
 };
 <span class="kw">use</span> <span class="ident">toml</span>;
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Builder</span>, <span class="ident">Deserialize</span>, <span class="ident">Serialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Builder</span>, <span class="ident">Debug</span>, <span class="ident">Deserialize</span>, <span class="ident">Serialize</span>)]</span>
 <span class="attribute">#[<span class="ident">serde</span>(<span class="ident">default</span>, <span class="ident">rename_all</span> <span class="op">=</span> <span class="string">&quot;kebab-case&quot;</span>)]</span>
 <span class="attribute">#[<span class="ident">builder</span>(<span class="ident">default</span>, <span class="ident">setter</span>(<span class="ident">into</span>))]</span>
 <span class="doccomment">/// The global configuration</span>
@@ -206,12 +253,13 @@
 
 <span class="kw">impl</span> <span class="ident">Default</span> <span class="kw">for</span> <span class="ident">Config</span> {
     <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="kw">let</span> <span class="ident">yaml</span> <span class="op">=</span> <span class="ident">serde_yaml</span>::<span class="ident">from_str</span>(<span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;cli.yaml&quot;</span>)).<span class="ident">unwrap</span>();
         <span class="ident">Config</span> {
-            <span class="ident">root</span>: <span class="ident">PathBuf</span>::<span class="ident">from</span>(<span class="string">&quot;kubernix&quot;</span>),
-            <span class="ident">log_level</span>: <span class="string">&quot;info&quot;</span>.<span class="ident">parse</span>().<span class="ident">unwrap</span>(),
-            <span class="ident">crio_cidr</span>: <span class="string">&quot;10.100.0.0/16&quot;</span>.<span class="ident">parse</span>().<span class="ident">unwrap</span>(),
-            <span class="ident">cluster_cidr</span>: <span class="string">&quot;10.200.0.0/16&quot;</span>.<span class="ident">parse</span>().<span class="ident">unwrap</span>(),
-            <span class="ident">service_cidr</span>: <span class="string">&quot;10.50.0.0/24&quot;</span>.<span class="ident">parse</span>().<span class="ident">unwrap</span>(),
+            <span class="ident">root</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;root&quot;</span>),
+            <span class="ident">log_level</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;log-level&quot;</span>),
+            <span class="ident">crio_cidr</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;crio-cidr&quot;</span>),
+            <span class="ident">cluster_cidr</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;cluster-cidr&quot;</span>),
+            <span class="ident">service_cidr</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;service-cidr&quot;</span>),
         }
     }
 }
@@ -264,12 +312,52 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">service_cidr</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="kw-2">&amp;</span><span class="ident">IpNetwork</span> {
         <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">service_cidr</span>
     }
+
+    <span class="doccomment">/// Parse an internal value from a YAML Value</span>
+    <span class="doccomment">/// This function is highly unsafe and should be used with care ;)</span>
+    <span class="kw">fn</span> <span class="ident">parse_from_yaml</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span>(<span class="ident">value</span>: <span class="kw-2">&amp;</span><span class="ident">Value</span>, <span class="ident">key</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-&gt;</span> <span class="ident">T</span>
+    <span class="kw">where</span>
+        <span class="ident">T</span>: <span class="ident">FromStr</span>,
+        <span class="op">&lt;</span><span class="ident">T</span> <span class="kw">as</span> <span class="ident">std</span>::<span class="ident">str</span>::<span class="ident">FromStr</span><span class="op">&gt;</span>::<span class="prelude-val">Err</span>: <span class="ident">Debug</span>,
+    {
+        <span class="ident">value</span>
+            .<span class="ident">get</span>(<span class="string">&quot;args&quot;</span>)
+            .<span class="ident">unwrap</span>()
+            .<span class="ident">as_sequence</span>()
+            .<span class="ident">unwrap</span>()
+            .<span class="ident">iter</span>()
+            .<span class="ident">find</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">get</span>(<span class="ident">key</span>).<span class="ident">is_some</span>())
+            .<span class="ident">unwrap</span>()
+            .<span class="ident">get</span>(<span class="ident">key</span>)
+            .<span class="ident">unwrap</span>()
+            .<span class="ident">get</span>(<span class="string">&quot;default_value&quot;</span>)
+            .<span class="ident">unwrap</span>()
+            .<span class="ident">as_str</span>()
+            .<span class="ident">unwrap</span>()
+            .<span class="ident">parse</span>()
+            .<span class="ident">unwrap</span>()
+    }
 }
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
-<span class="kw">mod</span> <span class="ident">tests</span> {
+<span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">tests</span> {
     <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
     <span class="kw">use</span> <span class="ident">tempfile</span>::<span class="ident">tempdir</span>;
+
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">ConfigBuilder</span>::<span class="ident">default</span>()
+            .<span class="ident">root</span>(<span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>())
+            .<span class="ident">build</span>()
+            .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to build config: {}&quot;</span>, <span class="ident">e</span>))<span class="question-mark">?</span>;
+        <span class="ident">c</span>.<span class="ident">canonicalize_root</span>()<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(<span class="ident">c</span>)
+    }
+
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config_wrong_root</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">test_config</span>()<span class="question-mark">?</span>;
+        <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">Path</span>::<span class="ident">new</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;proc&quot;</span>);
+        <span class="prelude-val">Ok</span>(<span class="ident">c</span>)
+    }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">canonicalize_root_success</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {

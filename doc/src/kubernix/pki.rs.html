@@ -267,6 +267,23 @@
 <span id="267">267</span>
 <span id="268">268</span>
 <span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">Config</span>;
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
@@ -280,7 +297,6 @@
     <span class="ident">process</span>::{<span class="ident">Command</span>, <span class="ident">Stdio</span>},
 };
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Default</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Pki</span> {
     <span class="kw">pub</span> <span class="ident">admin</span>: <span class="ident">Pair</span>,
     <span class="kw">pub</span> <span class="ident">apiserver</span>: <span class="ident">Pair</span>,
@@ -292,7 +308,6 @@
     <span class="kw">pub</span> <span class="ident">service_account</span>: <span class="ident">Pair</span>,
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>, <span class="ident">Default</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Pair</span> {
     <span class="ident">cert</span>: <span class="ident">PathBuf</span>,
     <span class="ident">key</span>: <span class="ident">PathBuf</span>,
@@ -314,11 +329,10 @@
     }
 }
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clone</span>)]</span>
-<span class="kw">struct</span> <span class="ident">PkiConfig</span> {
-    <span class="ident">ca</span>: <span class="ident">Pair</span>,
+<span class="kw">struct</span> <span class="ident">PkiConfig</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
+    <span class="ident">ca</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">Pair</span>,
     <span class="ident">ca_config</span>: <span class="ident">PathBuf</span>,
-    <span class="ident">dir</span>: <span class="ident">PathBuf</span>,
+    <span class="ident">dir</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">Path</span>,
     <span class="ident">hostnames</span>: <span class="ident">String</span>,
 }
 
@@ -356,8 +370,8 @@
 
         <span class="kw">let</span> <span class="ident">ca</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">setup_ca</span>(<span class="ident">pki_dir</span>)<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">pki_config</span> <span class="op">=</span> <span class="ident">PkiConfig</span> {
-            <span class="ident">dir</span>: <span class="ident">pki_dir</span>.<span class="ident">to_owned</span>(),
-            <span class="ident">ca</span>: <span class="ident">ca</span>.<span class="ident">clone</span>(),
+            <span class="ident">dir</span>: <span class="ident">pki_dir</span>,
+            <span class="ident">ca</span>: <span class="kw-2">&amp;</span><span class="ident">ca</span>,
             <span class="ident">ca_config</span>: <span class="self">Self</span>::<span class="ident">write_ca_config</span>(<span class="ident">pki_dir</span>)<span class="question-mark">?</span>,
             <span class="ident">hostnames</span>: <span class="ident">hostnames</span>.<span class="ident">join</span>(<span class="string">&quot;,&quot;</span>),
         };
@@ -535,6 +549,26 @@
         <span class="kw">let</span> <span class="ident">dest</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;ca-config.json&quot;</span>);
         <span class="ident">fs</span>::<span class="ident">write</span>(<span class="kw-2">&amp;</span><span class="ident">dest</span>, <span class="ident">to_string_pretty</span>(<span class="kw-2">&amp;</span><span class="ident">cfg</span>)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="ident">dest</span>)
+    }
+}
+
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
+<span class="kw">mod</span> <span class="ident">tests</span> {
+    <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
+    <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">config</span>::<span class="ident">tests</span>::{<span class="ident">test_config</span>, <span class="ident">test_config_wrong_root</span>};
+
+    <span class="attribute">#[<span class="ident">test</span>]</span>
+    <span class="kw">fn</span> <span class="ident">new_success</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">test_config</span>()<span class="question-mark">?</span>;
+        <span class="ident">Pki</span>::<span class="ident">new</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>, <span class="string">&quot;&quot;</span>, <span class="string">&quot;&quot;</span>)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="attribute">#[<span class="ident">test</span>]</span>
+    <span class="kw">fn</span> <span class="ident">new_failure</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">test_config_wrong_root</span>()<span class="question-mark">?</span>;
+        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">Pki</span>::<span class="ident">new</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>, <span class="string">&quot;&quot;</span>, <span class="string">&quot;&quot;</span>).<span class="ident">is_err</span>());
+        <span class="prelude-val">Ok</span>(())
     }
 }
 </pre></div>
