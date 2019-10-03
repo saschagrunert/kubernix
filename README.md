@@ -2,8 +2,10 @@
 
 [![CircleCI](https://circleci.com/gh/saschagrunert/kubernix.svg?style=shield)](https://circleci.com/gh/saschagrunert/kubernix)
 [![Docs master](https://img.shields.io/badge/doc-master-orange.svg)](https://saschagrunert.github.io/kubernix/doc/kubernix/index.html)
+[![Docs release](https://docs.rs/kubernix/badge.svg)](https://docs.rs/kubernix)
 [![Coverage](https://codecov.io/gh/saschagrunert/kubernix/branch/master/graph/badge.svg)](https://codecov.io/gh/saschagrunert/kubernix)
 [![Dependencies](https://deps.rs/repo/github/saschagrunert/kubernix/status.svg)](https://deps.rs/repo/github/saschagrunert/kubernix)
+[![Crates.io](https://img.shields.io/crates/v/kubernix.svg)](https://crates.io/crates/kubernix)
 [![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/saschagrunert/kubernix/blob/master/LICENSE)
 
 ## Kubernetes development cluster bootstrapping with Nix packages
