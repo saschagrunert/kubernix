@@ -89,7 +89,8 @@ impl Kubernix {
         Command::new(Self::find_executable("nix-shell")?)
             .arg(&config.root().join(NIX_DIR))
             .arg("--pure")
-            .arg("--quiet")
+            .arg("-Q")
+            .arg(format!("-j{}", num_cpus::get()))
             .arg("--run")
             .arg(format!(
                 "bash --init-file {}",
@@ -240,7 +241,8 @@ impl Kubernix {
         let status = Command::new(Self::find_executable("nix-shell")?)
             .arg(nix_dir)
             .arg("--pure")
-            .arg("--quiet")
+            .arg("-Q")
+            .arg(format!("-j{}", num_cpus::get()))
             .arg("--run")
             .arg(
                 &[

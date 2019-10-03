@@ -2,7 +2,7 @@ SUDO := sudo -E
 KUBERNIX := $(SUDO) target/release/kubernix
 
 define nix-shell
-	nix-shell nix/build.nix $(1)
+	nix-shell -j$(shell nproc) nix/build.nix $(1)
 endef
 
 define nix-shell-pure

@@ -19,6 +19,7 @@ hostname = "0.1.5"
 ipnetwork = "0.15.0"
 log = { version = "0.4.8", features = ["serde"] }
 nix = "0.15.0"
+num_cpus = "1.10.1"
 rand = "0.7.2"
 rayon = "1.2.0"
 serde = { version = "1.0.101", features = ["derive"] }
