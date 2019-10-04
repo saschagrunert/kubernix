@@ -24,8 +24,10 @@ workflows:
           requires:
             - build-static
           filters:
+            branches:
+              ignore: /.*/
             tags:
-              only: /.*/
+              only: /v.*/
       - docs
       - docs-publish:
           requires:
@@ -209,28 +211,14 @@ jobs:
     executor: machine
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
       - run:
           name: test and coverage upload
           environment:
             IMAGE: *image
           command: |
             docker pull $IMAGE
-            docker run --security-opt seccomp=unconfined \
-              -v $(pwd):/build \
-              -v $(pwd)/nix:/nix \
-              -w /build \
-              --network=host \
-              -e CODECOV_TOKEN \
-              -it \
-              $IMAGE \
-              sh -c "apk add bash make && \
-                     make coverage && \
-                     bash <(curl -s https://codecov.io/bash)"
-            chown -R (id -u):(id -g) nix
-      - save_cache:
-          key: v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
-          paths:
-            - nix
+            docker run --security-opt seccomp=unconfined --network=host \
+              -v $(pwd):/w -w /w -it $IMAGE \
+              sh -c "apk add ca-certificates curl make && \
+                     make coverage"
+            bash <(curl -s https://codecov.io/bash)
