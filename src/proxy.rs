@@ -20,7 +20,7 @@ impl Proxy {
 
         let yml = format!(
             include_str!("assets/proxy.yml"),
-            kubeconfig.proxy.display(),
+            kubeconfig.proxy().display(),
             config.cluster_cidr(),
         );
         let yml_file = dir.join("config.yml");
@@ -28,10 +28,8 @@ impl Proxy {
 
         let mut process = Process::start(
             config,
-            &[
-                "kube-proxy".to_owned(),
-                format!("--config={}", yml_file.display()),
-            ],
+            "kube-proxy",
+            &[&format!("--config={}", yml_file.display())],
         )?;
 
         process.wait_ready("Caches are synced")?;

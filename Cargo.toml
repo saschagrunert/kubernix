@@ -22,8 +22,10 @@ clap = { version = "2.33.0", features = ["wrap_help", "yaml"] }
 derive_builder = "0.8.0"
 env_logger = "0.7.0"
 failure = "0.1.5"
+getset = "0.0.8"
 hostname = "0.1.5"
 ipnetwork = "0.15.0"
+lazy_static = "1.4.0"
 log = { version = "0.4.8", features = ["serde"] }
 nix = "0.15.0"
 num_cpus = "1.10.1"

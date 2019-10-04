@@ -59,30 +59,26 @@ impl Crio {
             }))?,
         )?;
 
-        let runc = Kubernix::find_executable("runc")?;
-        let storage_driver = "overlay".to_owned();
-        let storage_root = dir.join("storage");
-        let run_root = dir.join("run");
         let mut process = Process::start(
             config,
+            "crio",
             &[
-                "crio".to_owned(),
-                "--log-level=debug".to_owned(),
-                format!("--storage-driver={}", &storage_driver),
-                format!("--conmon={}", conmon.display()),
-                format!("--listen={}", &socket.display()),
-                format!("--root={}", &storage_root.display()),
-                format!("--runroot={}", &run_root.display()),
-                format!("--cni-config-dir={}", cni_config.display()),
-                format!("--cni-plugin-dir={}", cni.display()),
-                "--registry=docker.io".to_owned(),
-                format!("--signature-policy={}", policy_json.display()),
-                format!(
+                "--log-level=debug",
+                "--storage-driver=overlay",
+                &format!("--conmon={}", conmon.display()),
+                &format!("--listen={}", socket.display()),
+                &format!("--root={}", dir.join("storage").display()),
+                &format!("--runroot={}", dir.join("run").display()),
+                &format!("--cni-config-dir={}", cni_config.display()),
+                &format!("--cni-plugin-dir={}", cni.display()),
+                "--registry=docker.io",
+                &format!("--signature-policy={}", policy_json.display()),
+                &format!(
                     "--runtimes=local-runc:{}:{}",
-                    runc.display(),
+                    Kubernix::find_executable("runc")?.display(),
                     dir.join("runc").display()
                 ),
-                "--default-runtime=local-runc".to_owned(),
+                "--default-runtime=local-runc",
             ],
         )?;
 

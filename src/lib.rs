@@ -45,13 +45,13 @@ use std::{
     process::Command,
 };
 
-const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
-const KUBECONFIG_ENV: &str = "KUBECONFIG";
-const NIX_SHELL_ENV: &str = "IN_NIX_SHELL";
 const CRIO_DIR: &str = "crio";
+const KUBECONFIG_ENV: &str = "KUBECONFIG";
+const KUBERNIX_ENV: &str = "kubernix.env";
 const LOG_DIR: &str = "log";
 const NIX_DIR: &str = "nix";
-const KUBERNIX_ENV: &str = "kubernix.env";
+const NIX_SHELL_ENV: &str = "IN_NIX_SHELL";
+const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
 type Stoppables = Vec<Startable>;
 
@@ -86,21 +86,17 @@ impl Kubernix {
             "Spawning new kubernix shell in '{}'",
             config.root().display()
         );
-        Command::new(Self::find_executable("nix-shell")?)
-            .arg(&config.root().join(NIX_DIR))
-            .arg("--pure")
-            .arg("-Q")
-            .arg(format!("-j{}", num_cpus::get()))
-            .arg("--run")
-            .arg(format!(
+
+        Self::run_nix_shell(
+            &config,
+            &format!(
                 "bash --init-file {}",
                 config.root().join(KUBERNIX_ENV).display()
-            ))
-            .status()?;
-
-        Ok(())
+            ),
+        )
     }
 
+    /// Prepare the environment based on the provided config
     fn prepare_env(config: &mut Config) -> Fallible<()> {
         // Rootless is currently not supported
         if !getuid().is_root() {
@@ -119,7 +115,7 @@ impl Kubernix {
         let mut builder = Builder::new();
         builder
             .format_timestamp(None)
-            .filter(None, config.log_level())
+            .filter(None, *config.log_level())
             .try_init()?;
 
         Ok(())
@@ -134,6 +130,7 @@ impl Kubernix {
         }
     }
 
+    /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config) -> Fallible<()> {
         // Retrieve the local IP
         let ip = Self::local_ip()?;
@@ -209,7 +206,7 @@ impl Kubernix {
         Ok(())
     }
 
-    // Apply needed workloads to the running cluster. This method stops the cluster on any error.
+    /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
     fn apply_addons(&mut self) -> Fallible<()> {
         if let Err(e) = CoreDNS::apply(&self.config, &self.kubeconfig) {
             bail!("Unable to apply CoreDNS: {}", e);
@@ -217,6 +214,7 @@ impl Kubernix {
         Ok(())
     }
 
+    /// Bootstrap the nix environment
     fn bootstrap_nix(config: Config) -> Fallible<()> {
         // Prepare the nix dir
         let nix_dir = config.root().join(NIX_DIR);
@@ -238,35 +236,26 @@ impl Kubernix {
         fs::write(nix_dir.join("deps.nix"), include_str!("../nix/deps.nix"))?;
 
         // Run the shell
-        let status = Command::new(Self::find_executable("nix-shell")?)
-            .arg(nix_dir)
-            .arg("--pure")
-            .arg("-Q")
-            .arg(format!("-j{}", num_cpus::get()))
-            .arg("--run")
-            .arg(
-                &[
-                    &current_exe()?.display().to_string(),
-                    "--root",
-                    &config.root().display().to_string(),
-                    "--log-level",
-                    &config.log_level().to_string().to_lowercase(),
-                    "--crio-cidr",
-                    &config.crio_cidr().to_string(),
-                    "--cluster-cidr",
-                    &config.cluster_cidr().to_string(),
-                    "--service-cidr",
-                    &config.service_cidr().to_string(),
-                ]
-                .join(" "),
-            )
-            .status()?;
-        if !status.success() {
-            bail!("nix-shell command failed");
-        }
-        Ok(())
+        Self::run_nix_shell(
+            &config,
+            &[
+                &current_exe()?.display().to_string(),
+                "--root",
+                &config.root().display().to_string(),
+                "--log-level",
+                &config.log_level().to_string().to_lowercase(),
+                "--crio-cidr",
+                &config.crio_cidr().to_string(),
+                "--cluster-cidr",
+                &config.cluster_cidr().to_string(),
+                "--service-cidr",
+                &config.service_cidr().to_string(),
+            ]
+            .join(" "),
+        )
     }
 
+    /// Spawn a new interactive nix shell
     fn spawn_shell(&self) -> Fallible<()> {
         info!("Spawning interactive shell");
         info!("Please be aware that the cluster gets destroyed if you exit the shell");
@@ -278,12 +267,12 @@ impl Kubernix {
                 RUNTIME_ENV,
                 format!("unix://{}", self.crio_socket.display()),
                 KUBECONFIG_ENV,
-                self.kubeconfig.admin.display(),
+                self.kubeconfig.admin().display(),
             ),
         )?;
 
         Command::new("bash")
-            .current_dir(&self.config.root().join(LOG_DIR))
+            .current_dir(self.config.root().join(LOG_DIR))
             .arg("--init-file")
             .arg(env_file)
             .status()?;
@@ -311,6 +300,19 @@ impl Kubernix {
         Ok(ip.to_owned())
     }
 
+    /// Run a pure nix shell command
+    fn run_nix_shell(config: &Config, arg: &str) -> Fallible<()> {
+        Command::new(Self::find_executable("nix-shell")?)
+            .arg(config.root().join(NIX_DIR))
+            .arg("--pure")
+            .arg("-Q")
+            .arg(format!("-j{}", num_cpus::get()))
+            .arg("--run")
+            .arg(arg)
+            .status()?;
+        Ok(())
+    }
+
     /// Find an executable inside the current $PATH environment
     fn find_executable<P>(name: P) -> Fallible<PathBuf>
     where
@@ -332,7 +334,7 @@ impl Kubernix {
             .ok_or_else(|| format_err!("Unable to find {} in $PATH", name))
     }
 
-    // Retrieve the DNS address from the config
+    /// Retrieve the DNS address from the config
     fn dns(config: &Config) -> Fallible<Ipv4Addr> {
         match config.service_cidr() {
             IpNetwork::V4(n) => Ok(n.nth(2).ok_or_else(|| {
