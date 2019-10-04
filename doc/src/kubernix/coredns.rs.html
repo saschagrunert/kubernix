@@ -65,7 +65,7 @@
 
         <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;kubectl&quot;</span>)
             .<span class="ident">arg</span>(<span class="string">&quot;apply&quot;</span>)
-            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--kubeconfig={}&quot;</span>, <span class="ident">kubeconfig</span>.<span class="ident">admin</span>.<span class="ident">display</span>()))
+            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--kubeconfig={}&quot;</span>, <span class="ident">kubeconfig</span>.<span class="ident">admin</span>().<span class="ident">display</span>()))
             .<span class="ident">arg</span>(<span class="string">&quot;-f&quot;</span>)
             .<span class="ident">arg</span>(<span class="ident">yml_file</span>)
             .<span class="ident">output</span>()<span class="question-mark">?</span>;

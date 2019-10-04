@@ -209,59 +209,90 @@
 <span id="209">209</span>
 <span id="210">210</span>
 <span id="211">211</span>
-<span id="212">212</span>
-<span id="213">213</span>
-<span id="214">214</span>
-<span id="215">215</span>
-<span id="216">216</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
 <span class="kw">use</span> <span class="ident">derive_builder</span>::<span class="ident">Builder</span>;
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">format_err</span>, <span class="ident">Fallible</span>};
+<span class="kw">use</span> <span class="ident">getset</span>::<span class="ident">Getters</span>;
 <span class="kw">use</span> <span class="ident">ipnetwork</span>::<span class="ident">IpNetwork</span>;
+<span class="kw">use</span> <span class="ident">lazy_static</span>::<span class="ident">lazy_static</span>;
 <span class="kw">use</span> <span class="ident">log</span>::<span class="ident">LevelFilter</span>;
 <span class="kw">use</span> <span class="ident">serde</span>::{<span class="ident">Deserialize</span>, <span class="ident">Serialize</span>};
 <span class="kw">use</span> <span class="ident">serde_yaml</span>::<span class="ident">Value</span>;
 <span class="kw">use</span> <span class="ident">std</span>::{
+    <span class="ident">error</span>::<span class="ident">Error</span>,
     <span class="ident">fmt</span>::<span class="ident">Debug</span>,
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">canonicalize</span>, <span class="ident">create_dir_all</span>, <span class="ident">read_to_string</span>},
-    <span class="ident">path</span>::{<span class="ident">Path</span>, <span class="ident">PathBuf</span>},
+    <span class="ident">path</span>::<span class="ident">PathBuf</span>,
     <span class="ident">str</span>::<span class="ident">FromStr</span>,
 };
 <span class="kw">use</span> <span class="ident">toml</span>;
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Builder</span>, <span class="ident">Debug</span>, <span class="ident">Deserialize</span>, <span class="ident">Serialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Builder</span>, <span class="ident">Clone</span>, <span class="ident">Debug</span>, <span class="ident">Deserialize</span>, <span class="ident">Getters</span>, <span class="ident">Serialize</span>)]</span>
 <span class="attribute">#[<span class="ident">serde</span>(<span class="ident">default</span>, <span class="ident">rename_all</span> <span class="op">=</span> <span class="string">&quot;kebab-case&quot;</span>)]</span>
 <span class="attribute">#[<span class="ident">builder</span>(<span class="ident">default</span>, <span class="ident">setter</span>(<span class="ident">into</span>))]</span>
 <span class="doccomment">/// The global configuration</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Config</span> {
     <span class="doccomment">/// The root path during runtime</span>
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">root</span>: <span class="ident">PathBuf</span>,
 
     <span class="doccomment">/// The logging level of the application</span>
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">log_level</span>: <span class="ident">LevelFilter</span>,
 
     <span class="doccomment">/// Container Networking CIDR for CRI-O</span>
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">crio_cidr</span>: <span class="ident">IpNetwork</span>,
 
     <span class="doccomment">/// Cluster CIDR</span>
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">cluster_cidr</span>: <span class="ident">IpNetwork</span>,
 
     <span class="doccomment">/// Service CIDR</span>
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">service_cidr</span>: <span class="ident">IpNetwork</span>,
 }
 
 <span class="kw">impl</span> <span class="ident">Default</span> <span class="kw">for</span> <span class="ident">Config</span> {
     <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+        <span class="ident">DEFAULT_CONFIG</span>.<span class="ident">clone</span>()
+    }
+}
+
+<span class="macro">lazy_static</span><span class="macro">!</span> {
+    <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">DEFAULT_CONFIG</span>: <span class="ident">Config</span> <span class="op">=</span> {
+        <span class="doccomment">/// Parse an internal value from a YAML Value.</span>
+        <span class="kw">fn</span> <span class="ident">parse_from_yaml</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span>(<span class="ident">value</span>: <span class="kw-2">&amp;</span><span class="ident">Value</span>, <span class="ident">key</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span>
+        <span class="kw">where</span>
+            <span class="ident">T</span>: <span class="ident">FromStr</span>,
+            <span class="op">&lt;</span><span class="ident">T</span> <span class="kw">as</span> <span class="ident">FromStr</span><span class="op">&gt;</span>::<span class="prelude-val">Err</span>: <span class="ident">Debug</span> <span class="op">+</span> <span class="ident">Error</span> <span class="op">+</span> <span class="ident">Send</span> <span class="op">+</span> <span class="ident">Sync</span>,
+        {
+            <span class="ident">value</span>
+                .<span class="ident">get</span>(<span class="string">&quot;args&quot;</span>)
+                .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to get args&quot;</span>))<span class="question-mark">?</span>
+                .<span class="ident">as_sequence</span>()
+                .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to get sequence&quot;</span>))<span class="question-mark">?</span>
+                .<span class="ident">iter</span>()
+                .<span class="ident">find</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">get</span>(<span class="ident">key</span>).<span class="ident">is_some</span>())
+                .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to find {}&quot;</span>, <span class="ident">key</span>))<span class="question-mark">?</span>
+                .<span class="ident">get</span>(<span class="ident">key</span>)
+                .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to get {}&quot;</span>, <span class="ident">key</span>))<span class="question-mark">?</span>
+                .<span class="ident">get</span>(<span class="string">&quot;default_value&quot;</span>)
+                .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to get default value&quot;</span>))<span class="question-mark">?</span>
+                .<span class="ident">as_str</span>()
+                .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to get string reference&quot;</span>))<span class="question-mark">?</span>
+                .<span class="ident">parse</span>().<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to parse value: {}&quot;</span>, <span class="ident">e</span>))
+        }
         <span class="kw">let</span> <span class="ident">yaml</span> <span class="op">=</span> <span class="ident">serde_yaml</span>::<span class="ident">from_str</span>(<span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;cli.yaml&quot;</span>)).<span class="ident">unwrap</span>();
         <span class="ident">Config</span> {
-            <span class="ident">root</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;root&quot;</span>),
-            <span class="ident">log_level</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;log-level&quot;</span>),
-            <span class="ident">crio_cidr</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;crio-cidr&quot;</span>),
-            <span class="ident">cluster_cidr</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;cluster-cidr&quot;</span>),
-            <span class="ident">service_cidr</span>: <span class="self">Self</span>::<span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;service-cidr&quot;</span>),
+            <span class="ident">root</span>: <span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;root&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">log_level</span>: <span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;log-level&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">crio_cidr</span>: <span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;crio-cidr&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">cluster_cidr</span>: <span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;cluster-cidr&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">service_cidr</span>: <span class="ident">parse_from_yaml</span>(<span class="kw-2">&amp;</span><span class="ident">yaml</span>, <span class="string">&quot;service-cidr&quot;</span>).<span class="ident">unwrap</span>(),
         }
-    }
+    };
 }
 
 <span class="kw">impl</span> <span class="ident">Config</span> {
@@ -269,79 +300,38 @@
 
     <span class="doccomment">/// Make the configs root path absolute</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">canonicalize_root</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="self">self</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">canonicalize</span>(<span class="self">self</span>.<span class="ident">root</span>())<span class="question-mark">?</span>;
+        <span class="self">self</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">canonicalize</span>(<span class="self">self</span>.<span class="ident">root</span>())
+            .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to canonicalize config root directory: {}&quot;</span>, <span class="ident">e</span>))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="doccomment">/// Write the current configuration to the internal set root path</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">to_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="ident">create_dir_all</span>(<span class="self">self</span>.<span class="ident">root</span>())<span class="question-mark">?</span>;
-        <span class="ident">fs</span>::<span class="ident">write</span>(<span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">FILENAME</span>), <span class="ident">toml</span>::<span class="ident">to_string</span>(<span class="kw-2">&amp;</span><span class="self">self</span>)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+        <span class="ident">fs</span>::<span class="ident">write</span>(<span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">FILENAME</span>), <span class="ident">toml</span>::<span class="ident">to_string</span>(<span class="kw-2">&amp;</span><span class="self">self</span>)<span class="question-mark">?</span>)
+            .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to write configuration to file: {}&quot;</span>, <span class="ident">e</span>))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="doccomment">/// Read the configuration from the internal set root path</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">update_from_file</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">file</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">FILENAME</span>);
-        <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="ident">toml</span>::<span class="ident">from_str</span>(<span class="kw-2">&amp;</span><span class="ident">read_to_string</span>(<span class="kw-2">&amp;</span><span class="ident">file</span>)<span class="question-mark">?</span>)
-            .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to load config file &#39;{}&#39;: {}&quot;</span>, <span class="ident">file</span>.<span class="ident">display</span>(), <span class="ident">e</span>))<span class="question-mark">?</span>;
+        <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="ident">toml</span>::<span class="ident">from_str</span>(<span class="kw-2">&amp;</span><span class="ident">read_to_string</span>(<span class="kw-2">&amp;</span><span class="ident">file</span>).<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> {
+            <span class="macro">format_err</span><span class="macro">!</span>(
+                <span class="string">&quot;Unable to read configuration file &#39;{}&#39;: {}&quot;</span>,
+                <span class="ident">file</span>.<span class="ident">display</span>(),
+                <span class="ident">e</span>
+            )
+        })<span class="question-mark">?</span>)
+        .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to load config file &#39;{}&#39;: {}&quot;</span>, <span class="ident">file</span>.<span class="ident">display</span>(), <span class="ident">e</span>))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
-    }
-
-    <span class="doccomment">/// Retrieve the root path</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">root</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="kw-2">&amp;</span><span class="ident">Path</span> {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">root</span>
-    }
-
-    <span class="doccomment">/// Retrieve the log level</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">log_level</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">LevelFilter</span> {
-        <span class="self">self</span>.<span class="ident">log_level</span>
-    }
-
-    <span class="doccomment">/// Retrieve the CRI-O container CIDR</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">crio_cidr</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="kw-2">&amp;</span><span class="ident">IpNetwork</span> {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">crio_cidr</span>
-    }
-
-    <span class="doccomment">/// Retrieve the cluster CIDR</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">cluster_cidr</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="kw-2">&amp;</span><span class="ident">IpNetwork</span> {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">cluster_cidr</span>
-    }
-
-    <span class="doccomment">/// Retrieve the service CIDR</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">service_cidr</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="kw-2">&amp;</span><span class="ident">IpNetwork</span> {
-        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">service_cidr</span>
-    }
-
-    <span class="doccomment">/// Parse an internal value from a YAML Value</span>
-    <span class="doccomment">/// This function is highly unsafe and should be used with care ;)</span>
-    <span class="kw">fn</span> <span class="ident">parse_from_yaml</span><span class="op">&lt;</span><span class="ident">T</span><span class="op">&gt;</span>(<span class="ident">value</span>: <span class="kw-2">&amp;</span><span class="ident">Value</span>, <span class="ident">key</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-&gt;</span> <span class="ident">T</span>
-    <span class="kw">where</span>
-        <span class="ident">T</span>: <span class="ident">FromStr</span>,
-        <span class="op">&lt;</span><span class="ident">T</span> <span class="kw">as</span> <span class="ident">std</span>::<span class="ident">str</span>::<span class="ident">FromStr</span><span class="op">&gt;</span>::<span class="prelude-val">Err</span>: <span class="ident">Debug</span>,
-    {
-        <span class="ident">value</span>
-            .<span class="ident">get</span>(<span class="string">&quot;args&quot;</span>)
-            .<span class="ident">unwrap</span>()
-            .<span class="ident">as_sequence</span>()
-            .<span class="ident">unwrap</span>()
-            .<span class="ident">iter</span>()
-            .<span class="ident">find</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">get</span>(<span class="ident">key</span>).<span class="ident">is_some</span>())
-            .<span class="ident">unwrap</span>()
-            .<span class="ident">get</span>(<span class="ident">key</span>)
-            .<span class="ident">unwrap</span>()
-            .<span class="ident">get</span>(<span class="string">&quot;default_value&quot;</span>)
-            .<span class="ident">unwrap</span>()
-            .<span class="ident">as_str</span>()
-            .<span class="ident">unwrap</span>()
-            .<span class="ident">parse</span>()
-            .<span class="ident">unwrap</span>()
     }
 }
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">tests</span> {
     <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
+    <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">path</span>::<span class="ident">Path</span>;
     <span class="kw">use</span> <span class="ident">tempfile</span>::<span class="ident">tempdir</span>;
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
@@ -403,7 +393,7 @@ service-cidr = &quot;3.3.3.3/24&quot;
         )<span class="question-mark">?</span>;
         <span class="ident">c</span>.<span class="ident">update_from_file</span>()<span class="question-mark">?</span>;
         <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">root</span>(), <span class="ident">Path</span>::<span class="ident">new</span>(<span class="string">&quot;root&quot;</span>));
-        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">log_level</span>(), <span class="ident">LevelFilter</span>::<span class="ident">Debug</span>);
+        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">log_level</span>(), <span class="kw-2">&amp;</span><span class="ident">LevelFilter</span>::<span class="ident">Debug</span>);
         <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">crio_cidr</span>().<span class="ident">to_string</span>(), <span class="string">&quot;1.1.1.1/16&quot;</span>);
         <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">cluster_cidr</span>().<span class="ident">to_string</span>(), <span class="string">&quot;2.2.2.2/16&quot;</span>);
         <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">service_cidr</span>().<span class="ident">to_string</span>(), <span class="string">&quot;3.3.3.3/24&quot;</span>);
@@ -427,7 +417,7 @@ service-cidr = &quot;3.3.3.3/24&quot;
             .<span class="ident">build</span>()
             .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to build config: {}&quot;</span>, <span class="ident">e</span>))<span class="question-mark">?</span>;
         <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">root</span>(), <span class="ident">Path</span>::<span class="ident">new</span>(<span class="string">&quot;root&quot;</span>));
-        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">log_level</span>(), <span class="ident">LevelFilter</span>::<span class="ident">Warn</span>);
+        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">log_level</span>(), <span class="kw-2">&amp;</span><span class="ident">LevelFilter</span>::<span class="ident">Warn</span>);
         <span class="prelude-val">Ok</span>(())
     }
 }
