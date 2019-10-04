@@ -34,6 +34,9 @@ fn run() -> Fallible<()> {
     if let Some(x) = matches.value_of("service-cidr") {
         config_builder.service_cidr(x.parse::<IpNetwork>()?);
     }
+    if let Some(x) = matches.value_of("overlay") {
+        config_builder.overlay(x);
+    }
     let config = config_builder
         .build()
         .map_err(|e| format_err!("Unable to build config: {}", e))?;

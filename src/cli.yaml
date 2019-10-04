@@ -45,6 +45,11 @@ args:
       short: s
       help: The CIDR used for the service network
       value_name: CIDR
+  - overlay:
+      long: overlay
+      short: o
+      help: The Nix package overlay to be used
+      value_name: PATH
 
 subcommands:
   - shell:

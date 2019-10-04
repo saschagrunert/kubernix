@@ -31,6 +31,10 @@ build-release:
 coverage:
 	$(call nix-shell-pure-run,cargo kcov)
 
+.PHONY: nix-shell
+nix-shell:
+	$(call nix-shell-pure)
+
 .PHONY: docs
 docs:
 	$(call nix-shell-pure-run,cargo doc --no-deps)
