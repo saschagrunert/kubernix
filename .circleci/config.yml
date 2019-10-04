@@ -226,7 +226,9 @@ jobs:
               -e CODECOV_TOKEN \
               -it \
               $IMAGE \
-              sh -c "apk add bash make && make coverage"
+              sh -c "apk add bash make && \
+                     make coverage && \
+                     bash <(curl -s https://codecov.io/bash)"
             chown -R (id -u):(id -g) nix
       - save_cache:
           key: v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
