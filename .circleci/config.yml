@@ -4,7 +4,7 @@ version: 2.1
 executors:
   container:
     docker:
-      - image: nixos/nix
+      - image: &image nixos/nix
   container-musl:
     docker:
       - image: ekidd/rust-musl-builder:stable
@@ -208,19 +208,28 @@ jobs:
             - ~/.cargo
 
   test:
-    executor: container
+    executor: machine
     steps:
-      - <<: *prepare-env
       - checkout
       - restore_cache:
           keys:
             - v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
       - run:
-          name: test
-          command: make coverage
+          name: test and coverage upload
+          environment:
+            IMAGE: *image
+          command: |
+            docker pull $IMAGE
+            docker run --security-opt seccomp=unconfined \
+              -v $(pwd):/build \
+              -v $(pwd)/nix:/nix \
+              -w /build \
+              --network=host \
+              -e CODECOV_TOKEN \
+              $IMAGE \
+              make coverage
+            chown -R (id -u):(id -g) nix
       - save_cache:
           key: v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:
-            - /nix
-            - target
-            - ~/.cargo
+            - nix
