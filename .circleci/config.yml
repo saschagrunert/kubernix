@@ -20,14 +20,12 @@ workflows:
       - build
       - build-release
       - build-static
-      - coverage
       - deploy:
           requires:
             - build-static
-          # TODO: apply filter
-          # filters:
-            # tags:
-              # only: /.*/
+          filters:
+            tags:
+              only: /.*/
       - docs
       - docs-publish:
           requires:
@@ -43,7 +41,7 @@ prepare-env: &prepare-env
   run:
     name: Install dependencies
     command: |
-      apk add bash ca-certificates curl findutils git jq make openssh
+      apk add bash ca-certificates curl file findutils git jq make openssh
 
 static-binary: &static-binary target/x86_64-unknown-linux-musl/release/kubernix
 
@@ -226,8 +224,9 @@ jobs:
               -w /build \
               --network=host \
               -e CODECOV_TOKEN \
+              -it \
               $IMAGE \
-              make coverage
+              sh -c "apk add bash make && make coverage"
             chown -R (id -u):(id -g) nix
       - save_cache:
           key: v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
