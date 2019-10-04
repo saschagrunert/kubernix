@@ -27,25 +27,25 @@ impl Etcd {
 
         let mut process = Process::start(
             config,
+            "etcd",
             &[
-                "etcd".to_owned(),
-                format!("--advertise-client-urls={}", etcd_localhost),
-                "--client-cert-auth".to_owned(),
-                format!("--data-dir={}", data_dir.display()),
-                format!("--initial-advertise-peer-urls={}", etcd_localhost_peer),
-                "--initial-cluster-state=new".to_owned(),
-                "--initial-cluster-token=etcd-cluster".to_owned(),
-                format!("--initial-cluster=etcd={}", etcd_localhost_peer),
-                format!("--listen-client-urls={}", etcd_localhost),
-                format!("--listen-peer-urls={}", etcd_localhost_peer),
-                "--name=etcd".to_owned(),
-                "--peer-client-cert-auth".to_owned(),
-                format!("--cert-file={}", pki.apiserver.cert().display()),
-                format!("--key-file={}", pki.apiserver.key().display()),
-                format!("--peer-cert-file={}", pki.apiserver.cert().display()),
-                format!("--peer-key-file={}", pki.apiserver.key().display()),
-                format!("--peer-trusted-ca-file={}", pki.ca.cert().display()),
-                format!("--trusted-ca-file={}", pki.ca.cert().display()),
+                &format!("--advertise-client-urls={}", etcd_localhost),
+                "--client-cert-auth",
+                &format!("--data-dir={}", data_dir.display()),
+                &format!("--initial-advertise-peer-urls={}", etcd_localhost_peer),
+                "--initial-cluster-state=new",
+                "--initial-cluster-token=etcd-cluster",
+                &format!("--initial-cluster=etcd={}", etcd_localhost_peer),
+                &format!("--listen-client-urls={}", etcd_localhost),
+                &format!("--listen-peer-urls={}", etcd_localhost_peer),
+                "--name=etcd",
+                "--peer-client-cert-auth",
+                &format!("--cert-file={}", pki.apiserver().cert().display()),
+                &format!("--key-file={}", pki.apiserver().key().display()),
+                &format!("--peer-cert-file={}", pki.apiserver().cert().display()),
+                &format!("--peer-key-file={}", pki.apiserver().key().display()),
+                &format!("--peer-trusted-ca-file={}", pki.ca().cert().display()),
+                &format!("--trusted-ca-file={}", pki.ca().cert().display()),
             ],
         )?;
 
@@ -58,5 +58,20 @@ impl Etcd {
 impl Stoppable for Etcd {
     fn stop(&mut self) -> Fallible<()> {
         self.process.stop()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::tests::test_config;
+
+    #[test]
+    fn new_success() -> Fallible<()> {
+        let c = test_config()?;
+        let p = Pki::new(&c, "", "")?;
+
+        let mut etcd = Etcd::start(&c, &p)?;
+        etcd.stop()
     }
 }

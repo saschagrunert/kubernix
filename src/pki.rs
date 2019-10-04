@@ -1,5 +1,6 @@
 use crate::Config;
 use failure::{bail, format_err, Fallible};
+use getset::Getters;
 use ipnetwork::IpNetwork;
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
@@ -10,19 +11,39 @@ use std::{
     process::{Command, Stdio},
 };
 
+#[derive(Getters)]
 pub struct Pki {
-    pub admin: Pair,
-    pub apiserver: Pair,
-    pub ca: Pair,
-    pub controller_manager: Pair,
-    pub kubelet: Pair,
-    pub proxy: Pair,
-    pub scheduler: Pair,
-    pub service_account: Pair,
+    #[get = "pub"]
+    admin: Pair,
+
+    #[get = "pub"]
+    apiserver: Pair,
+
+    #[get = "pub"]
+    ca: Pair,
+
+    #[get = "pub"]
+    controller_manager: Pair,
+
+    #[get = "pub"]
+    kubelet: Pair,
+
+    #[get = "pub"]
+    proxy: Pair,
+
+    #[get = "pub"]
+    scheduler: Pair,
+
+    #[get = "pub"]
+    service_account: Pair,
 }
 
+#[derive(Getters)]
 pub struct Pair {
+    #[get = "pub"]
     cert: PathBuf,
+
+    #[get = "pub"]
     key: PathBuf,
 }
 
@@ -32,21 +53,21 @@ impl Pair {
         let key = dir.join(format!("{}-key.pem", name));
         Pair { cert, key }
     }
-
-    pub fn cert(&self) -> &Path {
-        &self.cert
-    }
-
-    pub fn key(&self) -> &Path {
-        &self.key
-    }
 }
 
+#[derive(Getters)]
 struct PkiConfig<'a> {
+    #[get = "pub"]
     ca: &'a Pair,
+
+    #[get = "pub"]
     ca_config: PathBuf,
+
+    #[get = "pub"]
     dir: &'a Path,
-    hostnames: String,
+
+    #[get = "pub"]
+    hostnames: &'a str,
 }
 
 impl Pki {
@@ -86,7 +107,7 @@ impl Pki {
             dir: pki_dir,
             ca: &ca,
             ca_config: Self::write_ca_config(pki_dir)?,
-            hostnames: hostnames.join(","),
+            hostnames: &hostnames.join(","),
         };
 
         Ok(Pki {

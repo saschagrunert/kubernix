@@ -20,18 +20,15 @@ impl Scheduler {
 
         let yml = format!(
             include_str!("assets/scheduler.yml"),
-            kubeconfig.scheduler.display()
+            kubeconfig.scheduler().display()
         );
         let cfg = &dir.join("config.yml");
         fs::write(cfg, yml)?;
 
         let mut process = Process::start(
             config,
-            &[
-                "kube-scheduler".to_owned(),
-                format!("--config={}", cfg.display()),
-                "--v=2".to_owned(),
-            ],
+            "kube-scheduler",
+            &[&format!("--config={}", cfg.display()), "--v=2"],
         )?;
 
         process.wait_ready("Serving securely")?;

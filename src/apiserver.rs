@@ -33,53 +33,53 @@ impl APIServer {
 
         let mut process = Process::start(
             config,
+            "kube-apiserver",
             &[
-                "kube-apiserver".to_owned(),
-                format!("--advertise-address={}", ip),
-                "--allow-privileged=true".to_owned(),
-                "--audit-log-maxage=30".to_owned(),
-                "--audit-log-maxbackup=3".to_owned(),
-                "--audit-log-maxsize=100".to_owned(),
-                format!("--audit-log-path={}", dir.join("audit.log").display()),
-                "--authorization-mode=Node,RBAC".to_owned(),
-                "--bind-address=0.0.0.0".to_owned(),
-                format!("--client-ca-file={}", pki.ca.cert().display()),
-                format!("--etcd-cafile={}", pki.ca.cert().display()),
-                format!("--etcd-certfile={}", pki.apiserver.cert().display()),
-                format!("--etcd-keyfile={}", pki.apiserver.key().display()),
-                format!(
+                &format!("--advertise-address={}", ip),
+                "--allow-privileged=true",
+                "--audit-log-maxage=30",
+                "--audit-log-maxbackup=3",
+                "--audit-log-maxsize=100",
+                &format!("--audit-log-path={}", dir.join("audit.log").display()),
+                "--authorization-mode=Node,RBAC",
+                "--bind-address=0.0.0.0",
+                &format!("--client-ca-file={}", pki.ca().cert().display()),
+                &format!("--etcd-cafile={}", pki.ca().cert().display()),
+                &format!("--etcd-certfile={}", pki.apiserver().cert().display()),
+                &format!("--etcd-keyfile={}", pki.apiserver().key().display()),
+                &format!(
                     "--etcd-servers=https://{}:2379",
-                    &Ipv4Addr::LOCALHOST.to_string(),
+                    Ipv4Addr::LOCALHOST.to_string(),
                 ),
-                "--event-ttl=1h".to_owned(),
-                format!(
+                "--event-ttl=1h",
+                &format!(
                     "--encryption-provider-config={}",
                     encryptionconfig.path().display()
                 ),
-                format!(
+                &format!(
                     "--kubelet-certificate-authority={}",
-                    pki.ca.cert().display()
+                    pki.ca().cert().display()
                 ),
-                format!(
+                &format!(
                     "--kubelet-client-certificate={}",
-                    pki.apiserver.cert().display()
+                    pki.apiserver().cert().display()
                 ),
-                format!("--kubelet-client-key={}", pki.apiserver.key().display()),
-                "--kubelet-https=true".to_owned(),
-                "--runtime-config=api/all".to_owned(),
-                format!(
+                &format!("--kubelet-client-key={}", pki.apiserver().key().display()),
+                "--kubelet-https=true",
+                "--runtime-config=api/all",
+                &format!(
                     "--service-account-key-file={}",
-                    pki.service_account.cert().display()
+                    pki.service_account().cert().display()
                 ),
-                format!("--service-cluster-ip-range={}", config.service_cidr()),
-                format!("--tls-cert-file={}", pki.apiserver.cert().display()),
-                format!("--tls-private-key-file={}", pki.apiserver.key().display()),
-                "--v=2".to_owned(),
+                &format!("--service-cluster-ip-range={}", config.service_cidr()),
+                &format!("--tls-cert-file={}", pki.apiserver().cert().display()),
+                &format!("--tls-private-key-file={}", pki.apiserver().key().display()),
+                "--v=2",
             ],
         )?;
 
         process.wait_ready("etcd ok")?;
-        Self::setup_rbac(&dir, &kubeconfig.admin)?;
+        Self::setup_rbac(&dir, kubeconfig.admin())?;
         info!("API Server is ready");
         Ok(Box::new(APIServer { process }))
     }

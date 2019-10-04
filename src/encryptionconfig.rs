@@ -1,14 +1,17 @@
 use crate::Config;
 use base64::encode;
 use failure::Fallible;
+use getset::Getters;
 use log::info;
 use rand::{thread_rng, Rng};
 use std::{
     fs::{self, create_dir_all},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
+#[derive(Getters)]
 pub struct EncryptionConfig {
+    #[get = "pub"]
     path: PathBuf,
 }
 
@@ -26,10 +29,6 @@ impl EncryptionConfig {
         let path = encryption_dir.join("config.yml");
         fs::write(&path, yml)?;
         Ok(EncryptionConfig { path })
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
     }
 }
 

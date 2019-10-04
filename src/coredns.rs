@@ -21,7 +21,7 @@ impl CoreDNS {
 
         let output = Command::new("kubectl")
             .arg("apply")
-            .arg(format!("--kubeconfig={}", kubeconfig.admin.display()))
+            .arg(format!("--kubeconfig={}", kubeconfig.admin().display()))
             .arg("-f")
             .arg(yml_file)
             .output()?;

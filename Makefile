@@ -27,6 +27,12 @@ build:
 build-release:
 	$(call nix-shell-pure-run,cargo build --release)
 
+.PHONY: coverage
+coverage: SHELL := $(shell which bash)
+coverage:
+	$(call nix-shell-pure-run,cargo kcov)
+	bash <(curl -s https://codecov.io/bash)
+
 .PHONY: docs
 docs:
 	$(call nix-shell-pure-run,cargo doc --no-deps)

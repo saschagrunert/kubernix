@@ -30,28 +30,28 @@ impl Kubelet {
 
         let yml = format!(
             include_str!("assets/kubelet.yml"),
-            pki.ca.cert().display(),
+            pki.ca().cert().display(),
             Kubernix::dns(config)?,
             config.crio_cidr(),
-            pki.kubelet.cert().display(),
-            pki.kubelet.key().display()
+            pki.kubelet().cert().display(),
+            pki.kubelet().key().display()
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
 
         let mut process = Process::start(
             config,
+            "kubelet",
             &[
-                "kubelet".to_owned(),
-                format!("--config={}", yml_file.display()),
-                "--container-runtime=remote".to_owned(),
-                format!("--container-runtime-endpoint=unix://{}", socket.display()),
-                format!("--kubeconfig={}", kubeconfig.kubelet.display()),
-                "--image-pull-progress-deadline=2m".to_owned(),
-                "--network-plugin=cni".to_owned(),
-                "--register-node=true".to_owned(),
-                "--fail-swap-on=false".to_owned(),
-                "--v=2".to_owned(),
+                &format!("--config={}", yml_file.display()),
+                "--container-runtime=remote",
+                &format!("--container-runtime-endpoint=unix://{}", socket.display()),
+                &format!("--kubeconfig={}", kubeconfig.kubelet().display()),
+                "--image-pull-progress-deadline=2m",
+                "--network-plugin=cni",
+                "--register-node=true",
+                "--fail-swap-on=false",
+                "--v=2",
             ],
         )?;
 

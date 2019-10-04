@@ -21,6 +21,13 @@ workflows:
       - build-release
       - build-static
       - coverage
+      - deploy:
+          requires:
+            - build-static
+          # TODO: apply filter
+          # filters:
+            # tags:
+              # only: /.*/
       - docs
       - docs-publish:
           requires:
@@ -36,7 +43,9 @@ prepare-env: &prepare-env
   run:
     name: Install dependencies
     command: |
-      apk add bash ca-certificates curl findutils git make openssh
+      apk add bash ca-certificates curl findutils git jq make openssh
+
+static-binary: &static-binary target/x86_64-unknown-linux-musl/release/kubernix
 
 jobs:
   build:
@@ -90,24 +99,31 @@ jobs:
           paths:
             - target
             - ~/.cargo
+      - persist_to_workspace:
+          root: .
+          paths:
+            - *static-binary
       - store_artifacts:
-          path: target/x86_64-unknown-linux-musl/release/kubernix
+          path: *static-binary
 
-  coverage:
-    executor: machine
+  deploy:
+    executor: container
     steps:
+      - <<: *prepare-env
       - checkout
+      - attach_workspace:
+          at: .
       - run:
-          name: test and coverage upload
-          environment:
-            IMAGE: saschagrunert/build-rust
+          name: Deploy static release
           command: |
-            docker pull $IMAGE
-            docker run --security-opt seccomp=unconfined -v $(pwd):/build \
-              -w /build --network=host -e CODECOV_TOKEN $IMAGE \
-              bash -c "\
-                cargo kcov && \
-                bash <(curl -s https://codecov.io/bash)"
+            ID=$(curl https://$GITHUB_TOKEN:@api.$SLUG/latest | jq .id)
+            curl -H "Authorization: token $GITHUB_TOKEN" \
+                 -H "Content-Type: $(file -b --mime-type $FILE)" \
+                 --data-binary @$FILE \
+                 "https://uploads.$SLUG/$ID/assets?name=$(basename $FILE)"
+          environment:
+            FILE: *static-binary
+            SLUG: github.com/repos/saschagrunert/kubernix/releases
 
   docs:
     executor: container
@@ -201,7 +217,7 @@ jobs:
             - v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
       - run:
           name: test
-          command: make test
+          command: make coverage
       - save_cache:
           key: v1-test-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:

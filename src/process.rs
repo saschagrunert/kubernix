@@ -35,31 +35,29 @@ pub type Startable = Box<dyn Stoppable + Send>;
 impl Process {
     /// Creates a new `Process` instance by spawning the provided command `cmd`.
     /// If the process creation fails, an `Error` will be returned.
-    pub fn start(config: &Config, command: &[String]) -> Fallible<Process> {
+    pub fn start(config: &Config, command: &'static str, args: &[&str]) -> Fallible<Process> {
         // Prepare the commands
-        let cmd = command
-            .get(0)
-            .map(String::to_owned)
-            .ok_or_else(|| format_err!("No valid command provided"))?;
-        let args: Vec<String> = command.iter().map(|x| x.to_owned()).skip(1).collect();
+        if command.is_empty() {
+            bail!("No valid command provided")
+        }
 
         // Prepare the log dir and file
         create_dir_all(config.root().join(LOG_DIR))?;
-        let mut log_file = config.root().join(LOG_DIR).join(&cmd);
+        let mut log_file = config.root().join(LOG_DIR).join(&command);
         log_file.set_extension("log");
 
         let out_file = File::create(&log_file)?;
         let err_file = out_file.try_clone()?;
 
         // Spawn the process child
-        let mut child = Command::new(&cmd)
-            .args(&args)
+        let mut child = Command::new(command)
+            .args(args)
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file))
             .spawn()?;
 
         let (kill_tx, kill_rx) = channel();
-        let c = cmd.clone();
+        let c = command.to_owned();
         let pid = child.id();
         let watch = spawn(move || {
             // Wait for the process to exit
@@ -75,7 +73,7 @@ impl Process {
         });
 
         Ok(Process {
-            command: cmd,
+            command: command.to_owned(),
             kill: kill_tx,
             log_file,
             pid,
@@ -151,35 +149,35 @@ mod tests {
     #[test]
     fn start_success() -> Fallible<()> {
         let c = test_config()?;
-        Process::start(&c, &["echo".to_owned()])?;
+        Process::start(&c, "echo", &[])?;
         Ok(())
     }
 
     #[test]
     fn start_failure_wrong_root() -> Fallible<()> {
         let c = test_config_wrong_root()?;
-        assert!(Process::start(&c, &["echo".to_owned()]).is_err());
+        assert!(Process::start(&c, "echo", &[]).is_err());
         Ok(())
     }
 
     #[test]
     fn start_failure_no_command() -> Fallible<()> {
         let c = test_config()?;
-        assert!(Process::start(&c, &[]).is_err());
+        assert!(Process::start(&c, "", &[]).is_err());
         Ok(())
     }
 
     #[test]
     fn start_failure_invalid_command() -> Fallible<()> {
         let c = test_config()?;
-        assert!(Process::start(&c, &["invalid_command".to_owned()]).is_err());
+        assert!(Process::start(&c, "invalid_command", &[]).is_err());
         Ok(())
     }
 
     #[test]
     fn wait_ready_success() -> Fallible<()> {
         let c = test_config()?;
-        let mut p = Process::start(&c, &["echo".to_owned(), "test".to_owned()])?;
+        let mut p = Process::start(&c, "echo", &["test"])?;
         p.wait_ready("test")?;
         Ok(())
     }
@@ -187,7 +185,7 @@ mod tests {
     #[test]
     fn wait_ready_failure() -> Fallible<()> {
         let c = test_config()?;
-        let mut p = Process::start(&c, &["echo".to_owned(), "test".to_owned()])?;
+        let mut p = Process::start(&c, "echo", &["test"])?;
         p.readyness_timeout = 1;
         assert!(p.wait_ready("invalid").is_err());
         Ok(())
@@ -196,7 +194,7 @@ mod tests {
     #[test]
     fn stop_success() -> Fallible<()> {
         let c = test_config()?;
-        let mut p = Process::start(&c, &["sleep".to_owned(), "500".to_owned()])?;
+        let mut p = Process::start(&c, "sleep", &["500"])?;
         p.stop()?;
         Ok(())
     }

@@ -1,5 +1,6 @@
 use crate::{pki::Pki, Config};
 use failure::{bail, Fallible};
+use getset::Getters;
 use log::{debug, info};
 use std::{
     fs::create_dir_all,
@@ -8,14 +9,22 @@ use std::{
     process::Command,
 };
 
-#[derive(Default)]
+#[derive(Default, Getters)]
 pub struct KubeConfig {
-    pub kubelet: PathBuf,
-    pub proxy: PathBuf,
-    pub controller_manager: PathBuf,
-    pub scheduler: PathBuf,
-    pub admin: PathBuf,
-    dir: PathBuf,
+    #[get = "pub"]
+    kubelet: PathBuf,
+
+    #[get = "pub"]
+    proxy: PathBuf,
+
+    #[get = "pub"]
+    controller_manager: PathBuf,
+
+    #[get = "pub"]
+    scheduler: PathBuf,
+
+    #[get = "pub"]
+    admin: PathBuf,
 }
 
 impl KubeConfig {
@@ -27,89 +36,84 @@ impl KubeConfig {
         create_dir_all(&kube_dir)?;
 
         let mut kube = KubeConfig::default();
-        kube.dir = kube_dir;
 
         let localhost = Ipv4Addr::LOCALHOST.to_string();
-        kube.setup_kubelet(&pki, ip, hostname)?;
-        kube.setup_proxy(&pki, ip)?;
-        kube.setup_controller_manager(&pki, &localhost)?;
-        kube.setup_scheduler(&pki, &localhost)?;
-        kube.setup_admin(&pki, &localhost)?;
+
+        kube.kubelet = Self::setup_kubelet(&kube_dir, &pki, ip, hostname)?;
+        kube.proxy = Self::setup_proxy(&kube_dir, &pki, ip)?;
+        kube.controller_manager = Self::setup_controller_manager(&kube_dir, &pki, &localhost)?;
+        kube.scheduler = Self::setup_scheduler(&kube_dir, &pki, &localhost)?;
+        kube.admin = Self::setup_admin(&kube_dir, &pki, &localhost)?;
 
         Ok(kube)
     }
 
-    fn setup_kubelet(&mut self, pki: &Pki, ip: &str, hostname: &str) -> Fallible<()> {
-        let target = self.setup_kubeconfig(
+    fn setup_kubelet(dir: &Path, pki: &Pki, ip: &str, hostname: &str) -> Fallible<PathBuf> {
+        Ok(Self::setup_kubeconfig(
+            dir,
             ip,
             hostname,
             &format!("system:node:{}", hostname),
-            pki.ca.cert(),
-            pki.kubelet.cert(),
-            pki.kubelet.key(),
-        )?;
-        self.kubelet = target;
-        Ok(())
+            pki.ca().cert(),
+            pki.kubelet().cert(),
+            pki.kubelet().key(),
+        )?)
     }
 
-    fn setup_proxy(&mut self, pki: &Pki, ip: &str) -> Fallible<()> {
+    fn setup_proxy(dir: &Path, pki: &Pki, ip: &str) -> Fallible<PathBuf> {
         const NAME: &str = "kube-proxy";
-        let target = self.setup_kubeconfig(
+        Ok(Self::setup_kubeconfig(
+            dir,
             ip,
             NAME,
             &format!("system:{}", NAME),
-            pki.ca.cert(),
-            pki.proxy.cert(),
-            pki.proxy.key(),
-        )?;
-        self.proxy = target;
-        Ok(())
+            pki.ca().cert(),
+            pki.proxy().cert(),
+            pki.proxy().key(),
+        )?)
     }
 
-    fn setup_controller_manager(&mut self, pki: &Pki, ip: &str) -> Fallible<()> {
+    fn setup_controller_manager(dir: &Path, pki: &Pki, ip: &str) -> Fallible<PathBuf> {
         const NAME: &str = "kube-controller-manager";
-        let target = self.setup_kubeconfig(
+        Ok(Self::setup_kubeconfig(
+            dir,
             ip,
             NAME,
             &format!("system:{}", NAME),
-            pki.ca.cert(),
-            pki.controller_manager.cert(),
-            pki.controller_manager.key(),
-        )?;
-        self.controller_manager = target;
-        Ok(())
+            pki.ca().cert(),
+            pki.controller_manager().cert(),
+            pki.controller_manager().key(),
+        )?)
     }
 
-    fn setup_scheduler(&mut self, pki: &Pki, ip: &str) -> Fallible<()> {
+    fn setup_scheduler(dir: &Path, pki: &Pki, ip: &str) -> Fallible<PathBuf> {
         const NAME: &str = "kube-scheduler";
-        let target = self.setup_kubeconfig(
+        Ok(Self::setup_kubeconfig(
+            dir,
             ip,
             NAME,
             &format!("system:{}", NAME),
-            pki.ca.cert(),
-            pki.scheduler.cert(),
-            pki.scheduler.key(),
-        )?;
-        self.scheduler = target;
-        Ok(())
+            pki.ca().cert(),
+            pki.scheduler().cert(),
+            pki.scheduler().key(),
+        )?)
     }
 
-    fn setup_admin(&mut self, pki: &Pki, ip: &str) -> Fallible<()> {
+    fn setup_admin(dir: &Path, pki: &Pki, ip: &str) -> Fallible<PathBuf> {
         const NAME: &str = "admin";
-        let target = self.setup_kubeconfig(
+        Ok(Self::setup_kubeconfig(
+            dir,
             ip,
             NAME,
             NAME,
-            pki.ca.cert(),
-            pki.admin.cert(),
-            pki.admin.key(),
-        )?;
-        self.admin = target;
-        Ok(())
+            pki.ca().cert(),
+            pki.admin().cert(),
+            pki.admin().key(),
+        )?)
     }
 
     fn setup_kubeconfig(
-        &mut self,
+        dir: &Path,
         ip: &str,
         name: &str,
         user: &str,
@@ -118,7 +122,7 @@ impl KubeConfig {
         key: &Path,
     ) -> Fallible<PathBuf> {
         debug!("Creating kubeconfig for {}", name);
-        let target = Path::new(&self.dir).join(format!("{}.kubeconfig", name));
+        let target = dir.join(format!("{}.kubeconfig", name));
         let kubeconfig_arg = format!("--kubeconfig={}", target.display());
 
         let output = Command::new("kubectl")
@@ -203,5 +207,19 @@ impl KubeConfig {
 
         debug!("Kubeconfig created for {}", name);
         Ok(target)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::tests::test_config;
+
+    #[test]
+    fn new_success() -> Fallible<()> {
+        let c = test_config()?;
+        let p = Pki::new(&c, "", "")?;
+        KubeConfig::new(&c, &p, "", "")?;
+        Ok(())
     }
 }
