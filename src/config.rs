@@ -1,96 +1,138 @@
 //! Configuration related structures
-use derive_builder::Builder;
+use clap::{crate_version, AppSettings, Clap};
 use failure::{format_err, Fallible};
 use getset::Getters;
 use ipnetwork::IpNetwork;
-use lazy_static::lazy_static;
 use log::LevelFilter;
 use serde::{Deserialize, Serialize};
-use serde_yaml::Value;
 use std::{
-    error::Error,
     fmt::Debug,
     fs::{self, canonicalize, create_dir_all, read_to_string},
     path::PathBuf,
-    str::FromStr,
 };
 use toml;
 
-#[derive(Builder, Clone, Debug, Deserialize, Getters, Serialize)]
-#[serde(default, rename_all = "kebab-case")]
-#[builder(default, setter(into, strip_option))]
+#[derive(Clap, Clone, Debug, Deserialize, Getters, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[clap(
+    after_help = "More info at: https://github.com/saschagrunert/kubernix",
+    author = "Sascha Grunert <mail@saschagrunert.de>",
+    raw(global_setting = "AppSettings::ColoredHelp"),
+    raw(version = "crate_version!()")
+)]
 /// The global configuration
 pub struct Config {
-    /// The root path during runtime
     #[get = "pub"]
+    #[clap(subcommand)]
+    /// All available subcommands
+    subcommand: Option<SubCommand>,
+
+    #[get = "pub"]
+    #[clap(
+        default_value = "kubernix-run",
+        env = "KUBERNIX_RUN",
+        global = true,
+        help = "Path where all the runtime data is stored",
+        long = "root",
+        short = "r",
+        value_name = "PATH"
+    )]
+    /// The root path during runtime
     root: PathBuf,
 
-    /// The logging level of the application
     #[get = "pub"]
+    #[clap(
+        default_value = "info",
+        env = "KUBERNIX_LOG_LEVEL",
+        help = "Set the log level verbosity (trace, debug, info, warn, error, off)",
+        long = "log-level",
+        short = "l",
+        value_name = "LEVEL"
+    )]
+    /// The logging level of the application
     log_level: LevelFilter,
 
-    /// The Container Networking CIDR for CRI-O
     #[get = "pub"]
+    #[clap(
+        default_value = "10.100.0.0/16",
+        env = "KUBERNIX_CRIO_CIDR",
+        help = "The CIDR used for the CRI-O CNI network",
+        long = "crio-cidr",
+        short = "c",
+        value_name = "CIDR"
+    )]
+    /// The CIDR used for the CRI-O CNI network
     crio_cidr: IpNetwork,
 
-    /// The Cluster Network CIDR
     #[get = "pub"]
+    #[clap(
+        default_value = "10.200.0.0/16",
+        env = "KUBERNIX_CLUSTER_CIDR",
+        help = "The CIDR used for the whole cluster network",
+        long = "cluster-cidr",
+        short = "u",
+        value_name = "CIDR"
+    )]
+    /// The CIDR used for the whole cluster network
     cluster_cidr: IpNetwork,
 
-    /// The Cluster Network Service CIDR
     #[get = "pub"]
+    #[clap(
+        default_value = "10.50.0.0/16",
+        env = "KUBERNIX_SERVICE_CIDR",
+        help = "The CIDR used for the service network",
+        long = "service-cidr",
+        short = "s",
+        value_name = "CIDR"
+    )]
+    /// The CIDR used for the service network
     service_cidr: IpNetwork,
 
-    /// The Nix package overlay to be used
     #[get = "pub"]
+    #[clap(
+        env = "KUBERNIX_OVERLAY",
+        help = "The Nix package overlay to be used",
+        long = "overlay",
+        short = "o",
+        value_name = "PATH"
+    )]
+    /// The Nix package overlay to be used
     overlay: Option<PathBuf>,
 
-    /// Do not clear the current env during bootstrap
     #[get = "pub"]
+    #[clap(
+        help = "Do not clear the current env during bootstrap",
+        long = "impure",
+        short = "i"
+    )]
+    /// Do not clear the current env during bootstrap
     impure: bool,
+
+    #[get = "pub"]
+    #[clap(
+        env = "KUBERNIX_PACKAGES",
+        help = "Additional Nix dependencies to be added to the environment",
+        long = "packages",
+        multiple = true,
+        short = "p",
+        value_name = "PACKAGE"
+    )]
+    /// Additional dependencies to be added to the environment
+    packages: Vec<String>,
+}
+
+/// Possible subcommands
+#[derive(Clap, Clone, Debug, Deserialize, Serialize)]
+pub enum SubCommand {
+    /// `shell` subcommand specified
+    #[clap(name = "shell", about = "Spawn an additional shell session")]
+    Shell,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        DEFAULT_CONFIG.clone()
+        Self::parse()
     }
-}
-
-lazy_static! {
-    static ref DEFAULT_CONFIG: Config = {
-        /// Parse an internal value from a YAML Value.
-        fn parse_from_yaml<T>(value: &Value, key: &str) -> Fallible<T>
-        where
-            T: FromStr,
-            <T as FromStr>::Err: Debug + Error + Send + Sync,
-        {
-            value
-                .get("args")
-                .ok_or_else(|| format_err!("Unable to get args"))?
-                .as_sequence()
-                .ok_or_else(|| format_err!("Unable to get sequence"))?
-                .iter()
-                .find(|x| x.get(key).is_some())
-                .ok_or_else(|| format_err!("Unable to find {}", key))?
-                .get(key)
-                .ok_or_else(|| format_err!("Unable to get {}", key))?
-                .get("default_value")
-                .ok_or_else(|| format_err!("Unable to get default value"))?
-                .as_str()
-                .ok_or_else(|| format_err!("Unable to get string reference"))?
-                .parse().map_err(|e| format_err!("Unable to parse value: {}", e))
-        }
-        let yaml = serde_yaml::from_str(include_str!("cli.yaml")).unwrap();
-        Config {
-            root: parse_from_yaml(&yaml, "root").unwrap(),
-            log_level: parse_from_yaml(&yaml, "log-level").unwrap(),
-            crio_cidr: parse_from_yaml(&yaml, "crio-cidr").unwrap(),
-            cluster_cidr: parse_from_yaml(&yaml, "cluster-cidr").unwrap(),
-            service_cidr: parse_from_yaml(&yaml, "service-cidr").unwrap(),
-            overlay: None,
-            impure: false,
-        }
-    };
 }
 
 impl Config {
@@ -133,10 +175,8 @@ pub mod tests {
     use tempfile::tempdir;
 
     pub fn test_config() -> Fallible<Config> {
-        let mut c = ConfigBuilder::default()
-            .root(tempdir()?.into_path())
-            .build()
-            .map_err(|e| format_err!("Unable to build config: {}", e))?;
+        let mut c = Config::default();
+        c.root = tempdir()?.into_path();
         c.canonicalize_root()?;
         Ok(c)
     }
@@ -187,6 +227,8 @@ log-level = "DEBUG"
 crio-cidr = "1.1.1.1/16"
 cluster-cidr = "2.2.2.2/16"
 service-cidr = "3.3.3.3/24"
+impure = false
+packages = []
             "#,
         )?;
         c.update_from_file()?;
@@ -204,18 +246,6 @@ service-cidr = "3.3.3.3/24"
         c.root = tempdir()?.into_path();
         fs::write(c.root.join(Config::FILENAME), "invalid")?;
         assert!(c.update_from_file().is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn builder_success() -> Fallible<()> {
-        let c = ConfigBuilder::default()
-            .root("root")
-            .log_level(LevelFilter::Warn)
-            .build()
-            .map_err(|e| format_err!("Unable to build config: {}", e))?;
-        assert_eq!(c.root(), Path::new("root"));
-        assert_eq!(c.log_level(), &LevelFilter::Warn);
         Ok(())
     }
 }

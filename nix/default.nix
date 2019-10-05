@@ -3,7 +3,7 @@ let
   pkgs = import ./nixpkgs.nix {};
 in
 pkgs.stdenv.mkDerivation {
-  buildInputs = import ./deps-minimal.nix;
+  buildInputs = import ./deps.nix;
   LANG = "en_US.UTF-8";
   name = "kubernix-shell";
 }
