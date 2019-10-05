@@ -4,12 +4,21 @@ use crate::{
 };
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
+use nix::{
+    mount::{umount2, MntFlags},
+    sys::signal::{kill, Signal},
+    unistd::Pid,
+};
+use psutil::process;
 use serde_json::{json, to_string_pretty};
 use std::{
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
     process::Command,
+    thread::sleep,
+    time::Duration,
 };
+use walkdir::WalkDir;
 
 pub struct Crio {
     process: Process,
@@ -59,16 +68,20 @@ impl Crio {
             }))?,
         )?;
 
-        let mut process = Process::start(
+        let run_root = dir.join("run");
+        let storage_driver = "overlay";
+        let storage_root = dir.join("storage");
+
+        let mut process = Process::start_with_dead_closure(
             config,
             "crio",
             &[
                 "--log-level=debug",
-                "--storage-driver=overlay",
+                &format!("--storage-driver={}", storage_driver),
                 &format!("--conmon={}", conmon.display()),
                 &format!("--listen={}", socket.display()),
-                &format!("--root={}", dir.join("storage").display()),
-                &format!("--runroot={}", dir.join("run").display()),
+                &format!("--root={}", storage_root.display()),
+                &format!("--runroot={}", run_root.display()),
                 &format!("--cni-config-dir={}", cni_config.display()),
                 &format!("--cni-plugin-dir={}", cni.display()),
                 "--registry=docker.io",
@@ -80,6 +93,7 @@ impl Crio {
                 ),
                 "--default-runtime=local-runc",
             ],
+            move || Self::cleanup(&run_root, &storage_root, &storage_driver),
         )?;
 
         process.wait_ready("sandboxes:")?;
@@ -90,6 +104,58 @@ impl Crio {
         }))
     }
 
+    /// Try to cleanup a dead CRI-O process
+    fn cleanup(run_root: &Path, storage_root: &Path, storage_driver: &str) {
+        // Remove all conmon processes
+        loop {
+            match process::all() {
+                Err(e) => {
+                    debug!("Unable to retrieve processes: {}", e);
+                    sleep(Duration::from_millis(100));
+                }
+                Ok(procs) => {
+                    let mut found = false;
+                    for p in procs.iter().filter(|p| &p.comm == "conmon") {
+                        debug!("Killing conmon process {}", p.pid);
+                        if let Err(e) = kill(Pid::from_raw(p.pid), Signal::SIGTERM) {
+                            debug!("Unable to kill PID {}: {}", p.pid, e);
+                        }
+                        found = true;
+                    }
+                    if !found {
+                        debug!("All conmon processes exited");
+                        break;
+                    }
+                    sleep(Duration::from_millis(100));
+                }
+            }
+        }
+
+        // Umount every shared memory (SHM)
+        for entry in WalkDir::new(run_root)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|x| {
+                x.path()
+                    .to_str()
+                    .map(|e| e.contains("shm"))
+                    .unwrap_or(false)
+            })
+        {
+            debug!("Umounting: {}", entry.path().display());
+            if let Err(e) = umount2(entry.path(), MntFlags::MNT_FORCE) {
+                debug!("Unable to umount '{}': {}", entry.path().display(), e)
+            }
+        }
+
+        // Umount the storage dir
+        let storage = storage_root.join(storage_driver);
+        if let Err(e) = umount2(&storage, MntFlags::MNT_FORCE) {
+            debug!("Unable to umount '{}': {}", storage.display(), e);
+        }
+    }
+
+    /// Remove all containers via crictl invocations
     fn remove_all_containers(&self) -> Fallible<()> {
         debug!("Removing all CRI-O workloads");
         let env_value = format!("unix://{}", self.socket.display());

@@ -34,7 +34,8 @@ impl Kubelet {
             Kubernix::dns(config)?,
             config.crio_cidr(),
             pki.kubelet().cert().display(),
-            pki.kubelet().key().display()
+            pki.kubelet().key().display(),
+            dir.display()
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
@@ -50,7 +51,6 @@ impl Kubelet {
                 "--image-pull-progress-deadline=2m",
                 "--network-plugin=cni",
                 "--register-node=true",
-                "--fail-swap-on=false",
                 "--v=2",
             ],
         )?;

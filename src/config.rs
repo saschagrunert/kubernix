@@ -160,7 +160,7 @@ impl Config {
         let file = self.root().join(Self::FILENAME);
         *self = toml::from_str(&read_to_string(&file).map_err(|e| {
             format_err!(
-                "Unable to read configuration file '{}': {}",
+                "Unable to read expected configuration file '{}': {}",
                 file.display(),
                 e
             )
