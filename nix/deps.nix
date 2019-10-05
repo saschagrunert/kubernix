@@ -1,5 +1,5 @@
 let
-  pkgs = import ./nixpkgs.nix {};
+  pkgs = import ./nixpkgs.nix { overlays = [(import ./overlay.nix)]; };
   deps = with pkgs; [
     bash
     cacert

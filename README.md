@@ -163,9 +163,39 @@ KuberNix has some configuration possibilities, which are currently:
 | `-c, --crio-cidr`    | CIDR used for the CRI-O CNI network       | `10.100.0.0/16` |
 | `-u, --cluster-cidr` | CIDR used for the whole cluster network   | `10.200.0.0/16` |
 | `-s, --service-cidr` | CIDR used for the service network         | `10.50.0.0/24`  |
+| `-o, --overlay`      | Nix package overlay to be used            |                 |
 
 Please ensure that the CIDRs are not overlapping with existing local networks
 and that your setup has access to the internet.
+
+### Overlays
+
+Overlays provide a method to extend and change Nix derivations. This means, that
+we're able to change dependencies during the cluster bootstrapping process. For
+example, we can exchange the used CRI-O version to use a local checkout by
+writing this simple `overlay.nix`:
+
+```nix
+self: super: {
+  cri-o = super.cri-o.overrideAttrs(old: {
+    src = ../path/to/go/src/github.com/cri-o/cri-o;
+  });
+}
+```
+
+Now we can run KuberNix with the `--overlay` command line argument:
+
+```
+$ sudo kubernix --overlay overlay.nix
+[INFO  kubernix] Nix environment not found, bootstrapping one
+[INFO  kubernix] Using custom overlay 'overlay.nix'
+these derivations will be built:
+  /nix/store/9jb43i2mqjc94mbx30d9nrx529w6lngw-cri-o-1.15.2.drv
+  building '/nix/store/9jb43i2mqjc94mbx30d9nrx529w6lngw-cri-o-1.15.2.drv'...
+```
+
+Using this technique makes it easy for daily development of Kubernetes
+components, by simply changing it to local paths or trying out new versions.
 
 ## Contributing
 

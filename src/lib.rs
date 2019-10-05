@@ -235,6 +235,22 @@ impl Kubernix {
         )?;
         fs::write(nix_dir.join("deps.nix"), include_str!("../nix/deps.nix"))?;
 
+        // Apply the overlay if existing
+        let target_overlay = nix_dir.join("overlay.nix");
+        match config.overlay() {
+            // User defined overlay
+            Some(overlay) => {
+                info!("Using custom overlay '{}'", overlay.display());
+                fs::copy(overlay, target_overlay)?;
+            }
+
+            // The default overlay
+            None => {
+                debug!("Using default overlay");
+                fs::write(target_overlay, include_str!("../nix/overlay.nix"))?;
+            }
+        }
+
         // Run the shell
         Self::run_nix_shell(
             &config,

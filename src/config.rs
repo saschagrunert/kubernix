@@ -18,7 +18,7 @@ use toml;
 
 #[derive(Builder, Clone, Debug, Deserialize, Getters, Serialize)]
 #[serde(default, rename_all = "kebab-case")]
-#[builder(default, setter(into))]
+#[builder(default, setter(into, strip_option))]
 /// The global configuration
 pub struct Config {
     /// The root path during runtime
@@ -29,17 +29,21 @@ pub struct Config {
     #[get = "pub"]
     log_level: LevelFilter,
 
-    /// Container Networking CIDR for CRI-O
+    /// The Container Networking CIDR for CRI-O
     #[get = "pub"]
     crio_cidr: IpNetwork,
 
-    /// Cluster CIDR
+    /// The Cluster Network CIDR
     #[get = "pub"]
     cluster_cidr: IpNetwork,
 
-    /// Service CIDR
+    /// The Cluster Network Service CIDR
     #[get = "pub"]
     service_cidr: IpNetwork,
+
+    /// The Nix package overlay to be used
+    #[get = "pub"]
+    overlay: Option<PathBuf>,
 }
 
 impl Default for Config {
@@ -79,6 +83,7 @@ lazy_static! {
             crio_cidr: parse_from_yaml(&yaml, "crio-cidr").unwrap(),
             cluster_cidr: parse_from_yaml(&yaml, "cluster-cidr").unwrap(),
             service_cidr: parse_from_yaml(&yaml, "service-cidr").unwrap(),
+            overlay: None,
         }
     };
 }
