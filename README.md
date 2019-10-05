@@ -156,15 +156,16 @@ access the log and configuration files for further processing.
 
 KuberNix has some configuration possibilities, which are currently:
 
-| CLI argument         | Description                                   | Default         | Environment Variable    |
-| -------------------- | --------------------------------------------- | --------------- | ----------------------- |
-| `-r, --root`         | Path where all the runtime data is stored     | `kubernix-run`  | `KUBERNIX_ROOT`         |
-| `-l, --log-level`    | Logging verbosity                             | `info`          | `KUBERNIX_LOG_LEVEL`    |
-| `-c, --crio-cidr`    | CIDR used for the CRI-O CNI network           | `10.100.0.0/16` | `KUBERNIX_CRIO_CIDR`    |
-| `-u, --cluster-cidr` | CIDR used for the whole cluster network       | `10.200.0.0/16` | `KUBERNIX_CLUSTER_CIDR` |
-| `-s, --service-cidr` | CIDR used for the service network             | `10.50.0.0/24`  | `KUBERNIX_SERVICE_CIDR` |
-| `-o, --overlay`      | Nix package overlay to be used                |                 | `KUBERNIX_OVERLAY`      |
-| `-i, --impure`       | Do not clear the current env during bootstrap | `false`         |
+| CLI argument         | Description                                                | Default         | Environment Variable    |
+| -------------------- | ---------------------------------------------------------- | --------------- | ----------------------- |
+| `-r, --root`         | Path where all the runtime data is stored                  | `kubernix-run`  | `KUBERNIX_ROOT`         |
+| `-l, --log-level`    | Logging verbosity                                          | `info`          | `KUBERNIX_LOG_LEVEL`    |
+| `-c, --crio-cidr`    | CIDR used for the CRI-O CNI network                        | `10.100.0.0/16` | `KUBERNIX_CRIO_CIDR`    |
+| `-u, --cluster-cidr` | CIDR used for the whole cluster network                    | `10.200.0.0/16` | `KUBERNIX_CLUSTER_CIDR` |
+| `-s, --service-cidr` | CIDR used for the service network                          | `10.50.0.0/24`  | `KUBERNIX_SERVICE_CIDR` |
+| `-o, --overlay`      | Nix package overlay to be used                             |                 | `KUBERNIX_OVERLAY`      |
+| `-p, --packages`     | Additional Nix dependencies to be added to the environment |                 | `KUBERNIX_PACKAGES`     |
+| `-i, --impure`       | Do not clear the current env during bootstrap              | `false`         |                         |
 
 Please ensure that the CIDRs are not overlapping with existing local networks
 and that your setup has access to the internet.
@@ -184,7 +185,7 @@ self: super: {
 }
 ```
 
-Now we can run KuberNix with the `--overlay` command line argument:
+Now we can run KuberNix with the `--overlay, -o` command line argument:
 
 ```
 $ sudo kubernix --overlay overlay.nix
@@ -197,6 +198,29 @@ these derivations will be built:
 
 Using this technique makes it easy for daily development of Kubernetes
 components, by simply changing it to local paths or trying out new versions.
+
+#### Additional Packages
+
+It is also possible to add additional packages to the KuberNix environment by
+specifying them via the `--packages, -p` command line parameter. This way you
+can easily utilize additional tools in a reproducible way. For example, when to
+comes to using always the same [Helm][20] version, you could simply run:
+
+```
+$ sudo kubernix -p kubernetes-helm
+[INFO  kubernix] Nix environment not found, bootstrapping one
+[INFO  kubernix] Bootstrapping cluster inside nix environment
+...
+> helm init
+> helm version
+Client: &version.Version{SemVer:"v2.14.3", GitCommit:"", GitTreeState:"clean"}
+Server: &version.Version{SemVer:"v2.14.3", GitCommit:"0e7f3b6637f7af8fcfddb3d2941fcc7cbebb0085", GitTreeState:"clean"}
+```
+
+All available packages are listed in the [official Nix website][21].
+
+[20]: https://helm.sh
+[21]: https://nixos.org/nixos/packages.html?channel=nixpkgs-unstable
 
 #### Purity
 

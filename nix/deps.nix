@@ -14,7 +14,6 @@ let
     iproute
     iptables
     kubernetes
-    kubernetes-helm
     runc
     socat
     utillinux
