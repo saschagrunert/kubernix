@@ -11,7 +11,7 @@ pub fn main() {
 
 fn run() -> Fallible<()> {
     // Parse CLI arguments
-    let config = Config::new();
+    let config = Config::default();
 
     if config.subcommand().is_some() {
         // Spawn only a new shell

@@ -129,13 +129,14 @@ pub enum SubCommand {
     Shell,
 }
 
-impl Config {
-    const FILENAME: &'static str = "kubernix.toml";
-
-    /// Parse the config from the command line
-    pub fn new() -> Self {
+impl Default for Config {
+    fn default() -> Self {
         Self::parse()
     }
+}
+
+impl Config {
+    const FILENAME: &'static str = "kubernix.toml";
 
     /// Make the configs root path absolute
     pub fn canonicalize_root(&mut self) -> Fallible<()> {
@@ -174,7 +175,7 @@ pub mod tests {
     use tempfile::tempdir;
 
     pub fn test_config() -> Fallible<Config> {
-        let mut c = Config::new();
+        let mut c = Config::default();
         c.root = tempdir()?.into_path();
         c.canonicalize_root()?;
         Ok(c)
@@ -188,35 +189,35 @@ pub mod tests {
 
     #[test]
     fn canonicalize_root_success() -> Fallible<()> {
-        let mut c = Config::new();
+        let mut c = Config::default();
         c.root = tempdir()?.into_path();
         c.canonicalize_root()
     }
 
     #[test]
     fn canonicalize_root_failure() {
-        let mut c = Config::new();
+        let mut c = Config::default();
         c.root = Path::new("/").join("proc").join("invalid");
         assert!(c.canonicalize_root().is_err())
     }
 
     #[test]
     fn to_file_success() -> Fallible<()> {
-        let mut c = Config::new();
+        let mut c = Config::default();
         c.root = tempdir()?.into_path();
         c.to_file()
     }
 
     #[test]
     fn to_file_failure() {
-        let mut c = Config::new();
+        let mut c = Config::default();
         c.root = Path::new("/").join("proc").join("invalid");
         assert!(c.to_file().is_err())
     }
 
     #[test]
     fn update_from_file_success() -> Fallible<()> {
-        let mut c = Config::new();
+        let mut c = Config::default();
         c.root = tempdir()?.into_path();
         fs::write(
             c.root.join(Config::FILENAME),
@@ -241,7 +242,7 @@ additional-deps = []
 
     #[test]
     fn update_from_file_failure() -> Fallible<()> {
-        let mut c = Config::new();
+        let mut c = Config::default();
         c.root = tempdir()?.into_path();
         fs::write(c.root.join(Config::FILENAME), "invalid")?;
         assert!(c.update_from_file().is_err());
