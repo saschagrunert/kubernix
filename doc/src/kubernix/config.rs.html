@@ -249,6 +249,7 @@
 <span id="249">249</span>
 <span id="250">250</span>
 <span id="251">251</span>
+<span id="252">252</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
 <span class="kw">use</span> <span class="ident">clap</span>::{<span class="ident">crate_version</span>, <span class="ident">AppSettings</span>, <span class="ident">Clap</span>};
@@ -296,8 +297,9 @@
     <span class="attribute">#[<span class="ident">clap</span>(
         <span class="ident">default_value</span> <span class="op">=</span> <span class="string">&quot;info&quot;</span>,
         <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_LOG_LEVEL&quot;</span>,
-        <span class="ident">help</span> <span class="op">=</span> <span class="string">&quot;Set the log level verbosity (trace, debug, info, warn, error, off)&quot;</span>,
+        <span class="ident">help</span> <span class="op">=</span> <span class="string">&quot;Set the log level verbosity&quot;</span>,
         <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;log-level&quot;</span>,
+        <span class="ident">raw</span>(<span class="ident">possible_values</span> <span class="op">=</span> <span class="string">r#&quot;&amp;[&quot;trace&quot;, &quot;debug&quot;, &quot;info&quot;, &quot;warn&quot;, &quot;error&quot;, &quot;off&quot;]&quot;#</span>),
         <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;l&quot;</span>,
         <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;LEVEL&quot;</span>
     )]</span>
