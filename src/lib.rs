@@ -374,7 +374,7 @@ impl Kubernix {
     fn umount(&self) {
         debug!("Removing active mounts");
         let now = Instant::now();
-        while now.elapsed().as_secs() < 10 {
+        while now.elapsed().as_secs() < 5 {
             if let Ok(mounts) = MountIter::new() {
                 let mut found_mount = false;
                 mounts
