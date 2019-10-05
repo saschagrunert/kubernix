@@ -13,10 +13,10 @@ let
     ];
   });
   deps = import ./deps.nix;
-  cargo-kcov = pkgs.callPackage ./cargo-kcov.nix {};
+  grcov = pkgs.callPackage ./grcov.nix {};
 in
 pkgs.stdenv.mkDerivation {
-  buildInputs = with pkgs; deps ++ [ cargo-kcov git kcov ruststable ];
+  buildInputs = with pkgs; deps ++ [ git grcov ruststable ];
   LANG = "en_US.UTF-8";
   name = "build-shell";
 }
