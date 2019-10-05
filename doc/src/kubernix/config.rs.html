@@ -419,7 +419,7 @@
         <span class="kw">let</span> <span class="ident">file</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">FILENAME</span>);
         <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="ident">toml</span>::<span class="ident">from_str</span>(<span class="kw-2">&amp;</span><span class="ident">read_to_string</span>(<span class="kw-2">&amp;</span><span class="ident">file</span>).<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> {
             <span class="macro">format_err</span><span class="macro">!</span>(
-                <span class="string">&quot;Unable to read configuration file &#39;{}&#39;: {}&quot;</span>,
+                <span class="string">&quot;Unable to read expected configuration file &#39;{}&#39;: {}&quot;</span>,
                 <span class="ident">file</span>.<span class="ident">display</span>(),
                 <span class="ident">e</span>
             )
