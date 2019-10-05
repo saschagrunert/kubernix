@@ -398,7 +398,7 @@
 <span class="kw">mod</span> <span class="ident">proxy</span>;
 <span class="kw">mod</span> <span class="ident">scheduler</span>;
 
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">config</span>::{<span class="ident">Config</span>, <span class="ident">ConfigBuilder</span>};
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">config</span>::{<span class="ident">Config</span>, <span class="ident">SubCommand</span>};
 
 <span class="kw">use</span> <span class="ident">apiserver</span>::<span class="ident">APIServer</span>;
 <span class="kw">use</span> <span class="ident">controllermanager</span>::<span class="ident">ControllerManager</span>;
@@ -617,8 +617,8 @@
             <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/default.nix&quot;</span>),
         )<span class="question-mark">?</span>;
         <span class="ident">fs</span>::<span class="ident">write</span>(
-            <span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;deps-minimal.nix&quot;</span>),
-            <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/deps-minimal.nix&quot;</span>),
+            <span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;deps.nix&quot;</span>),
+            <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/deps.nix&quot;</span>).<span class="ident">replace</span>(<span class="string">&quot;/* PACKAGES */&quot;</span>, <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">packages</span>().<span class="ident">join</span>(<span class="string">&quot; &quot;</span>)),
         )<span class="question-mark">?</span>;
 
         <span class="comment">// Apply the overlay if existing</span>
