@@ -34,7 +34,11 @@ use env_logger::Builder;
 use failure::{bail, format_err, Fallible};
 use ipnetwork::IpNetwork;
 use log::{debug, error, info};
-use nix::unistd::getuid;
+use nix::{
+    mount::{umount2, MntFlags},
+    unistd::getuid,
+};
+use proc_mounts::MountIter;
 use rayon::scope;
 use std::{
     env::{current_exe, split_paths, var, var_os},
@@ -43,6 +47,8 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
     process::Command,
+    thread::sleep,
+    time::{Duration, Instant},
 };
 
 const CRIO_DIR: &str = "crio";
@@ -364,11 +370,36 @@ impl Kubernix {
             _ => bail!("Service CIDR is not for IPv4"),
         }
     }
+
+    /// Remove all stale mounts
+    fn umount(&self) {
+        debug!("Removing active mounts");
+        let now = Instant::now();
+        while now.elapsed().as_secs() < 10 {
+            if let Ok(mounts) = MountIter::new() {
+                let mut found_mount = false;
+                mounts
+                    .filter_map(|x| x.ok())
+                    .filter(|x| x.dest.starts_with(self.config.root()))
+                    .for_each(|m| {
+                        found_mount = true;
+                        debug!("Removing mount: {}", m.dest.display());
+                        if let Err(e) = umount2(&m.dest, MntFlags::MNT_FORCE) {
+                            debug!("Unable to umount '{}': {}", m.dest.display(), e);
+                        }
+                    });
+                if !found_mount {
+                    break;
+                }
+            }
+        }
+    }
 }
 
 impl Drop for Kubernix {
     fn drop(&mut self) {
         info!("Cleaning up");
         self.stop();
+        self.umount();
     }
 }

@@ -38,21 +38,6 @@ impl Process {
     /// Creates a new `Process` instance by spawning the provided command `cmd`.
     /// If the process creation fails, an `Error` will be returned.
     pub fn start(config: &Config, command: &'static str, args: &[&str]) -> Fallible<Process> {
-        Self::start_with_dead_closure(config, command, args, || {})
-    }
-
-    /// Creates a new `Process` instance by spawning the provided command `cmd`.
-    /// The provided exit closure will be called if the process died.
-    /// If the process creation fails, an `Error` will be returned.
-    pub fn start_with_dead_closure<F>(
-        config: &Config,
-        command: &'static str,
-        args: &[&str],
-        on_dead: F,
-    ) -> Fallible<Process>
-    where
-        F: Fn() + Send + 'static,
-    {
         // Prepare the commands
         if command.is_empty() {
             bail!("No valid command provided")
@@ -83,9 +68,6 @@ impl Process {
             // No kill send, we assume that the process died
             if kill_rx.try_recv().is_err() {
                 error!("Process '{}' died on {}", c, status);
-
-                // Call the exit closure
-                on_dead();
             } else {
                 info!("Process '{}' exited on {}", c, status);
             }
@@ -140,7 +122,9 @@ impl Stoppable for Process {
         debug!("Stopping process '{}'", self.command);
 
         // Indicate that this shutdown is intended
-        self.kill.send(())?;
+        self.kill
+            .send(())
+            .map_err(|e| format_err!("Unable to send kill signal to process: {}", e))?;
 
         // Send SIGTERM to the process
         kill(Pid::from_raw(self.pid as i32), Signal::SIGTERM)?;

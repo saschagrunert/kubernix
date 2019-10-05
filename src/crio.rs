@@ -3,9 +3,8 @@ use crate::{
     Config, Kubernix, CRIO_DIR, RUNTIME_ENV,
 };
 use failure::{bail, format_err, Fallible};
-use log::{debug, info};
+use log::{debug, info, warn};
 use nix::{
-    mount::{umount2, MntFlags},
     sys::signal::{kill, Signal},
     unistd::Pid,
 };
@@ -18,7 +17,6 @@ use std::{
     thread::sleep,
     time::Duration,
 };
-use walkdir::WalkDir;
 
 pub struct Crio {
     process: Process,
@@ -68,20 +66,16 @@ impl Crio {
             }))?,
         )?;
 
-        let run_root = dir.join("run");
-        let storage_driver = "overlay";
-        let storage_root = dir.join("storage");
-
-        let mut process = Process::start_with_dead_closure(
+        let mut process = Process::start(
             config,
             "crio",
             &[
                 "--log-level=debug",
-                &format!("--storage-driver={}", storage_driver),
+                "--storage-driver=overlay",
                 &format!("--conmon={}", conmon.display()),
                 &format!("--listen={}", socket.display()),
-                &format!("--root={}", storage_root.display()),
-                &format!("--runroot={}", run_root.display()),
+                &format!("--root={}", dir.join("storage").display()),
+                &format!("--runroot={}", dir.join("run").display()),
                 &format!("--cni-config-dir={}", cni_config.display()),
                 &format!("--cni-plugin-dir={}", cni.display()),
                 "--registry=docker.io",
@@ -93,7 +87,6 @@ impl Crio {
                 ),
                 "--default-runtime=local-runc",
             ],
-            move || Self::cleanup(&run_root, &storage_root, &storage_driver),
         )?;
 
         process.wait_ready("sandboxes:")?;
@@ -104,8 +97,8 @@ impl Crio {
         }))
     }
 
-    /// Try to cleanup a dead CRI-O process
-    fn cleanup(run_root: &Path, storage_root: &Path, storage_driver: &str) {
+    /// Try to cleanup all related resources
+    fn stop_conmons(&self) {
         // Remove all conmon processes
         loop {
             match process::all() {
@@ -129,29 +122,6 @@ impl Crio {
                     sleep(Duration::from_millis(100));
                 }
             }
-        }
-
-        // Umount every shared memory (SHM)
-        for entry in WalkDir::new(run_root)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|x| {
-                x.path()
-                    .to_str()
-                    .map(|e| e.contains("shm"))
-                    .unwrap_or(false)
-            })
-        {
-            debug!("Umounting: {}", entry.path().display());
-            if let Err(e) = umount2(entry.path(), MntFlags::MNT_FORCE) {
-                debug!("Unable to umount '{}': {}", entry.path().display(), e)
-            }
-        }
-
-        // Umount the storage dir
-        let storage = storage_root.join(storage_driver);
-        if let Err(e) = umount2(&storage, MntFlags::MNT_FORCE) {
-            debug!("Unable to umount '{}': {}", storage.display(), e);
         }
     }
 
@@ -195,9 +165,15 @@ impl Crio {
 impl Stoppable for Crio {
     fn stop(&mut self) -> Fallible<()> {
         // Remove all running containers
-        self.remove_all_containers()?;
+        if let Err(e) = self.remove_all_containers() {
+            warn!("Unable to remove CRI-O containers: {}", e)
+        }
 
-        // Stop the process
-        self.process.stop()
+        // Stop the process, should never really fail
+        self.process.stop()?;
+
+        // Remove conmon processes
+        self.stop_conmons();
+        Ok(())
     }
 }
