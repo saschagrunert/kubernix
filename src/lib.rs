@@ -240,9 +240,12 @@ impl Kubernix {
             nix_dir.join("default.nix"),
             include_str!("../nix/default.nix"),
         )?;
+
+        let packages = &config.packages().join(" ");
+        debug!("Adding additional packages: {}", packages);
         fs::write(
             nix_dir.join("deps.nix"),
-            include_str!("../nix/deps.nix").replace("/* PACKAGES */", &config.packages().join(" ")),
+            include_str!("../nix/deps.nix").replace("/* PACKAGES */", packages),
         )?;
 
         // Apply the overlay if existing
