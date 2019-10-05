@@ -1,6 +1,6 @@
-{ lib, fetchurl, mkDerivation }:
+{ lib, fetchurl, stdenv }:
 
-mkDerivation rec {
+stdenv.mkDerivation rec {
   name = "grcov";
   version = "0.5.4";
 
