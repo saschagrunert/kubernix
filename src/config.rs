@@ -44,8 +44,9 @@ pub struct Config {
     #[clap(
         default_value = "info",
         env = "KUBERNIX_LOG_LEVEL",
-        help = "Set the log level verbosity (trace, debug, info, warn, error, off)",
+        help = "Set the log level verbosity",
         long = "log-level",
+        raw(possible_values = r#"&["trace", "debug", "info", "warn", "error", "off"]"#),
         short = "l",
         value_name = "LEVEL"
     )]
