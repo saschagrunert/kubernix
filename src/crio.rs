@@ -120,6 +120,8 @@ impl Crio {
                         debug!("All conmon processes exited");
                         break;
                     }
+                    // Give the signal time to arrive
+                    sleep(Duration::from_millis(100));
                 }
             }
         }
