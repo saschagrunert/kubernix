@@ -15,7 +15,7 @@ mod process;
 mod proxy;
 mod scheduler;
 
-pub use config::{Config, SubCommand};
+pub use config::Config;
 
 use apiserver::APIServer;
 use controllermanager::ControllerManager;
