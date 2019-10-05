@@ -46,10 +46,11 @@ use std::{
 };
 
 const CRIO_DIR: &str = "crio";
-const KUBECONFIG_ENV: &str = "KUBECONFIG";
-const KUBERNIX_ENV: &str = "kubernix.env";
 const LOG_DIR: &str = "log";
 const NIX_DIR: &str = "nix";
+const KUBERNIX_ENV: &str = "kubernix.env";
+
+const KUBECONFIG_ENV: &str = "KUBECONFIG";
 const NIX_SHELL_ENV: &str = "IN_NIX_SHELL";
 const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
