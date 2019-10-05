@@ -6,7 +6,7 @@ stdenv.mkDerivation rec {
 
   src = fetchurl {
     url = "https://github.com/mozilla/grcov/releases/download/v0.5.4/grcov-linux-x86_64.tar.bz2";
-    sha256 = "0hqplgj3i8js42v2kj44khk543a93sk3n6wlfpv3c84pdqlm29br";
+    sha256 = "0p5zry2p7mcfsk7zrrb0ccivf3r666j2hs9c1x2rzwybx1ainfqs";
   };
 
   buildPhase = "";
