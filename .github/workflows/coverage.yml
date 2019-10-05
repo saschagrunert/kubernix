@@ -1,0 +1,15 @@
+---
+name: coverage
+on:
+  - push
+
+jobs:
+  codecov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - uses: cachix/install-nix-action@v3
+      - name: test coverage
+        run: make coverage
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
