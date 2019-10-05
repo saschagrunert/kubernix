@@ -37,6 +37,9 @@ fn run() -> Fallible<()> {
     if let Some(x) = matches.value_of("overlay") {
         config_builder.overlay(x);
     }
+    if matches.is_present("impure") {
+        config_builder.impure(true);
+    }
     let config = config_builder
         .build()
         .map_err(|e| format_err!("Unable to build config: {}", e))?;

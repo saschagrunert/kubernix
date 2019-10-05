@@ -233,7 +233,10 @@ impl Kubernix {
             nix_dir.join("default.nix"),
             include_str!("../nix/default.nix"),
         )?;
-        fs::write(nix_dir.join("deps.nix"), include_str!("../nix/deps.nix"))?;
+        fs::write(
+            nix_dir.join("deps-minimal.nix"),
+            include_str!("../nix/deps-minimal.nix"),
+        )?;
 
         // Apply the overlay if existing
         let target_overlay = nix_dir.join("overlay.nix");
@@ -318,9 +321,16 @@ impl Kubernix {
 
     /// Run a pure nix shell command
     fn run_nix_shell(config: &Config, arg: &str) -> Fallible<()> {
+        let purity = if !*config.impure() {
+            debug!("Runnig pure nix-shell");
+            "--pure"
+        } else {
+            info!("Runnig impure nix-shell");
+            "--impure"
+        };
         Command::new(Self::find_executable("nix-shell")?)
             .arg(config.root().join(NIX_DIR))
-            .arg("--pure")
+            .arg(purity)
             .arg("-Q")
             .arg(format!("-j{}", num_cpus::get()))
             .arg("--run")

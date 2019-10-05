@@ -44,6 +44,10 @@ pub struct Config {
     /// The Nix package overlay to be used
     #[get = "pub"]
     overlay: Option<PathBuf>,
+
+    /// Do not clear the current env during bootstrap
+    #[get = "pub"]
+    impure: bool,
 }
 
 impl Default for Config {
@@ -84,6 +88,7 @@ lazy_static! {
             cluster_cidr: parse_from_yaml(&yaml, "cluster-cidr").unwrap(),
             service_cidr: parse_from_yaml(&yaml, "service-cidr").unwrap(),
             overlay: None,
+            impure: false,
         }
     };
 }

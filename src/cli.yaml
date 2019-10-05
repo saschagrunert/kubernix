@@ -9,6 +9,7 @@ global_settings:
 args:
   - root:
       default_value: kubernix-run
+      env: KUBERNIX_ROOT
       help: Path where all the runtime data is stored
       global: true
       long: root
@@ -29,27 +30,35 @@ args:
       value_name: LEVEL
   - crio-cidr:
       default_value: 10.100.0.0/16
+      env: KUBERNIX_CRIO_CIDR
       long: crio-cidr
       short: c
       help: The CIDR used for the CRI-O CNI network
       value_name: CIDR
   - cluster-cidr:
       default_value: 10.200.0.0/16
+      env: KUBERNIX_CLUSTER_CIDR
       long: cluster-cidr
       short: u
       help: The CIDR used for the whole cluster network
       value_name: CIDR
   - service-cidr:
       default_value: 10.50.0.0/24
+      env: KUBERNIX_SERVICE_CIDR
       long: service-cidr
       short: s
       help: The CIDR used for the service network
       value_name: CIDR
   - overlay:
       long: overlay
+      env: KUBERNIX_OVERLAY
       short: o
       help: The Nix package overlay to be used
       value_name: PATH
+  - impure:
+      long: impure
+      short: i
+      help: Do not clear the current env during bootstrap
 
 subcommands:
   - shell:
