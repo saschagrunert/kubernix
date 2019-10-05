@@ -15,7 +15,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     thread::sleep,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 pub struct Crio {
@@ -100,11 +100,12 @@ impl Crio {
     /// Try to cleanup all related resources
     fn stop_conmons(&self) {
         // Remove all conmon processes
-        loop {
+        let now = Instant::now();
+        while now.elapsed().as_secs() < 5 {
             match process::all() {
                 Err(e) => {
                     debug!("Unable to retrieve processes: {}", e);
-                    sleep(Duration::from_millis(100));
+                    sleep(Duration::from_secs(1));
                 }
                 Ok(procs) => {
                     let mut found = false;
@@ -119,7 +120,6 @@ impl Crio {
                         debug!("All conmon processes exited");
                         break;
                     }
-                    sleep(Duration::from_millis(100));
                 }
             }
         }
