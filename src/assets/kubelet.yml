@@ -18,4 +18,3 @@ runtimeRequestTimeout: "15m"
 tlsCertFile: "{}"
 tlsPrivateKeyFile: "{}"
 failSwapOn: false
-rootDir: "{}"

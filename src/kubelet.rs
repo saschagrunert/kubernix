@@ -35,7 +35,6 @@ impl Kubelet {
             config.crio_cidr(),
             pki.kubelet().cert().display(),
             pki.kubelet().key().display(),
-            dir.display()
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
@@ -45,6 +44,7 @@ impl Kubelet {
             "kubelet",
             &[
                 &format!("--config={}", yml_file.display()),
+                &format!("--root-dir={}", dir.display()),
                 "--container-runtime=remote",
                 &format!("--container-runtime-endpoint=unix://{}", socket.display()),
                 &format!("--kubeconfig={}", kubeconfig.kubelet().display()),
