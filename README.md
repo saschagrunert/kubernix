@@ -70,15 +70,17 @@ Please make sure to follow the instructions output by the script.
 
 #### Cluster Bootstrap
 
-To bootstrap your first cluster, download one of the latest release binaries or
+To bootstrap your first cluster, download one of the latest [release binaries][18] or
 build the application via:
+
+[18]: https://github.com/saschagrunert/kubernix/releases/latest
 
 ```shell
 $ make build-release
 ```
 
 The binary should now be available in the `target/release/kubernix` directory of
-the project.
+the project. Alternatively, install the application via `cargo install kubernix`.
 
 After the successful binary retrieval, start KuberNix by running it as `root`:
 
