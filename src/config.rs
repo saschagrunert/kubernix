@@ -110,15 +110,15 @@ pub struct Config {
 
     #[get = "pub"]
     #[clap(
-        env = "KUBERNIX_ADDITIONAL_DEPS",
-        help = "Additional dependencies to be added to the environment",
-        long = "additional-deps",
+        env = "KUBERNIX_PACKAGES",
+        help = "Additional Nix dependencies to be added to the environment",
+        long = "packages",
         multiple = true,
-        short = "a",
-        value_name = "DEPENDENCY"
+        short = "p",
+        value_name = "PACKAGE"
     )]
     /// Additional dependencies to be added to the environment
-    additional_deps: Vec<String>,
+    packages: Vec<String>,
 }
 
 /// Possible subcommands

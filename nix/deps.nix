@@ -19,5 +19,5 @@ let
     socat
     utillinux
     watch
-  ];
+  ] ++ [ /* PACKAGES */ ];
 in deps

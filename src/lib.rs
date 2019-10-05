@@ -234,8 +234,8 @@ impl Kubernix {
             include_str!("../nix/default.nix"),
         )?;
         fs::write(
-            nix_dir.join("deps-minimal.nix"),
-            include_str!("../nix/deps-minimal.nix"),
+            nix_dir.join("deps.nix"),
+            include_str!("../nix/deps.nix").replace("/* PACKAGES */", &config.packages().join(" ")),
         )?;
 
         // Apply the overlay if existing
