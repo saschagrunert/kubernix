@@ -1,1 +1,1 @@
-initSidebarItems({"enum":[["SubCommand","Possible subcommands"]],"struct":[["Config","The global configuration"],["Kubernix","The main entry point for the application"]]});
+initSidebarItems({"struct":[["Config","The global configuration"],["Kubernix","The main entry point for the application"]]});
