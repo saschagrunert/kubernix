@@ -409,6 +409,9 @@
 <span id="409">409</span>
 <span id="410">410</span>
 <span id="411">411</span>
+<span id="412">412</span>
+<span id="413">413</span>
+<span id="414">414</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! # kubernix</span>
 <span class="attribute">#![<span class="ident">deny</span>(<span class="ident">missing_docs</span>)]</span>
@@ -652,9 +655,12 @@
             <span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;default.nix&quot;</span>),
             <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/default.nix&quot;</span>),
         )<span class="question-mark">?</span>;
+
+        <span class="kw">let</span> <span class="ident">packages</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">packages</span>().<span class="ident">join</span>(<span class="string">&quot; &quot;</span>);
+        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Adding additional packages: {}&quot;</span>, <span class="ident">packages</span>);
         <span class="ident">fs</span>::<span class="ident">write</span>(
             <span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;deps.nix&quot;</span>),
-            <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/deps.nix&quot;</span>).<span class="ident">replace</span>(<span class="string">&quot;/* PACKAGES */&quot;</span>, <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">packages</span>().<span class="ident">join</span>(<span class="string">&quot; &quot;</span>)),
+            <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/deps.nix&quot;</span>).<span class="ident">replace</span>(<span class="string">&quot;/* PACKAGES */&quot;</span>, <span class="ident">packages</span>),
         )<span class="question-mark">?</span>;
 
         <span class="comment">// Apply the overlay if existing</span>
