@@ -141,6 +141,7 @@ impl Config {
 
     /// Make the configs root path absolute
     pub fn canonicalize_root(&mut self) -> Fallible<()> {
+        self.create_root_dir()?;
         self.root = canonicalize(self.root())
             .map_err(|e| format_err!("Unable to canonicalize config root directory: {}", e))?;
         Ok(())
@@ -148,7 +149,7 @@ impl Config {
 
     /// Write the current configuration to the internal set root path
     pub fn to_file(&self) -> Fallible<()> {
-        create_dir_all(self.root())?;
+        self.create_root_dir()?;
         fs::write(self.root().join(Self::FILENAME), toml::to_string(&self)?)
             .map_err(|e| format_err!("Unable to write configuration to file: {}", e))?;
         Ok(())
@@ -166,6 +167,11 @@ impl Config {
         })?)
         .map_err(|e| format_err!("Unable to load config file '{}': {}", file.display(), e))?;
         Ok(())
+    }
+
+    fn create_root_dir(&self) -> Fallible<()> {
+        create_dir_all(self.root())
+            .map_err(|e| format_err!("Unable to create root directory: {}", e))
     }
 }
 

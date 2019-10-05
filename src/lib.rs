@@ -258,20 +258,11 @@ impl Kubernix {
         // Run the shell
         Self::run_nix_shell(
             &config,
-            &[
-                &current_exe()?.display().to_string(),
-                "--root",
-                &config.root().display().to_string(),
-                "--log-level",
-                &config.log_level().to_string().to_lowercase(),
-                "--crio-cidr",
-                &config.crio_cidr().to_string(),
-                "--cluster-cidr",
-                &config.cluster_cidr().to_string(),
-                "--service-cidr",
-                &config.service_cidr().to_string(),
-            ]
-            .join(" "),
+            &format!(
+                "{} --root {}",
+                current_exe()?.display(),
+                config.root().display()
+            ),
         )
     }
 
