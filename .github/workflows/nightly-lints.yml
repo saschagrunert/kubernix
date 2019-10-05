@@ -1,0 +1,34 @@
+---
+name: lint
+on:
+  - push
+
+jobs:
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout sources
+        uses: actions/checkout@v1
+
+      - id: component
+        name: search for latest nightly clippy
+        uses: actions-rs/components-nightly@v1
+        with:
+          target: x86_64-unknown-linux-gnu
+          component: clippy
+
+      - name: install nightly toolchain with clippy available
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ steps.component.outputs.toolchain }}
+          override: true
+
+      - name: install clippy
+        run: rustup component add clippy
+
+      - name: run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings

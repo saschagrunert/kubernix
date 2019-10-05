@@ -8,10 +8,6 @@ executors:
   container-musl:
     docker:
       - image: ekidd/rust-musl-builder:stable
-  machine:
-    machine:
-      docker_layer_caching: true
-      image: ubuntu-1604:201903-01
 
 workflows:
   version: 2
@@ -208,17 +204,19 @@ jobs:
             - ~/.cargo
 
   test:
-    executor: machine
+    executor: container
     steps:
+      - <<: *prepare-env
       - checkout
+      - restore_cache:
+          keys:
+            - v1-build-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
       - run:
-          name: test and coverage upload
-          environment:
-            IMAGE: *image
-          command: |
-            docker pull $IMAGE
-            docker run --security-opt seccomp=unconfined --network=host \
-              -v $(pwd):/w -w /w -it $IMAGE \
-              sh -c "apk add ca-certificates curl make && \
-                     make coverage"
-            bash <(curl -s https://codecov.io/bash)
+          name: build
+          command: make test
+      - save_cache:
+          key: v1-build-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+          paths:
+            - /nix
+            - target
+            - ~/.cargo
