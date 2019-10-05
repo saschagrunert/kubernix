@@ -3,7 +3,7 @@ use crate::{
     Config, Kubernix, CRIO_DIR, RUNTIME_ENV,
 };
 use failure::{bail, format_err, Fallible};
-use log::{debug, info, warn};
+use log::{debug, info};
 use nix::{
     sys::signal::{kill, Signal},
     unistd::Pid,
@@ -165,15 +165,17 @@ impl Crio {
 impl Stoppable for Crio {
     fn stop(&mut self) -> Fallible<()> {
         // Remove all running containers
-        if let Err(e) = self.remove_all_containers() {
-            warn!("Unable to remove CRI-O containers: {}", e)
-        }
+        self.remove_all_containers()
+            .map_err(|e| format_err!("Unable to remove CRI-O containers: {}", e))?;
 
         // Stop the process, should never really fail
-        self.process.stop()?;
+        self.process.stop()
+    }
+}
 
+impl Drop for Crio {
+    fn drop(&mut self) {
         // Remove conmon processes
         self.stop_conmons();
-        Ok(())
     }
 }

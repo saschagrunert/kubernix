@@ -47,8 +47,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
     process::Command,
-    thread::sleep,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 const CRIO_DIR: &str = "crio";
