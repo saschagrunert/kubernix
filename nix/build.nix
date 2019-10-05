@@ -12,7 +12,7 @@ let
       "rustfmt-preview"
     ];
   });
-  deps = import ./deps.nix;
+  deps = import ./deps-minimal.nix;
   cargo-kcov = pkgs.callPackage ./cargo-kcov.nix {};
 in
 pkgs.stdenv.mkDerivation {
