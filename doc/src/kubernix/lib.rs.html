@@ -354,6 +354,22 @@
 <span id="354">354</span>
 <span id="355">355</span>
 <span id="356">356</span>
+<span id="357">357</span>
+<span id="358">358</span>
+<span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
+<span id="362">362</span>
+<span id="363">363</span>
+<span id="364">364</span>
+<span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! # kubernix</span>
 <span class="attribute">#![<span class="ident">deny</span>(<span class="ident">missing_docs</span>)]</span>
@@ -591,6 +607,22 @@
             <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/default.nix&quot;</span>),
         )<span class="question-mark">?</span>;
         <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;deps.nix&quot;</span>), <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/deps.nix&quot;</span>))<span class="question-mark">?</span>;
+
+        <span class="comment">// Apply the overlay if existing</span>
+        <span class="kw">let</span> <span class="ident">target_overlay</span> <span class="op">=</span> <span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;overlay.nix&quot;</span>);
+        <span class="kw">match</span> <span class="ident">config</span>.<span class="ident">overlay</span>() {
+            <span class="comment">// User defined overlay</span>
+            <span class="prelude-val">Some</span>(<span class="ident">overlay</span>) <span class="op">=&gt;</span> {
+                <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Using custom overlay &#39;{}&#39;&quot;</span>, <span class="ident">overlay</span>.<span class="ident">display</span>());
+                <span class="ident">fs</span>::<span class="ident">copy</span>(<span class="ident">overlay</span>, <span class="ident">target_overlay</span>)<span class="question-mark">?</span>;
+            }
+
+            <span class="comment">// The default overlay</span>
+            <span class="prelude-val">None</span> <span class="op">=&gt;</span> {
+                <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Using default overlay&quot;</span>);
+                <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">target_overlay</span>, <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/overlay.nix&quot;</span>))<span class="question-mark">?</span>;
+            }
+        }
 
         <span class="comment">// Run the shell</span>
         <span class="self">Self</span>::<span class="ident">run_nix_shell</span>(
