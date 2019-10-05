@@ -1,8 +1,10 @@
 use crate::{Config, LOG_DIR};
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
-use nix::sys::signal::{kill, Signal};
-use nix::unistd::Pid;
+use nix::{
+    sys::signal::{kill, Signal},
+    unistd::Pid,
+};
 use std::{
     fs::{create_dir_all, File},
     io::{BufRead, BufReader},
@@ -120,7 +122,9 @@ impl Stoppable for Process {
         debug!("Stopping process '{}'", self.command);
 
         // Indicate that this shutdown is intended
-        self.kill.send(())?;
+        self.kill
+            .send(())
+            .map_err(|e| format_err!("Unable to send kill signal to process: {}", e))?;
 
         // Send SIGTERM to the process
         kill(Pid::from_raw(self.pid as i32), Signal::SIGTERM)?;

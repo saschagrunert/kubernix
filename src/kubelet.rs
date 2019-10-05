@@ -34,7 +34,7 @@ impl Kubelet {
             Kubernix::dns(config)?,
             config.crio_cidr(),
             pki.kubelet().cert().display(),
-            pki.kubelet().key().display()
+            pki.kubelet().key().display(),
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;
@@ -44,13 +44,13 @@ impl Kubelet {
             "kubelet",
             &[
                 &format!("--config={}", yml_file.display()),
+                &format!("--root-dir={}", dir.display()),
                 "--container-runtime=remote",
                 &format!("--container-runtime-endpoint=unix://{}", socket.display()),
                 &format!("--kubeconfig={}", kubeconfig.kubelet().display()),
                 "--image-pull-progress-deadline=2m",
                 "--network-plugin=cni",
                 "--register-node=true",
-                "--fail-swap-on=false",
                 "--v=2",
             ],
         )?;

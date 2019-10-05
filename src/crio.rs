@@ -4,11 +4,18 @@ use crate::{
 };
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
+use nix::{
+    sys::signal::{kill, Signal},
+    unistd::Pid,
+};
+use psutil::process;
 use serde_json::{json, to_string_pretty};
 use std::{
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
     process::Command,
+    thread::sleep,
+    time::{Duration, Instant},
 };
 
 pub struct Crio {
@@ -90,6 +97,37 @@ impl Crio {
         }))
     }
 
+    /// Try to cleanup all related resources
+    fn stop_conmons(&self) {
+        // Remove all conmon processes
+        let now = Instant::now();
+        while now.elapsed().as_secs() < 5 {
+            match process::all() {
+                Err(e) => {
+                    debug!("Unable to retrieve processes: {}", e);
+                    sleep(Duration::from_secs(1));
+                }
+                Ok(procs) => {
+                    let mut found = false;
+                    for p in procs.iter().filter(|p| &p.comm == "conmon") {
+                        debug!("Killing conmon process {}", p.pid);
+                        if let Err(e) = kill(Pid::from_raw(p.pid), Signal::SIGTERM) {
+                            debug!("Unable to kill PID {}: {}", p.pid, e);
+                        }
+                        found = true;
+                    }
+                    if !found {
+                        debug!("All conmon processes exited");
+                        break;
+                    }
+                    // Give the signal time to arrive
+                    sleep(Duration::from_millis(100));
+                }
+            }
+        }
+    }
+
+    /// Remove all containers via crictl invocations
     fn remove_all_containers(&self) -> Fallible<()> {
         debug!("Removing all CRI-O workloads");
         let env_value = format!("unix://{}", self.socket.display());
@@ -129,9 +167,17 @@ impl Crio {
 impl Stoppable for Crio {
     fn stop(&mut self) -> Fallible<()> {
         // Remove all running containers
-        self.remove_all_containers()?;
+        self.remove_all_containers()
+            .map_err(|e| format_err!("Unable to remove CRI-O containers: {}", e))?;
 
-        // Stop the process
+        // Stop the process, should never really fail
         self.process.stop()
+    }
+}
+
+impl Drop for Crio {
+    fn drop(&mut self) {
+        // Remove conmon processes
+        self.stop_conmons();
     }
 }
