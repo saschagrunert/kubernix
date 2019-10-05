@@ -17,6 +17,7 @@ args:
       value_name: PATH
   - log-level:
       default_value: info
+      env: KUBERNIX_LOG_LEVEL
       help: Set the log level verbosity
       long: log-level
       short: l
