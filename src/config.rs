@@ -228,7 +228,7 @@ crio-cidr = "1.1.1.1/16"
 cluster-cidr = "2.2.2.2/16"
 service-cidr = "3.3.3.3/24"
 impure = false
-additional-deps = []
+packages = []
             "#,
         )?;
         c.update_from_file()?;
