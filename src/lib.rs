@@ -17,7 +17,7 @@ mod scheduler;
 
 pub use config::Config;
 
-use apiserver::APIServer;
+use apiserver::ApiServer;
 use controllermanager::ControllerManager;
 use coredns::CoreDNS;
 use crio::Crio;
@@ -169,7 +169,7 @@ impl Kubernix {
             s.spawn(|_| crio = Crio::start(&config, &crio_socket));
             s.spawn(|_| {
                 etcd = Etcd::start(&config, &pki);
-                apis = APIServer::start(&config, &ip, &pki, &encryptionconfig, &kubeconfig)
+                apis = ApiServer::start(&config, &ip, &pki, &encryptionconfig, &kubeconfig)
             });
             s.spawn(|_| cont = ControllerManager::start(&config, &pki, &kubeconfig));
             s.spawn(|_| sche = Scheduler::start(&config, &kubeconfig));

@@ -32,18 +32,15 @@ impl KubeConfig {
         info!("Creating kubeconfigs");
 
         // Create the target dir
-        let kube_dir = config.root().join("kube");
-        create_dir_all(&kube_dir)?;
+        let dir = config.root().join("kubeconfig");
+        create_dir_all(&dir)?;
 
         let mut kube = KubeConfig::default();
-
-        let localhost = Ipv4Addr::LOCALHOST.to_string();
-
-        kube.kubelet = Self::setup_kubelet(&kube_dir, &pki, ip, hostname)?;
-        kube.proxy = Self::setup_proxy(&kube_dir, &pki, ip)?;
-        kube.controller_manager = Self::setup_controller_manager(&kube_dir, &pki, &localhost)?;
-        kube.scheduler = Self::setup_scheduler(&kube_dir, &pki, &localhost)?;
-        kube.admin = Self::setup_admin(&kube_dir, &pki, &localhost)?;
+        kube.kubelet = Self::setup_kubelet(&dir, &pki, ip, hostname)?;
+        kube.proxy = Self::setup_proxy(&dir, &pki, ip)?;
+        kube.controller_manager = Self::setup_controller_manager(&dir, &pki)?;
+        kube.scheduler = Self::setup_scheduler(&dir, &pki)?;
+        kube.admin = Self::setup_admin(&dir, &pki)?;
 
         Ok(kube)
     }
@@ -73,11 +70,11 @@ impl KubeConfig {
         )?)
     }
 
-    fn setup_controller_manager(dir: &Path, pki: &Pki, ip: &str) -> Fallible<PathBuf> {
+    fn setup_controller_manager(dir: &Path, pki: &Pki) -> Fallible<PathBuf> {
         const NAME: &str = "kube-controller-manager";
         Ok(Self::setup_kubeconfig(
             dir,
-            ip,
+            &Ipv4Addr::LOCALHOST.to_string(),
             NAME,
             &format!("system:{}", NAME),
             pki.ca().cert(),
@@ -86,11 +83,11 @@ impl KubeConfig {
         )?)
     }
 
-    fn setup_scheduler(dir: &Path, pki: &Pki, ip: &str) -> Fallible<PathBuf> {
+    fn setup_scheduler(dir: &Path, pki: &Pki) -> Fallible<PathBuf> {
         const NAME: &str = "kube-scheduler";
         Ok(Self::setup_kubeconfig(
             dir,
-            ip,
+            &Ipv4Addr::LOCALHOST.to_string(),
             NAME,
             &format!("system:{}", NAME),
             pki.ca().cert(),
@@ -99,11 +96,11 @@ impl KubeConfig {
         )?)
     }
 
-    fn setup_admin(dir: &Path, pki: &Pki, ip: &str) -> Fallible<PathBuf> {
+    fn setup_admin(dir: &Path, pki: &Pki) -> Fallible<PathBuf> {
         const NAME: &str = "admin";
         Ok(Self::setup_kubeconfig(
             dir,
-            ip,
+            &Ipv4Addr::LOCALHOST.to_string(),
             NAME,
             NAME,
             pki.ca().cert(),

@@ -14,11 +14,11 @@ use std::{
     process::Command,
 };
 
-pub struct APIServer {
+pub struct ApiServer {
     process: Process,
 }
 
-impl APIServer {
+impl ApiServer {
     pub fn start(
         config: &Config,
         ip: &str,
@@ -82,7 +82,7 @@ impl APIServer {
         process.wait_ready("etcd ok")?;
         Self::setup_rbac(&dir, kubeconfig.admin())?;
         info!("API Server is ready");
-        Ok(Box::new(APIServer { process }))
+        Ok(Box::new(ApiServer { process }))
     }
 
     fn setup_rbac(dir: &Path, admin_config: &Path) -> Fallible<()> {
@@ -113,7 +113,7 @@ impl APIServer {
     }
 }
 
-impl Stoppable for APIServer {
+impl Stoppable for ApiServer {
     fn stop(&mut self) -> Fallible<()> {
         self.process.stop()
     }

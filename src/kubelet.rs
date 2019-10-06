@@ -45,7 +45,7 @@ impl Kubelet {
             "kubelet",
             &[
                 &format!("--config={}", yml_file.display()),
-                &format!("--root-dir={}", dir.display()),
+                &format!("--root-dir={}", dir.join("run").display()),
                 "--container-runtime=remote",
                 &format!("--container-runtime-endpoint=unix://{}", socket.display()),
                 &format!("--kubeconfig={}", kubeconfig.kubelet().display()),
