@@ -33,7 +33,7 @@ use scheduler::Scheduler;
 use env_logger::Builder;
 use failure::{bail, format_err, Fallible};
 use ipnetwork::IpNetwork;
-use log::{debug, error, info};
+use log::{debug, error, info, LevelFilter};
 use nix::{
     mount::{umount2, MntFlags},
     unistd::getuid,
@@ -328,10 +328,16 @@ impl Kubernix {
             info!("Runnig impure nix-shell");
             "--impure"
         };
+        let verbosity = match *config.log_level() {
+            LevelFilter::Trace => "-vvvvv",
+            LevelFilter::Debug => "--verbose",
+            LevelFilter::Info => "-Q", // just no build output
+            _ => "--quiet",
+        };
         Command::new(Self::find_executable("nix-shell")?)
             .arg(config.root().join(NIX_DIR))
             .arg(purity)
-            .arg("-Q")
+            .arg(verbosity)
             .arg(format!("-j{}", num_cpus::get()))
             .arg("--run")
             .arg(arg)
