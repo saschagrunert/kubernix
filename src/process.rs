@@ -165,6 +165,7 @@ impl Stoppable for Process {
 mod tests {
     use super::*;
     use crate::config::tests::{test_config, test_config_wrong_root};
+    use tempfile::tempdir;
 
     #[test]
     fn stopped() {
@@ -174,35 +175,40 @@ mod tests {
     #[test]
     fn start_success() -> Fallible<()> {
         let c = test_config()?;
-        Process::start(&c, "echo", &[])?;
+        let d = tempdir()?;
+        Process::start(&c, d.path(), "echo", &[])?;
         Ok(())
     }
 
     #[test]
     fn start_failure_wrong_root() -> Fallible<()> {
         let c = test_config_wrong_root()?;
-        assert!(Process::start(&c, "echo", &[]).is_err());
+        let d = tempdir()?;
+        assert!(Process::start(&c, d.path(), "echo", &[]).is_err());
         Ok(())
     }
 
     #[test]
     fn start_failure_no_command() -> Fallible<()> {
         let c = test_config()?;
-        assert!(Process::start(&c, "", &[]).is_err());
+        let d = tempdir()?;
+        assert!(Process::start(&c, d.path(), "", &[]).is_err());
         Ok(())
     }
 
     #[test]
     fn start_failure_invalid_command() -> Fallible<()> {
         let c = test_config()?;
-        assert!(Process::start(&c, "invalid_command", &[]).is_err());
+        let d = tempdir()?;
+        assert!(Process::start(&c, d.path(), "invalid_command", &[]).is_err());
         Ok(())
     }
 
     #[test]
     fn wait_ready_success() -> Fallible<()> {
         let c = test_config()?;
-        let mut p = Process::start(&c, "echo", &["test"])?;
+        let d = tempdir()?;
+        let mut p = Process::start(&c, d.path(), "echo", &["test"])?;
         p.wait_ready("test")?;
         Ok(())
     }
@@ -210,7 +216,8 @@ mod tests {
     #[test]
     fn wait_ready_failure() -> Fallible<()> {
         let c = test_config()?;
-        let mut p = Process::start(&c, "echo", &["test"])?;
+        let d = tempdir()?;
+        let mut p = Process::start(&c, d.path(), "echo", &["test"])?;
         p.readyness_timeout = 1;
         assert!(p.wait_ready("invalid").is_err());
         Ok(())
@@ -219,7 +226,8 @@ mod tests {
     #[test]
     fn stop_success() -> Fallible<()> {
         let c = test_config()?;
-        let mut p = Process::start(&c, "sleep", &["500"])?;
+        let d = tempdir()?;
+        let mut p = Process::start(&c, d.path(), "sleep", &["500"])?;
         p.stop()?;
         Ok(())
     }
