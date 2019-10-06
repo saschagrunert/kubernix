@@ -135,8 +135,8 @@ proxy/
 scheduler/
 ```
 
-For example, the log files for the different running components are now available
-within the `log` directory:
+For example, the log files for the different running components are now
+available within the `log` directory:
 
 ```
 > ls -1 log
