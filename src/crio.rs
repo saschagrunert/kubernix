@@ -60,9 +60,7 @@ impl Crio {
         fs::write(
             &policy_json,
             to_string_pretty(&json!({
-              "default": [{
-                  "type": "insecureAcceptAnything"
-              }]
+              "default": [{ "type": "insecureAcceptAnything" }]
             }))?,
         )?;
 
