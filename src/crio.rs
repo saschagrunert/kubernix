@@ -42,7 +42,7 @@ impl Crio {
             bridge_json,
             to_string_pretty(&json!({
               "cniVersion": "0.3.1",
-              "name": "crio-bridge",
+              "name": "crio-kubernix",
               "type": "bridge",
               "bridge": "kubernix1",
               "isGateway": true,
