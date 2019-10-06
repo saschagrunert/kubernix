@@ -41,6 +41,7 @@ impl Kubelet {
 
         let mut process = Process::start(
             config,
+            &dir,
             "kubelet",
             &[
                 &format!("--config={}", yml_file.display()),

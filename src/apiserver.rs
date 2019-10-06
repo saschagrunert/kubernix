@@ -33,6 +33,7 @@ impl APIServer {
 
         let mut process = Process::start(
             config,
+            &dir,
             "kube-apiserver",
             &[
                 &format!("--advertise-address={}", ip),

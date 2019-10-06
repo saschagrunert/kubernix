@@ -28,6 +28,7 @@ impl Proxy {
 
         let mut process = Process::start(
             config,
+            &dir,
             "kube-proxy",
             &[&format!("--config={}", yml_file.display())],
         )?;

@@ -6,9 +6,10 @@ use nix::{
     unistd::Pid,
 };
 use std::{
-    fs::{create_dir_all, File},
+    fs::{self, create_dir_all, metadata, set_permissions, File},
     io::{BufRead, BufReader},
-    path::PathBuf,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::mpsc::{channel, Sender},
     thread::{spawn, JoinHandle},
@@ -37,7 +38,12 @@ pub type Startable = Box<dyn Stoppable + Send>;
 impl Process {
     /// Creates a new `Process` instance by spawning the provided command `cmd`.
     /// If the process creation fails, an `Error` will be returned.
-    pub fn start(config: &Config, command: &'static str, args: &[&str]) -> Fallible<Process> {
+    pub fn start(
+        config: &Config,
+        dir: &Path,
+        command: &'static str,
+        args: &[&str],
+    ) -> Fallible<Process> {
         // Prepare the commands
         if command.is_empty() {
             bail!("No valid command provided")
@@ -74,6 +80,20 @@ impl Process {
             }
             Ok(())
         });
+
+        // Write the executed command into the dir
+        create_dir_all(dir)?;
+        let run_file = dir.join("run.sh");
+        let sep = format!(" \\\n{}", " ".repeat(4));
+        let full_command = format!(r#"{}{}{}"#, command, sep, args.join(&sep));
+        fs::write(
+            &run_file,
+            format!(include_str!("assets/run.sh"), full_command),
+        )
+        .map_err(|e| format_err!("Unable to create '{}': {}", run_file.display(), e))?;
+        let mut perms = metadata(&run_file)?.permissions();
+        perms.set_mode(0o755);
+        set_permissions(run_file, perms)?;
 
         Ok(Process {
             command: command.to_owned(),

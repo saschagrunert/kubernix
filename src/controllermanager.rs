@@ -6,6 +6,7 @@ use crate::{
 };
 use failure::Fallible;
 use log::info;
+use std::fs::create_dir_all;
 
 pub struct ControllerManager {
     process: Process,
@@ -15,8 +16,12 @@ impl ControllerManager {
     pub fn start(config: &Config, pki: &Pki, kubeconfig: &KubeConfig) -> Fallible<Startable> {
         info!("Starting Controller Manager");
 
+        let dir = config.root().join("controllermanager");
+        create_dir_all(&dir)?;
+
         let mut process = Process::start(
             config,
+            &dir,
             "kube-controller-manager",
             &[
                 "--bind-address=0.0.0.0",

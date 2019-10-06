@@ -27,6 +27,7 @@ impl Scheduler {
 
         let mut process = Process::start(
             config,
+            &dir,
             "kube-scheduler",
             &[&format!("--config={}", cfg.display()), "--v=2"],
         )?;

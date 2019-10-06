@@ -5,7 +5,10 @@ use crate::{
 };
 use failure::Fallible;
 use log::info;
-use std::{fs::remove_dir_all, net::Ipv4Addr};
+use std::{
+    fs::{create_dir_all, remove_dir_all},
+    net::Ipv4Addr,
+};
 
 pub struct Etcd {
     process: Process,
@@ -20,13 +23,17 @@ impl Etcd {
         let etcd_localhost_peer = format!("https://{}:2380", localhost);
 
         // Remove the etcd data dir if already exists (configuration re-use)
-        let data_dir = config.root().join("etcd");
+        let dir = config.root().join("etcd");
+        create_dir_all(&dir)?;
+
+        let data_dir = dir.join("run");
         if data_dir.exists() {
             remove_dir_all(&data_dir)?;
         }
 
         let mut process = Process::start(
             config,
+            &dir,
             "etcd",
             &[
                 &format!("--advertise-client-urls={}", etcd_localhost),

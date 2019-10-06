@@ -68,6 +68,7 @@ impl Crio {
 
         let mut process = Process::start(
             config,
+            &dir,
             "crio",
             &[
                 "--log-level=debug",
