@@ -15,5 +15,5 @@ jobs:
       - uses: cachix/install-nix-action@v3
       - name: run kubernix
         run: |
-          ln -sf /home/runner/.nix-profile/bin/nix-shell /usr/bin/nix-shell
+          sudo ln -sf /home/runner/.nix-profile/bin/nix-shell /usr/bin/nix-shell
           make test-integration
