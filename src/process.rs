@@ -1,4 +1,4 @@
-use crate::{Config, LOG_DIR};
+use crate::Config;
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
 use nix::{
@@ -44,8 +44,9 @@ impl Process {
         }
 
         // Prepare the log dir and file
-        create_dir_all(config.root().join(LOG_DIR))?;
-        let mut log_file = config.root().join(LOG_DIR).join(&command);
+        let log_dir = config.root().join("log");
+        create_dir_all(&log_dir)?;
+        let mut log_file = log_dir.join(command);
         log_file.set_extension("log");
 
         let out_file = File::create(&log_file)?;

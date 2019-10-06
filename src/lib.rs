@@ -52,7 +52,6 @@ use std::{
 };
 
 const CRIO_DIR: &str = "crio";
-const LOG_DIR: &str = "log";
 const NIX_DIR: &str = "nix";
 const KUBERNIX_ENV: &str = "kubernix.env";
 
@@ -292,7 +291,7 @@ impl Kubernix {
         )?;
 
         Command::new("bash")
-            .current_dir(self.config.root().join(LOG_DIR))
+            .current_dir(self.config.root())
             .arg("--init-file")
             .arg(env_file)
             .status()?;
