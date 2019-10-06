@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-echo TBD
+#!/usr/bin/env expect
+spawn target/release/kubernix
+expect "> "
+send "exit"
+expect eof
