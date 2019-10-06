@@ -1,10 +1,10 @@
 ---
-name: run
+name: test
 on:
   - push
 
 jobs:
-  codecov:
+  integration:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
