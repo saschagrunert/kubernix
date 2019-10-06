@@ -113,11 +113,33 @@ NAMESPACE     NAME                       READY   STATUS    RESTARTS   AGE
 kube-system   coredns-85d84dd694-xz997   1/1     Running   0          102s
 ```
 
-The log files for the different running components are now available within the
-current working directory, too:
+All configuration files have been written to the target directory, which is now
+the current one:
 
 ```
 > ls -1
+apiserver/
+controllermanager/
+coredns/
+crio/
+encryptionconfig/
+etcd/
+kubeconfig/
+kubelet/
+kubernix.env
+kubernix.toml
+log/
+nix/
+pki/
+proxy/
+scheduler/
+```
+
+For example, the log files for the different running components are now available
+within the `log` directory:
+
+```
+> ls -1 log
 crio.log
 etcd.log
 kube-apiserver.log
