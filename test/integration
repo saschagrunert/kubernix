@@ -1,5 +1,6 @@
 #!/usr/bin/env expect
 spawn target/release/kubernix
 expect "> "
-send "exit"
+send "exit\n"
+expect "Cleaning up"
 expect eof
