@@ -18,7 +18,7 @@ purposes.
 
 ### About
 
-Do you ever heard from [Nix][2], the functional package manager? Don't worry if
+Do you ever heard from [Nix][2], the functional package manager? Don’t worry if
 not, all you need to know is that it provides all the third party dependencies
 for this project, pinned to a dedicated and reproducible version.
 
@@ -173,7 +173,7 @@ the initial process:
 ```
 
 Please note that the directory where all the data is stored is not being
-removed after the exit of KuberNix. This means that you're still able to
+removed after the exit of KuberNix. This means that you’re still able to
 access the log and configuration files for further processing.
 
 ### Configuration
