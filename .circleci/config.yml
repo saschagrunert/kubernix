@@ -213,7 +213,7 @@ jobs:
             - v1-build-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
       - run:
           name: build
-          command: make test
+          command: make test-unit
       - save_cache:
           key: v1-build-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:

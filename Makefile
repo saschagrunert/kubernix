@@ -49,13 +49,16 @@ nixpkgs:
 shell: build-release
 	$(KUBERNIX) shell
 
-.PHONY: test
-test:
+.PHONY: test-integration
+test-integration: build-release
+	$(SUDO) test/integration
+
+.PHONY: test-unit
+test-unit:
 	$(call nix-shell-pure-run,cargo test)
 
 .PHONY: run
 run: build-release
-	$(call nix-shell-pure-run,cargo build --release)
 	$(KUBERNIX)
 
 .PHONY: lint-clippy
@@ -64,5 +67,4 @@ lint-clippy:
 
 .PHONY: lint-rustfmt
 lint-rustfmt:
-	$(call nix-shell-pure-run,cargo fmt)
-	$(call nix-shell-pure-run,git diff --exit-code)
+	$(call nix-shell-pure-run,cargo fmt && git diff --exit-code)

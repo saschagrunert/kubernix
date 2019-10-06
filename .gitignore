@@ -1,3 +1,4 @@
 **/*.rs.bk
 /kubernix-run
+/integration
 /target
