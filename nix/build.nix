@@ -16,7 +16,12 @@ let
   cargo-kcov = pkgs.callPackage ./cargo-kcov.nix {};
 in
 pkgs.stdenv.mkDerivation {
-  buildInputs = with pkgs; deps ++ [ cargo-kcov git kcov ruststable ];
+  buildInputs = with pkgs; deps ++ [
+    cargo-kcov
+    git
+    kcov
+    ruststable
+  ];
   LANG = "en_US.UTF-8";
   name = "build-shell";
 }

@@ -1,3 +1,3 @@
 **/*.rs.bk
-/kubernix-run
 /target
+kubernix-run
