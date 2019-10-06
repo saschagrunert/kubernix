@@ -14,4 +14,6 @@ jobs:
       - uses: actions/checkout@v1
       - uses: cachix/install-nix-action@v3
       - name: run kubernix
-        run: make test-integration
+        run: |
+          which nix-shell
+          make test-integration
