@@ -1,5 +1,6 @@
+ARGS ?=
 SUDO := sudo -E
-KUBERNIX := $(SUDO) target/release/kubernix
+KUBERNIX := $(SUDO) target/release/kubernix $(ARGS)
 
 define nix-shell
 	nix-shell -j$(shell nproc) nix/build.nix $(1)
