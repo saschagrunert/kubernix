@@ -256,10 +256,48 @@
 <span id="256">256</span>
 <span id="257">257</span>
 <span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
 <span class="kw">use</span> <span class="ident">clap</span>::{<span class="ident">crate_version</span>, <span class="ident">AppSettings</span>, <span class="ident">Clap</span>};
-<span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">format_err</span>, <span class="ident">Fallible</span>};
+<span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
 <span class="kw">use</span> <span class="ident">getset</span>::<span class="ident">Getters</span>;
 <span class="kw">use</span> <span class="ident">ipnetwork</span>::<span class="ident">IpNetwork</span>;
 <span class="kw">use</span> <span class="ident">log</span>::<span class="ident">LevelFilter</span>;
@@ -267,6 +305,7 @@
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">fmt</span>::<span class="ident">Debug</span>,
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">canonicalize</span>, <span class="ident">create_dir_all</span>, <span class="ident">read_to_string</span>},
+    <span class="ident">net</span>::<span class="ident">Ipv4Addr</span>,
     <span class="ident">path</span>::<span class="ident">PathBuf</span>,
 };
 <span class="kw">use</span> <span class="ident">toml</span>;
@@ -432,12 +471,26 @@
         <span class="ident">create_dir_all</span>(<span class="self">self</span>.<span class="ident">root</span>())
             .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to create root directory: {}&quot;</span>, <span class="ident">e</span>))
     }
+
+    <span class="doccomment">/// Retrieve the DNS address from the config</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">dns</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Ipv4Addr</span><span class="op">&gt;</span> {
+        <span class="kw">match</span> <span class="self">self</span>.<span class="ident">service_cidr</span>() {
+            <span class="ident">IpNetwork</span>::<span class="ident">V4</span>(<span class="ident">n</span>) <span class="op">=&gt;</span> <span class="prelude-val">Ok</span>(<span class="ident">n</span>.<span class="ident">nth</span>(<span class="number">2</span>).<span class="ident">ok_or_else</span>(<span class="op">||</span> {
+                <span class="macro">format_err</span><span class="macro">!</span>(
+                    <span class="string">&quot;Unable to retrieve second IP from service CIDR: {}&quot;</span>,
+                    <span class="self">self</span>.<span class="ident">service_cidr</span>()
+                )
+            })<span class="question-mark">?</span>),
+            <span class="kw">_</span> <span class="op">=&gt;</span> <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Service CIDR is not for IPv4&quot;</span>),
+        }
+    }
 }
 
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">tests</span> {
     <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">path</span>::<span class="ident">Path</span>;
+    <span class="kw">use</span> <span class="ident">ipnetwork</span>::{<span class="ident">Ipv4Network</span>, <span class="ident">Ipv6Network</span>};
+    <span class="kw">use</span> <span class="ident">std</span>::{<span class="ident">net</span>::<span class="ident">Ipv6Addr</span>, <span class="ident">path</span>::<span class="ident">Path</span>};
     <span class="kw">use</span> <span class="ident">tempfile</span>::<span class="ident">tempdir</span>;
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
@@ -512,6 +565,29 @@ packages = []
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">c</span>.<span class="ident">root</span>.<span class="ident">join</span>(<span class="ident">Config</span>::<span class="ident">FILENAME</span>), <span class="string">&quot;invalid&quot;</span>)<span class="question-mark">?</span>;
         <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">update_from_file</span>().<span class="ident">is_err</span>());
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="attribute">#[<span class="ident">test</span>]</span>
+    <span class="kw">fn</span> <span class="ident">dns_success</span>() {
+        <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
+        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">dns</span>().<span class="ident">unwrap</span>(), <span class="ident">Ipv4Addr</span>::<span class="ident">new</span>(<span class="number">10</span>, <span class="number">50</span>, <span class="number">0</span>, <span class="number">2</span>));
+    }
+
+    <span class="attribute">#[<span class="ident">test</span>]</span>
+    <span class="kw">fn</span> <span class="ident">dns_failure_too_small_service_cidr</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
+        <span class="ident">c</span>.<span class="ident">service_cidr</span> <span class="op">=</span> <span class="ident">IpNetwork</span>::<span class="ident">V4</span>(<span class="ident">Ipv4Network</span>::<span class="ident">new</span>(<span class="ident">Ipv4Addr</span>::<span class="ident">new</span>(<span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>), <span class="number">32</span>)<span class="question-mark">?</span>);
+        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">dns</span>().<span class="ident">is_err</span>());
+        <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="attribute">#[<span class="ident">test</span>]</span>
+    <span class="kw">fn</span> <span class="ident">dns_failure_v6_service_cidr</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
+        <span class="ident">c</span>.<span class="ident">service_cidr</span> <span class="op">=</span>
+            <span class="ident">IpNetwork</span>::<span class="ident">V6</span>(<span class="ident">Ipv6Network</span>::<span class="ident">new</span>(<span class="ident">Ipv6Addr</span>::<span class="ident">new</span>(<span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>, <span class="number">1</span>), <span class="number">96</span>)<span class="question-mark">?</span>);
+        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">dns</span>().<span class="ident">is_err</span>());
         <span class="prelude-val">Ok</span>(())
     }
 }
