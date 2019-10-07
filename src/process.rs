@@ -74,10 +74,11 @@ impl Process {
 
             // No kill send, we assume that the process died
             if kill_rx.try_recv().is_err() {
-                error!("Process '{}' died on {}", c, status);
+                error!("Process '{}' died unexpectedly", c);
             } else {
-                info!("Process '{}' exited on {}", c, status);
+                info!("Process '{}' exited", c);
             }
+            debug!("{} {}", c, status);
             Ok(())
         });
 

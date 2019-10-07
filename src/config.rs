@@ -1,6 +1,6 @@
 //! Configuration related structures
 use clap::{crate_version, AppSettings, Clap};
-use failure::{format_err, Fallible};
+use failure::{bail, format_err, Fallible};
 use getset::Getters;
 use ipnetwork::IpNetwork;
 use log::LevelFilter;
@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,
     fs::{self, canonicalize, create_dir_all, read_to_string},
+    net::Ipv4Addr,
     path::PathBuf,
 };
 use toml;
@@ -173,12 +174,26 @@ impl Config {
         create_dir_all(self.root())
             .map_err(|e| format_err!("Unable to create root directory: {}", e))
     }
+
+    /// Retrieve the DNS address from the config
+    pub fn dns(&self) -> Fallible<Ipv4Addr> {
+        match self.service_cidr() {
+            IpNetwork::V4(n) => Ok(n.nth(2).ok_or_else(|| {
+                format_err!(
+                    "Unable to retrieve second IP from service CIDR: {}",
+                    self.service_cidr()
+                )
+            })?),
+            _ => bail!("Service CIDR is not for IPv4"),
+        }
+    }
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use std::path::Path;
+    use ipnetwork::{Ipv4Network, Ipv6Network};
+    use std::{net::Ipv6Addr, path::Path};
     use tempfile::tempdir;
 
     pub fn test_config() -> Fallible<Config> {
@@ -253,6 +268,29 @@ packages = []
         c.root = tempdir()?.into_path();
         fs::write(c.root.join(Config::FILENAME), "invalid")?;
         assert!(c.update_from_file().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn dns_success() {
+        let c = Config::default();
+        assert_eq!(c.dns().unwrap(), Ipv4Addr::new(10, 50, 0, 2));
+    }
+
+    #[test]
+    fn dns_failure_too_small_service_cidr() -> Fallible<()> {
+        let mut c = Config::default();
+        c.service_cidr = IpNetwork::V4(Ipv4Network::new(Ipv4Addr::new(1, 1, 1, 1), 32)?);
+        assert!(c.dns().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn dns_failure_v6_service_cidr() -> Fallible<()> {
+        let mut c = Config::default();
+        c.service_cidr =
+            IpNetwork::V6(Ipv6Network::new(Ipv6Addr::new(1, 1, 1, 1, 1, 1, 1, 1), 96)?);
+        assert!(c.dns().is_err());
         Ok(())
     }
 }

@@ -13,9 +13,11 @@ let
     etcd
     iproute
     iptables
+    kmod
     kubernetes
     runc
     socat
+    sysctl
     utillinux
     watch
   ] ++ [ /* PACKAGES */ ];
