@@ -110,12 +110,6 @@ mod tests {
     }
 
     #[test]
-    fn module_success() -> Fallible<()> {
-        let system = System::new();
-        system.modprobe("overlay")
-    }
-
-    #[test]
     fn module_failure() {
         let system = System::new();
         assert!(system.modprobe("invalid").is_err());
@@ -124,7 +118,7 @@ mod tests {
     #[test]
     fn sysctl_failure() {
         let system = System::new();
-        assert!(system.sysctl_enable("test").is_err());
+        assert!(system.sysctl_enable("invalid").is_err());
     }
 
     #[test]
