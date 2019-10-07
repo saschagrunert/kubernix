@@ -1,4 +1,5 @@
 use crate::{
+    network::Network,
     process::{Process, Startable, Stoppable},
     Config, Kubernix, CRIO_DIR, RUNTIME_ENV,
 };
@@ -24,7 +25,7 @@ pub struct Crio {
 }
 
 impl Crio {
-    pub fn start(config: &Config, socket: &Path) -> Fallible<Startable> {
+    pub fn start(config: &Config, network: &Network, socket: &Path) -> Fallible<Startable> {
         info!("Starting CRI-O");
         let conmon = Kubernix::find_executable("conmon")?;
         let bridge = Kubernix::find_executable("bridge")?;
@@ -44,14 +45,14 @@ impl Crio {
               "cniVersion": "0.3.1",
               "name": "crio-kubernix",
               "type": "bridge",
-              "bridge": "kubernix1",
+              "bridge": Network::BRIDGE,
               "isGateway": true,
               "ipMasq": true,
               "hairpinMode": true,
               "ipam": {
                 "type": "host-local",
                 "routes": [{ "dst": "0.0.0.0/0" }],
-                "ranges": [[{ "subnet": config.crio_cidr() }]]
+                "ranges": [[{ "subnet": network.crio() }]]
               }
             }))?,
         )?;

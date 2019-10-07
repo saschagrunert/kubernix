@@ -1,19 +1,17 @@
 //! Configuration related structures
 use clap::{crate_version, AppSettings, Clap};
-use failure::{bail, format_err, Fallible};
+use failure::{format_err, Fallible};
 use getset::Getters;
-use ipnetwork::IpNetwork;
+use ipnetwork::Ipv4Network;
 use log::LevelFilter;
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::Debug,
     fs::{self, canonicalize, create_dir_all, read_to_string},
-    net::Ipv4Addr,
     path::PathBuf,
 };
 use toml;
 
-#[derive(Clap, Clone, Debug, Deserialize, Getters, Serialize)]
+#[derive(Clap, Deserialize, Getters, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[clap(
     after_help = "More info at: https://github.com/saschagrunert/kubernix",
@@ -56,39 +54,15 @@ pub struct Config {
 
     #[get = "pub"]
     #[clap(
-        default_value = "10.100.0.0/16",
-        env = "KUBERNIX_CRIO_CIDR",
-        help = "The CIDR used for the CRI-O CNI network",
-        long = "crio-cidr",
+        default_value = "10.10.0.0/16",
+        env = "KUBERNIX_CIDR",
+        help = "The CIDR used for the cluster",
+        long = "cidr",
         short = "c",
         value_name = "CIDR"
     )]
-    /// The CIDR used for the CRI-O CNI network
-    crio_cidr: IpNetwork,
-
-    #[get = "pub"]
-    #[clap(
-        default_value = "10.200.0.0/16",
-        env = "KUBERNIX_CLUSTER_CIDR",
-        help = "The CIDR used for the whole cluster network",
-        long = "cluster-cidr",
-        short = "u",
-        value_name = "CIDR"
-    )]
-    /// The CIDR used for the whole cluster network
-    cluster_cidr: IpNetwork,
-
-    #[get = "pub"]
-    #[clap(
-        default_value = "10.50.0.0/16",
-        env = "KUBERNIX_SERVICE_CIDR",
-        help = "The CIDR used for the service network",
-        long = "service-cidr",
-        short = "s",
-        value_name = "CIDR"
-    )]
-    /// The CIDR used for the service network
-    service_cidr: IpNetwork,
+    /// The CIDR used for the cluster
+    cidr: Ipv4Network,
 
     #[get = "pub"]
     #[clap(
@@ -124,7 +98,7 @@ pub struct Config {
 }
 
 /// Possible subcommands
-#[derive(Clap, Clone, Debug, Deserialize, Serialize)]
+#[derive(Clap, Deserialize, Serialize)]
 pub enum SubCommand {
     /// `shell` subcommand specified
     #[clap(name = "shell", about = "Spawn an additional shell session")]
@@ -174,26 +148,12 @@ impl Config {
         create_dir_all(self.root())
             .map_err(|e| format_err!("Unable to create root directory: {}", e))
     }
-
-    /// Retrieve the DNS address from the config
-    pub fn dns(&self) -> Fallible<Ipv4Addr> {
-        match self.service_cidr() {
-            IpNetwork::V4(n) => Ok(n.nth(2).ok_or_else(|| {
-                format_err!(
-                    "Unable to retrieve second IP from service CIDR: {}",
-                    self.service_cidr()
-                )
-            })?),
-            _ => bail!("Service CIDR is not for IPv4"),
-        }
-    }
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use ipnetwork::{Ipv4Network, Ipv6Network};
-    use std::{net::Ipv6Addr, path::Path};
+    use std::path::Path;
     use tempfile::tempdir;
 
     pub fn test_config() -> Fallible<Config> {
@@ -206,6 +166,12 @@ pub mod tests {
     pub fn test_config_wrong_root() -> Fallible<Config> {
         let mut c = test_config()?;
         c.root = Path::new("/").join("proc");
+        Ok(c)
+    }
+
+    pub fn test_config_wrong_cidr() -> Fallible<Config> {
+        let mut c = test_config()?;
+        c.cidr = "10.0.0.1/25".parse()?;
         Ok(c)
     }
 
@@ -246,9 +212,7 @@ pub mod tests {
             r#"
 root = "root"
 log-level = "DEBUG"
-crio-cidr = "1.1.1.1/16"
-cluster-cidr = "2.2.2.2/16"
-service-cidr = "3.3.3.3/24"
+cidr = "1.1.1.1/16"
 impure = false
 packages = []
             "#,
@@ -256,9 +220,7 @@ packages = []
         c.update_from_file()?;
         assert_eq!(c.root(), Path::new("root"));
         assert_eq!(c.log_level(), &LevelFilter::Debug);
-        assert_eq!(c.crio_cidr().to_string(), "1.1.1.1/16");
-        assert_eq!(c.cluster_cidr().to_string(), "2.2.2.2/16");
-        assert_eq!(c.service_cidr().to_string(), "3.3.3.3/24");
+        assert_eq!(c.cidr().to_string(), "1.1.1.1/16");
         Ok(())
     }
 
@@ -268,29 +230,6 @@ packages = []
         c.root = tempdir()?.into_path();
         fs::write(c.root.join(Config::FILENAME), "invalid")?;
         assert!(c.update_from_file().is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn dns_success() {
-        let c = Config::default();
-        assert_eq!(c.dns().unwrap(), Ipv4Addr::new(10, 50, 0, 2));
-    }
-
-    #[test]
-    fn dns_failure_too_small_service_cidr() -> Fallible<()> {
-        let mut c = Config::default();
-        c.service_cidr = IpNetwork::V4(Ipv4Network::new(Ipv4Addr::new(1, 1, 1, 1), 32)?);
-        assert!(c.dns().is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn dns_failure_v6_service_cidr() -> Fallible<()> {
-        let mut c = Config::default();
-        c.service_cidr =
-            IpNetwork::V6(Ipv6Network::new(Ipv6Addr::new(1, 1, 1, 1, 1, 1, 1, 1), 96)?);
-        assert!(c.dns().is_err());
         Ok(())
     }
 }

@@ -1,7 +1,6 @@
-use crate::Config;
+use crate::{network::Network, Config};
 use failure::{bail, format_err, Fallible};
 use getset::Getters;
-use ipnetwork::IpNetwork;
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
 use std::{
@@ -71,28 +70,17 @@ struct PkiConfig<'a> {
 }
 
 impl Pki {
-    pub fn new(config: &Config, ip: &str, hostname: &str) -> Fallible<Pki> {
+    pub fn new(config: &Config, network: &Network, ip: &str, hostname: &str) -> Fallible<Pki> {
         info!("Generating certificates");
 
         // Create the target dir
         let pki_dir = &config.root().join("pki");
         create_dir_all(pki_dir)?;
 
-        // Find out the first Service IP
-        let service_addr = match config.service_cidr() {
-            IpNetwork::V4(n) => n.nth(1).ok_or_else(|| {
-                format_err!(
-                    "Unable to retrieve first IP from service CIDR: {}",
-                    config.service_cidr()
-                )
-            })?,
-            _ => Ipv4Addr::LOCALHOST,
-        };
-
         // Set the hostnames
         let hostnames = &[
             ip,
-            &service_addr.to_string(),
+            &network.api()?.to_string(),
             &Ipv4Addr::LOCALHOST.to_string(),
             hostname,
             "kubernetes",
@@ -289,19 +277,24 @@ impl Pki {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::tests::{test_config, test_config_wrong_root};
+    use crate::{
+        config::tests::{test_config, test_config_wrong_root},
+        network::tests::test_network,
+    };
 
     #[test]
     fn new_success() -> Fallible<()> {
         let c = test_config()?;
-        Pki::new(&c, "", "")?;
+        let n = test_network()?;
+        Pki::new(&c, &n, "", "")?;
         Ok(())
     }
 
     #[test]
     fn new_failure() -> Fallible<()> {
         let c = test_config_wrong_root()?;
-        assert!(Pki::new(&c, "", "").is_err());
+        let n = test_network()?;
+        assert!(Pki::new(&c, &n, "", "").is_err());
         Ok(())
     }
 }

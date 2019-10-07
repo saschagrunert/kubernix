@@ -1,6 +1,7 @@
 use crate::{
     config::Config,
     kubeconfig::KubeConfig,
+    network::Network,
     process::{Process, Startable, Stoppable},
 };
 use failure::Fallible;
@@ -12,7 +13,11 @@ pub struct Proxy {
 }
 
 impl Proxy {
-    pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Fallible<Startable> {
+    pub fn start(
+        config: &Config,
+        network: &Network,
+        kubeconfig: &KubeConfig,
+    ) -> Fallible<Startable> {
         info!("Starting Proxy");
 
         let dir = config.root().join("proxy");
@@ -21,7 +26,7 @@ impl Proxy {
         let yml = format!(
             include_str!("assets/proxy.yml"),
             kubeconfig.proxy().display(),
-            config.cluster_cidr(),
+            network.cluster(),
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;

@@ -210,12 +210,13 @@ impl KubeConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::tests::test_config;
+    use crate::{config::tests::test_config, network::tests::test_network};
 
     #[test]
     fn new_success() -> Fallible<()> {
         let c = test_config()?;
-        let p = Pki::new(&c, "", "")?;
+        let n = test_network()?;
+        let p = Pki::new(&c, &n, "", "")?;
         KubeConfig::new(&c, &p, "", "")?;
         Ok(())
     }

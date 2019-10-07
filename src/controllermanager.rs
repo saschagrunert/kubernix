@@ -1,6 +1,7 @@
 use crate::{
     config::Config,
     kubeconfig::KubeConfig,
+    network::Network,
     pki::Pki,
     process::{Process, Startable, Stoppable},
 };
@@ -13,7 +14,12 @@ pub struct ControllerManager {
 }
 
 impl ControllerManager {
-    pub fn start(config: &Config, pki: &Pki, kubeconfig: &KubeConfig) -> Fallible<Startable> {
+    pub fn start(
+        config: &Config,
+        network: &Network,
+        pki: &Pki,
+        kubeconfig: &KubeConfig,
+    ) -> Fallible<Startable> {
         info!("Starting Controller Manager");
 
         let dir = config.root().join("controllermanager");
@@ -25,7 +31,7 @@ impl ControllerManager {
             "kube-controller-manager",
             &[
                 "--bind-address=0.0.0.0",
-                &format!("--cluster-cidr={}", config.cluster_cidr()),
+                &format!("--cluster-cidr={}", network.cluster()),
                 "--cluster-name=kubernetes",
                 &format!("--cluster-signing-cert-file={}", pki.ca().cert().display()),
                 &format!("--cluster-signing-key-file={}", pki.ca().key().display()),
@@ -36,7 +42,7 @@ impl ControllerManager {
                     "--service-account-private-key-file={}",
                     pki.service_account().key().display()
                 ),
-                &format!("--service-cluster-ip-range={}", config.service_cidr()),
+                &format!("--service-cluster-ip-range={}", network.service()),
                 "--use-service-account-credentials=true",
                 "--v=2",
             ],

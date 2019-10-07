@@ -10,6 +10,7 @@ mod encryptionconfig;
 mod etcd;
 mod kubeconfig;
 mod kubelet;
+mod network;
 mod pki;
 mod process;
 mod proxy;
@@ -26,6 +27,7 @@ use encryptionconfig::EncryptionConfig;
 use etcd::Etcd;
 use kubeconfig::KubeConfig;
 use kubelet::Kubelet;
+use network::Network;
 use pki::Pki;
 use process::{Process, Startable};
 use proxy::Proxy;
@@ -64,6 +66,7 @@ type Stoppables = Vec<Startable>;
 /// The main entry point for the application
 pub struct Kubernix {
     config: Config,
+    network: Network,
     crio_socket: PathBuf,
     kubeconfig: KubeConfig,
     processes: Stoppables,
@@ -146,8 +149,11 @@ impl Kubernix {
         let ip = system.ip()?;
         let hostname = system.hostname()?;
 
+        // Setup the network
+        let network = Network::new(&config)?;
+
         // Setup the PKI
-        let pki = Pki::new(&config, &ip, &hostname)?;
+        let pki = Pki::new(&config, &network, &ip, &hostname)?;
 
         // Setup the configs
         let kubeconfig = KubeConfig::new(&config, &pki, &ip, &hostname)?;
@@ -168,15 +174,16 @@ impl Kubernix {
         // Spawn the processes
         info!("Starting processes");
         scope(|s| {
-            s.spawn(|_| crio = Crio::start(&config, &crio_socket));
+            s.spawn(|_| crio = Crio::start(&config, &network, &crio_socket));
             s.spawn(|_| {
                 etcd = Etcd::start(&config, &pki);
-                apis = ApiServer::start(&config, &ip, &pki, &encryptionconfig, &kubeconfig)
+                apis =
+                    ApiServer::start(&config, &network, &ip, &pki, &encryptionconfig, &kubeconfig)
             });
-            s.spawn(|_| cont = ControllerManager::start(&config, &pki, &kubeconfig));
+            s.spawn(|_| cont = ControllerManager::start(&config, &network, &pki, &kubeconfig));
             s.spawn(|_| sche = Scheduler::start(&config, &kubeconfig));
-            s.spawn(|_| kube = Kubelet::start(&config, &pki, &kubeconfig, &crio_socket));
-            s.spawn(|_| prox = Proxy::start(&config, &kubeconfig));
+            s.spawn(|_| kube = Kubelet::start(&config, &network, &pki, &kubeconfig, &crio_socket));
+            s.spawn(|_| prox = Proxy::start(&config, &network, &kubeconfig));
         });
 
         let mut processes = vec![];
@@ -196,6 +203,7 @@ impl Kubernix {
         // Setup the main instance
         let mut kubernix = Kubernix {
             config,
+            network,
             crio_socket,
             kubeconfig,
             processes,
@@ -216,7 +224,7 @@ impl Kubernix {
 
     /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
     fn apply_addons(&mut self) -> Fallible<()> {
-        if let Err(e) = CoreDNS::apply(&self.config, &self.kubeconfig) {
+        if let Err(e) = CoreDNS::apply(&self.config, &self.network, &self.kubeconfig) {
             bail!("Unable to apply CoreDNS: {}", e);
         }
         Ok(())
