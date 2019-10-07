@@ -180,19 +180,18 @@ access the log and configuration files for further processing.
 
 KuberNix has some configuration possibilities, which are currently:
 
-| CLI argument         | Description                                                | Default         | Environment Variable    |
-| -------------------- | ---------------------------------------------------------- | --------------- | ----------------------- |
-| `-r, --root`         | Path where all the runtime data is stored                  | `kubernix-run`  | `KUBERNIX_ROOT`         |
-| `-l, --log-level`    | Logging verbosity                                          | `info`          | `KUBERNIX_LOG_LEVEL`    |
-| `-c, --crio-cidr`    | CIDR used for the CRI-O CNI network                        | `10.100.0.0/16` | `KUBERNIX_CRIO_CIDR`    |
-| `-u, --cluster-cidr` | CIDR used for the whole cluster network                    | `10.200.0.0/16` | `KUBERNIX_CLUSTER_CIDR` |
-| `-s, --service-cidr` | CIDR used for the service network                          | `10.50.0.0/24`  | `KUBERNIX_SERVICE_CIDR` |
-| `-o, --overlay`      | Nix package overlay to be used                             |                 | `KUBERNIX_OVERLAY`      |
-| `-p, --packages`     | Additional Nix dependencies to be added to the environment |                 | `KUBERNIX_PACKAGES`     |
-| `-i, --impure`       | Do not clear the current env during bootstrap              | `false`         |                         |
+| CLI argument      | Description                                                | Default        | Environment Variable |
+| ----------------- | ---------------------------------------------------------- | -------------- | -------------------- |
+| `-r, --root`      | Path where all the runtime data is stored                  | `kubernix-run` | `KUBERNIX_ROOT`      |
+| `-l, --log-level` | Logging verbosity                                          | `info`         | `KUBERNIX_LOG_LEVEL` |
+| `-c, --cidr`      | CIDR used for the cluster network                          | `10.10.0.0/16` | `KUBERNIX_CIDR`      |
+| `-o, --overlay`   | Nix package overlay to be used                             |                | `KUBERNIX_OVERLAY`   |
+| `-p, --packages`  | Additional Nix dependencies to be added to the environment |                | `KUBERNIX_PACKAGES`  |
+| `-i, --impure`    | Do not clear the current env during bootstrap              | `false`        |                      |
 
-Please ensure that the CIDRs are not overlapping with existing local networks
-and that your setup has access to the internet.
+Please ensure that the CIDR is not overlapping with existing local networks and
+that your setup has access to the internet. The CIDR will be automatically split
+up over the necessary cluster components.
 
 #### Overlays
 

@@ -1,6 +1,7 @@
 use crate::{
     config::Config,
     kubeconfig::KubeConfig,
+    network::Network,
     pki::Pki,
     process::{Process, Startable, Stoppable},
 };
@@ -18,6 +19,7 @@ pub struct Kubelet {
 impl Kubelet {
     pub fn start(
         config: &Config,
+        network: &Network,
         pki: &Pki,
         kubeconfig: &KubeConfig,
         socket: &Path,
@@ -30,8 +32,8 @@ impl Kubelet {
         let yml = format!(
             include_str!("assets/kubelet.yml"),
             pki.ca().cert().display(),
-            config.dns()?,
-            config.crio_cidr(),
+            network.dns()?,
+            network.crio(),
             pki.kubelet().cert().display(),
             pki.kubelet().key().display(),
         );

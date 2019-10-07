@@ -2,6 +2,7 @@ use crate::{
     config::Config,
     encryptionconfig::EncryptionConfig,
     kubeconfig::KubeConfig,
+    network::Network,
     pki::Pki,
     process::{Process, Startable, Stoppable},
 };
@@ -21,6 +22,7 @@ pub struct ApiServer {
 impl ApiServer {
     pub fn start(
         config: &Config,
+        network: &Network,
         ip: &str,
         pki: &Pki,
         encryptionconfig: &EncryptionConfig,
@@ -72,7 +74,7 @@ impl ApiServer {
                     "--service-account-key-file={}",
                     pki.service_account().cert().display()
                 ),
-                &format!("--service-cluster-ip-range={}", config.service_cidr()),
+                &format!("--service-cluster-ip-range={}", network.service()),
                 &format!("--tls-cert-file={}", pki.apiserver().cert().display()),
                 &format!("--tls-private-key-file={}", pki.apiserver().key().display()),
                 "--v=2",
