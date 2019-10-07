@@ -1,4 +1,4 @@
-use crate::{config::Config, kubeconfig::KubeConfig, Kubernix};
+use crate::{config::Config, kubeconfig::KubeConfig};
 use failure::{bail, Fallible};
 use log::{debug, info};
 use std::{
@@ -15,7 +15,7 @@ impl CoreDNS {
         let dir = config.root().join("coredns");
         create_dir_all(&dir)?;
 
-        let yml = format!(include_str!("assets/coredns.yml"), Kubernix::dns(config)?);
+        let yml = format!(include_str!("assets/coredns.yml"), config.dns()?);
         let yml_file = dir.join("coredns.yml");
         fs::write(&yml_file, yml)?;
 

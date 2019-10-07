@@ -3,7 +3,6 @@ use crate::{
     kubeconfig::KubeConfig,
     pki::Pki,
     process::{Process, Startable, Stoppable},
-    Kubernix,
 };
 use failure::Fallible;
 use log::info;
@@ -31,7 +30,7 @@ impl Kubelet {
         let yml = format!(
             include_str!("assets/kubelet.yml"),
             pki.ca().cert().display(),
-            Kubernix::dns(config)?,
+            config.dns()?,
             config.crio_cidr(),
             pki.kubelet().cert().display(),
             pki.kubelet().key().display(),

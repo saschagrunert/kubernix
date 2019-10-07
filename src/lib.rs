@@ -14,6 +14,7 @@ mod pki;
 mod process;
 mod proxy;
 mod scheduler;
+mod system;
 
 pub use config::Config;
 
@@ -29,10 +30,10 @@ use pki::Pki;
 use process::{Process, Startable};
 use proxy::Proxy;
 use scheduler::Scheduler;
+use system::System;
 
 use env_logger::Builder;
 use failure::{bail, format_err, Fallible};
-use ipnetwork::IpNetwork;
 use log::{debug, error, info, LevelFilter};
 use nix::{
     mount::{umount2, MntFlags},
@@ -44,7 +45,6 @@ use std::{
     env::{current_exe, split_paths, var, var_os},
     fmt::Display,
     fs::{self, create_dir_all},
-    net::{IpAddr, Ipv4Addr},
     path::{Path, PathBuf},
     process::Command,
     thread::sleep,
@@ -93,7 +93,7 @@ impl Kubernix {
             config.root().display()
         );
 
-        Self::run_nix_shell(
+        Self::nix_shell_run(
             &config,
             &format!(
                 "bash --init-file {}",
@@ -138,11 +138,13 @@ impl Kubernix {
 
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config) -> Fallible<()> {
+        // Ensure that the system is prepared
+        let system = System::new();
+        system.prepare()?;
+
         // Retrieve the local IP
-        let ip = Self::local_ip()?;
-        let hostname =
-            hostname::get_hostname().ok_or_else(|| format_err!("Unable to retrieve hostname"))?;
-        info!("Using local IP {}", ip);
+        let ip = system.ip()?;
+        let hostname = system.hostname()?;
 
         // Setup the PKI
         let pki = Pki::new(&config, &ip, &hostname)?;
@@ -264,7 +266,7 @@ impl Kubernix {
         }
 
         // Run the shell
-        Self::run_nix_shell(
+        Self::nix_shell_run(
             &config,
             &format!(
                 "{} --root {}",
@@ -298,29 +300,8 @@ impl Kubernix {
         Ok(())
     }
 
-    /// Retrieve the local hosts IP via the default route
-    fn local_ip() -> Fallible<String> {
-        let cmd = Command::new("ip")
-            .arg("route")
-            .arg("get")
-            .arg("1.2.3.4")
-            .output()?;
-        if !cmd.status.success() {
-            bail!("Unable to obtain `ip` output")
-        }
-        let output = String::from_utf8(cmd.stdout)?;
-        let ip = output
-            .split_whitespace()
-            .nth(6)
-            .ok_or_else(|| format_err!("Different `ip` command output expected"))?;
-        if let Err(e) = ip.parse::<IpAddr>() {
-            bail!("Unable to parse IP '{}': {}", ip, e);
-        }
-        Ok(ip.to_owned())
-    }
-
     /// Run a pure nix shell command
-    fn run_nix_shell(config: &Config, arg: &str) -> Fallible<()> {
+    fn nix_shell_run(config: &Config, arg: &str) -> Fallible<()> {
         let purity = if !*config.impure() {
             debug!("Runnig pure nix-shell");
             "--pure"
@@ -364,19 +345,6 @@ impl Kubernix {
                     .next()
             })
             .ok_or_else(|| format_err!("Unable to find {} in $PATH", name))
-    }
-
-    /// Retrieve the DNS address from the config
-    fn dns(config: &Config) -> Fallible<Ipv4Addr> {
-        match config.service_cidr() {
-            IpNetwork::V4(n) => Ok(n.nth(2).ok_or_else(|| {
-                format_err!(
-                    "Unable to retrieve second IP from service CIDR: {}",
-                    config.service_cidr()
-                )
-            })?),
-            _ => bail!("Service CIDR is not for IPv4"),
-        }
     }
 
     /// Remove all stale mounts
