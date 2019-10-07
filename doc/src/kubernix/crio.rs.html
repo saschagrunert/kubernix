@@ -180,8 +180,10 @@
 <span id="180">180</span>
 <span id="181">181</span>
 <span id="182">182</span>
+<span id="183">183</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{
+    <span class="ident">network</span>::<span class="ident">Network</span>,
     <span class="ident">process</span>::{<span class="ident">Process</span>, <span class="ident">Startable</span>, <span class="ident">Stoppable</span>},
     <span class="ident">Config</span>, <span class="ident">Kubernix</span>, <span class="ident">CRIO_DIR</span>, <span class="ident">RUNTIME_ENV</span>,
 };
@@ -207,7 +209,7 @@
 }
 
 <span class="kw">impl</span> <span class="ident">Crio</span> {
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">socket</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Startable</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>, <span class="ident">socket</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Startable</span><span class="op">&gt;</span> {
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Starting CRI-O&quot;</span>);
         <span class="kw">let</span> <span class="ident">conmon</span> <span class="op">=</span> <span class="ident">Kubernix</span>::<span class="ident">find_executable</span>(<span class="string">&quot;conmon&quot;</span>)<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">bridge</span> <span class="op">=</span> <span class="ident">Kubernix</span>::<span class="ident">find_executable</span>(<span class="string">&quot;bridge&quot;</span>)<span class="question-mark">?</span>;
@@ -227,14 +229,14 @@
               <span class="string">&quot;cniVersion&quot;</span>: <span class="string">&quot;0.3.1&quot;</span>,
               <span class="string">&quot;name&quot;</span>: <span class="string">&quot;crio-kubernix&quot;</span>,
               <span class="string">&quot;type&quot;</span>: <span class="string">&quot;bridge&quot;</span>,
-              <span class="string">&quot;bridge&quot;</span>: <span class="string">&quot;kubernix1&quot;</span>,
+              <span class="string">&quot;bridge&quot;</span>: <span class="ident">Network</span>::<span class="ident">BRIDGE</span>,
               <span class="string">&quot;isGateway&quot;</span>: <span class="bool-val">true</span>,
               <span class="string">&quot;ipMasq&quot;</span>: <span class="bool-val">true</span>,
               <span class="string">&quot;hairpinMode&quot;</span>: <span class="bool-val">true</span>,
               <span class="string">&quot;ipam&quot;</span>: {
                 <span class="string">&quot;type&quot;</span>: <span class="string">&quot;host-local&quot;</span>,
                 <span class="string">&quot;routes&quot;</span>: [{ <span class="string">&quot;dst&quot;</span>: <span class="string">&quot;0.0.0.0/0&quot;</span> }],
-                <span class="string">&quot;ranges&quot;</span>: [[{ <span class="string">&quot;subnet&quot;</span>: <span class="ident">config</span>.<span class="ident">crio_cidr</span>() }]]
+                <span class="string">&quot;ranges&quot;</span>: [[{ <span class="string">&quot;subnet&quot;</span>: <span class="ident">network</span>.<span class="ident">crio</span>() }]]
               }
             }))<span class="question-mark">?</span>,
         )<span class="question-mark">?</span>;
