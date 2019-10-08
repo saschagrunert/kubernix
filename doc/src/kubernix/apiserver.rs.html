@@ -117,10 +117,6 @@
 <span id="117">117</span>
 <span id="118">118</span>
 <span id="119">119</span>
-<span id="120">120</span>
-<span id="121">121</span>
-<span id="122">122</span>
-<span id="123">123</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{
     <span class="ident">config</span>::<span class="ident">Config</span>,
@@ -135,7 +131,6 @@
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">info</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">create_dir_all</span>},
-    <span class="ident">net</span>::<span class="ident">Ipv4Addr</span>,
     <span class="ident">path</span>::<span class="ident">Path</span>,
     <span class="ident">process</span>::<span class="ident">Command</span>,
 };
@@ -175,10 +170,7 @@
                 <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--etcd-cafile={}&quot;</span>, <span class="ident">pki</span>.<span class="ident">ca</span>().<span class="ident">cert</span>().<span class="ident">display</span>()),
                 <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--etcd-certfile={}&quot;</span>, <span class="ident">pki</span>.<span class="ident">apiserver</span>().<span class="ident">cert</span>().<span class="ident">display</span>()),
                 <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--etcd-keyfile={}&quot;</span>, <span class="ident">pki</span>.<span class="ident">apiserver</span>().<span class="ident">key</span>().<span class="ident">display</span>()),
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
-                    <span class="string">&quot;--etcd-servers=https://{}:2379&quot;</span>,
-                    <span class="ident">Ipv4Addr</span>::<span class="ident">LOCALHOST</span>.<span class="ident">to_string</span>(),
-                ),
+                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--etcd-servers=https://{}&quot;</span>, <span class="ident">network</span>.<span class="ident">etcd_client</span>()),
                 <span class="string">&quot;--event-ttl=1h&quot;</span>,
                 <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
                     <span class="string">&quot;--encryption-provider-config={}&quot;</span>,
@@ -199,7 +191,7 @@
                     <span class="string">&quot;--service-account-key-file={}&quot;</span>,
                     <span class="ident">pki</span>.<span class="ident">service_account</span>().<span class="ident">cert</span>().<span class="ident">display</span>()
                 ),
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--service-cluster-ip-range={}&quot;</span>, <span class="ident">network</span>.<span class="ident">service</span>()),
+                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--service-cluster-ip-range={}&quot;</span>, <span class="ident">network</span>.<span class="ident">service_cidr</span>()),
                 <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--tls-cert-file={}&quot;</span>, <span class="ident">pki</span>.<span class="ident">apiserver</span>().<span class="ident">cert</span>().<span class="ident">display</span>()),
                 <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--tls-private-key-file={}&quot;</span>, <span class="ident">pki</span>.<span class="ident">apiserver</span>().<span class="ident">key</span>().<span class="ident">display</span>()),
                 <span class="string">&quot;--v=2&quot;</span>,
