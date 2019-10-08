@@ -63,11 +63,16 @@ impl Crio {
             }))?,
         )?;
 
+        // Pseudo config to not load local configuration values
+        let crio_config = dir.join("crio.conf");
+        fs::write(&crio_config, "")?;
+
         let mut process = Process::start(
             config,
             &dir,
             "crio",
             &[
+                &format!("--config={}", crio_config.display()),
                 "--log-level=debug",
                 "--storage-driver=overlay",
                 &format!("--conmon={}", conmon.display()),
