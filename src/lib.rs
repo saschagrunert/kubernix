@@ -160,11 +160,11 @@ impl Kubernix {
         // All processes
         let mut crio = Process::stopped();
         let mut etcd = Process::stopped();
-        let mut apis = Process::stopped();
-        let mut cont = Process::stopped();
-        let mut sche = Process::stopped();
-        let mut kube = Process::stopped();
-        let mut prox = Process::stopped();
+        let mut api_server = Process::stopped();
+        let mut controller_manager = Process::stopped();
+        let mut scheduler = Process::stopped();
+        let mut kubelet = Process::stopped();
+        let mut proxy = Process::stopped();
 
         // Spawn the processes
         info!("Starting processes");
@@ -172,7 +172,7 @@ impl Kubernix {
             s.spawn(|_| crio = Crio::start(&config, &network, &crio_socket));
             s.spawn(|_| {
                 etcd = Etcd::start(&config, &pki);
-                apis = ApiServer::start(
+                api_server = ApiServer::start(
                     &config,
                     &system,
                     &network,
@@ -181,16 +181,28 @@ impl Kubernix {
                     &kubeconfig,
                 )
             });
-            s.spawn(|_| cont = ControllerManager::start(&config, &network, &pki, &kubeconfig));
-            s.spawn(|_| sche = Scheduler::start(&config, &kubeconfig));
-            s.spawn(|_| kube = Kubelet::start(&config, &network, &pki, &kubeconfig, &crio_socket));
-            s.spawn(|_| prox = Proxy::start(&config, &network, &kubeconfig));
+            s.spawn(|_| {
+                controller_manager = ControllerManager::start(&config, &network, &pki, &kubeconfig)
+            });
+            s.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
+            s.spawn(|_| {
+                kubelet = Kubelet::start(&config, &network, &pki, &kubeconfig, &crio_socket)
+            });
+            s.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
         });
 
         let mut processes = vec![];
 
         // This order is important since we will shut down the processes in its reverse
-        let results = vec![kube, sche, prox, cont, apis, etcd, crio];
+        let results = vec![
+            kubelet,
+            scheduler,
+            proxy,
+            controller_manager,
+            api_server,
+            etcd,
+            crio,
+        ];
         let all_ok = results.iter().all(|x| x.is_ok());
 
         // Note: wait for `drain_filter()` to be stable and make it more straightforward
