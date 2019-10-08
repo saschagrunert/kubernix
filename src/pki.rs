@@ -1,4 +1,4 @@
-use crate::{network::Network, Config};
+use crate::{network::Network, system::System, Config};
 use failure::{bail, format_err, Fallible};
 use getset::Getters;
 use log::{debug, info};
@@ -70,7 +70,7 @@ struct PkiConfig<'a> {
 }
 
 impl Pki {
-    pub fn new(config: &Config, network: &Network, ip: &str, hostname: &str) -> Fallible<Pki> {
+    pub fn new(config: &Config, system: &System, network: &Network) -> Fallible<Pki> {
         info!("Generating certificates");
 
         // Create the target dir
@@ -79,10 +79,10 @@ impl Pki {
 
         // Set the hostnames
         let hostnames = &[
-            ip,
+            system.ip(),
             &network.api()?.to_string(),
             &Ipv4Addr::LOCALHOST.to_string(),
-            hostname,
+            system.hostname(),
             "kubernetes",
             "kubernetes.default",
             "kubernetes.default.svc",
@@ -102,7 +102,7 @@ impl Pki {
             admin: Self::setup_admin(&pki_config)?,
             apiserver: Self::setup_apiserver(&pki_config)?,
             controller_manager: Self::setup_controller_manager(&pki_config)?,
-            kubelet: Self::setup_kubelet(&pki_config, hostname)?,
+            kubelet: Self::setup_kubelet(&pki_config, system.hostname())?,
             proxy: Self::setup_proxy(&pki_config)?,
             scheduler: Self::setup_scheduler(&pki_config)?,
             service_account: Self::setup_service_account(&pki_config)?,
@@ -286,7 +286,8 @@ mod tests {
     fn new_success() -> Fallible<()> {
         let c = test_config()?;
         let n = test_network()?;
-        Pki::new(&c, &n, "", "")?;
+        let s = System::default();
+        Pki::new(&c, &s, &n)?;
         Ok(())
     }
 
@@ -294,7 +295,8 @@ mod tests {
     fn new_failure() -> Fallible<()> {
         let c = test_config_wrong_root()?;
         let n = test_network()?;
-        assert!(Pki::new(&c, &n, "", "").is_err());
+        let s = System::default();
+        assert!(Pki::new(&c, &s, &n).is_err());
         Ok(())
     }
 }

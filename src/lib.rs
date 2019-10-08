@@ -142,21 +142,16 @@ impl Kubernix {
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config) -> Fallible<()> {
         // Ensure that the system is prepared
-        let system = System::new();
-        system.prepare()?;
-
-        // Retrieve the local IP
-        let ip = system.ip()?;
-        let hostname = system.hostname()?;
+        let system = System::new()?;
 
         // Setup the network
         let network = Network::new(&config)?;
 
         // Setup the PKI
-        let pki = Pki::new(&config, &network, &ip, &hostname)?;
+        let pki = Pki::new(&config, &system, &network)?;
 
         // Setup the configs
-        let kubeconfig = KubeConfig::new(&config, &pki, &ip, &hostname)?;
+        let kubeconfig = KubeConfig::new(&config, &system, &pki)?;
         let encryptionconfig = EncryptionConfig::new(&config)?;
 
         // Full path to the CRI socket
@@ -177,8 +172,14 @@ impl Kubernix {
             s.spawn(|_| crio = Crio::start(&config, &network, &crio_socket));
             s.spawn(|_| {
                 etcd = Etcd::start(&config, &pki);
-                apis =
-                    ApiServer::start(&config, &network, &ip, &pki, &encryptionconfig, &kubeconfig)
+                apis = ApiServer::start(
+                    &config,
+                    &system,
+                    &network,
+                    &pki,
+                    &encryptionconfig,
+                    &kubeconfig,
+                )
             });
             s.spawn(|_| cont = ControllerManager::start(&config, &network, &pki, &kubeconfig));
             s.spawn(|_| sche = Scheduler::start(&config, &kubeconfig));

@@ -1,4 +1,4 @@
-use crate::{pki::Pki, Config};
+use crate::{pki::Pki, system::System, Config};
 use failure::{bail, Fallible};
 use getset::Getters;
 use log::{debug, info};
@@ -28,7 +28,7 @@ pub struct KubeConfig {
 }
 
 impl KubeConfig {
-    pub fn new(config: &Config, pki: &Pki, ip: &str, hostname: &str) -> Fallible<KubeConfig> {
+    pub fn new(config: &Config, system: &System, pki: &Pki) -> Fallible<KubeConfig> {
         info!("Creating kubeconfigs");
 
         // Create the target dir
@@ -36,8 +36,8 @@ impl KubeConfig {
         create_dir_all(&dir)?;
 
         let mut kube = KubeConfig::default();
-        kube.kubelet = Self::setup_kubelet(&dir, &pki, ip, hostname)?;
-        kube.proxy = Self::setup_proxy(&dir, &pki, ip)?;
+        kube.kubelet = Self::setup_kubelet(&dir, &pki, system.ip(), system.hostname())?;
+        kube.proxy = Self::setup_proxy(&dir, &pki, system.ip())?;
         kube.controller_manager = Self::setup_controller_manager(&dir, &pki)?;
         kube.scheduler = Self::setup_scheduler(&dir, &pki)?;
         kube.admin = Self::setup_admin(&dir, &pki)?;
@@ -216,8 +216,9 @@ mod tests {
     fn new_success() -> Fallible<()> {
         let c = test_config()?;
         let n = test_network()?;
-        let p = Pki::new(&c, &n, "", "")?;
-        KubeConfig::new(&c, &p, "", "")?;
+        let s = System::default();
+        let p = Pki::new(&c, &s, &n)?;
+        KubeConfig::new(&c, &s, &p)?;
         Ok(())
     }
 }

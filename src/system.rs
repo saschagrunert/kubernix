@@ -1,32 +1,39 @@
 use failure::{bail, format_err, Fallible};
+use getset::Getters;
 use log::{debug, info};
 use std::{net::IpAddr, process::Command};
 
+#[derive(Default, Getters)]
 pub struct System {
-    modules: Vec<String>,
-    sysctls: Vec<String>,
+    #[get = "pub"]
+    ip: String,
+
+    #[get = "pub"]
+    hostname: String,
 }
 
 impl System {
     /// Create a new system
-    pub fn new() -> Self {
-        Self {
-            modules: vec![
-                "overlay".to_owned(),
-                "br_netfilter".to_owned(),
-                "ip_conntrack".to_owned(),
-            ],
-            sysctls: vec![
-                "net.bridge.bridge-nf-call-ip6tables".to_owned(),
-                "net.bridge.bridge-nf-call-iptables".to_owned(),
-                "net.ipv4.conf.all.route_localnet".to_owned(),
-                "net.ipv4.ip_forward".to_owned(),
-            ],
+    pub fn new() -> Fallible<Self> {
+        for module in &["overlay", "br_netfilter", "ip_conntrack"] {
+            Self::modprobe(module)?;
         }
+        for sysctl in &[
+            "net.bridge.bridge-nf-call-ip6tables",
+            "net.bridge.bridge-nf-call-iptables",
+            "net.ipv4.conf.all.route_localnet",
+            "net.ipv4.ip_forward",
+        ] {
+            Self::sysctl_enable(sysctl)?;
+        }
+        Ok(Self {
+            ip: Self::get_ip()?,
+            hostname: Self::get_hostname()?,
+        })
     }
 
     /// Retrieve the local hosts IP via the default route
-    pub fn ip(&self) -> Fallible<String> {
+    fn get_ip() -> Fallible<String> {
         let cmd = Command::new("ip")
             .arg("route")
             .arg("get")
@@ -48,30 +55,15 @@ impl System {
     }
 
     /// Retrieve the local hostname
-    pub fn hostname(&self) -> Fallible<String> {
+    fn get_hostname() -> Fallible<String> {
         let hostname =
             hostname::get_hostname().ok_or_else(|| format_err!("Unable to retrieve hostname"))?;
         info!("Using hostname {}", hostname);
         Ok(hostname)
     }
 
-    /// Load all required kernel modules and configure the system
-    pub fn prepare(&self) -> Fallible<()> {
-        // Load the modules
-        for module in &self.modules {
-            self.modprobe(module)?;
-        }
-
-        // Set the sysctls
-        for sysctl in &self.sysctls {
-            self.sysctl_enable(sysctl)?;
-        }
-
-        Ok(())
-    }
-
     /// Load a single kernel module via 'modprobe'
-    fn modprobe(&self, module: &str) -> Fallible<()> {
+    fn modprobe(module: &str) -> Fallible<()> {
         debug!("Loading kernel module '{}'", module);
         let output = Command::new("modprobe").arg(module).output()?;
         if !output.status.success() {
@@ -85,7 +77,7 @@ impl System {
     }
 
     /// Enable a single sysctl by setting it to '1'
-    fn sysctl_enable(&self, key: &str) -> Fallible<()> {
+    fn sysctl_enable(key: &str) -> Fallible<()> {
         debug!("Enabling sysctl '{}'", key);
         let enable_arg = format!("{}=1", key);
         let output = Command::new("sysctl").arg("-w").arg(&enable_arg).output()?;
@@ -102,32 +94,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn prepare_success_empty() -> Fallible<()> {
-        let mut system = System::new();
-        system.modules = vec![];
-        system.sysctls = vec![];
-        system.prepare()
-    }
-
-    #[test]
     fn module_failure() {
-        let system = System::new();
-        assert!(system.modprobe("invalid").is_err());
+        assert!(System::modprobe("invalid").is_err());
     }
 
     #[test]
     fn sysctl_failure() {
-        let system = System::new();
-        assert!(system.sysctl_enable("invalid").is_err());
+        assert!(System::sysctl_enable("invalid").is_err());
     }
 
     #[test]
     fn ip_success() {
-        assert!(System::new().ip().is_ok());
+        assert!(System::get_ip().is_ok());
     }
 
     #[test]
     fn hostname_success() {
-        assert!(System::new().hostname().is_ok());
+        assert!(System::get_hostname().is_ok());
     }
 }
