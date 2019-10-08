@@ -71,7 +71,7 @@ impl Crio {
                 "--log-level=debug",
                 "--storage-driver=overlay",
                 &format!("--conmon={}", conmon.display()),
-                &format!("--listen={}", network.crio_socket().to_string()),
+                &format!("--listen={}", network.crio_socket()),
                 &format!("--root={}", dir.join("storage").display()),
                 &format!("--runroot={}", dir.join("run").display()),
                 &format!("--cni-config-dir={}", cni_config.display()),

@@ -4,6 +4,7 @@ use getset::Getters;
 use ipnetwork::Ipv4Network;
 use log::{debug, warn};
 use std::{
+    fmt::{Display, Formatter, Result},
     net::{Ipv4Addr, SocketAddr},
     path::PathBuf,
     process::Command,
@@ -33,11 +34,13 @@ pub struct Network {
 /// Simple CRI-O socket abstraction
 pub struct CrioSocket(PathBuf);
 
-impl CrioSocket {
-    pub fn to_string(&self) -> String {
-        format!("{}", self.0.display())
+impl Display for CrioSocket {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self.0.display())
     }
+}
 
+impl CrioSocket {
     pub fn to_socket_string(&self) -> String {
         format!("unix://{}", self.0.display())
     }
