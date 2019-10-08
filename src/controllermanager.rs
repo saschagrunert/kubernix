@@ -31,7 +31,7 @@ impl ControllerManager {
             "kube-controller-manager",
             &[
                 "--bind-address=0.0.0.0",
-                &format!("--cluster-cidr={}", network.cluster()),
+                &format!("--cluster-cidr={}", network.cluster_cidr()),
                 "--cluster-name=kubernetes",
                 &format!("--cluster-signing-cert-file={}", pki.ca().cert().display()),
                 &format!("--cluster-signing-key-file={}", pki.ca().key().display()),
@@ -42,7 +42,7 @@ impl ControllerManager {
                     "--service-account-private-key-file={}",
                     pki.service_account().key().display()
                 ),
-                &format!("--service-cluster-ip-range={}", network.service()),
+                &format!("--service-cluster-ip-range={}", network.service_cidr()),
                 "--use-service-account-credentials=true",
                 "--v=2",
             ],

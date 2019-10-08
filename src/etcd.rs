@@ -1,26 +1,20 @@
 use crate::{
     config::Config,
+    network::Network,
     pki::Pki,
     process::{Process, Startable, Stoppable},
 };
 use failure::Fallible;
 use log::info;
-use std::{
-    fs::{create_dir_all, remove_dir_all},
-    net::Ipv4Addr,
-};
+use std::fs::{create_dir_all, remove_dir_all};
 
 pub struct Etcd {
     process: Process,
 }
 
 impl Etcd {
-    pub fn start(config: &Config, pki: &Pki) -> Fallible<Startable> {
+    pub fn start(config: &Config, network: &Network, pki: &Pki) -> Fallible<Startable> {
         info!("Starting etcd");
-
-        let localhost = Ipv4Addr::LOCALHOST.to_string();
-        let etcd_localhost = format!("https://{}:2379", localhost);
-        let etcd_localhost_peer = format!("https://{}:2380", localhost);
 
         // Remove the etcd data dir if already exists (configuration re-use)
         let dir = config.root().join("etcd");
@@ -36,15 +30,18 @@ impl Etcd {
             &dir,
             "etcd",
             &[
-                &format!("--advertise-client-urls={}", etcd_localhost),
+                &format!("--advertise-client-urls=https://{}", network.etcd_client()),
                 "--client-cert-auth",
                 &format!("--data-dir={}", data_dir.display()),
-                &format!("--initial-advertise-peer-urls={}", etcd_localhost_peer),
+                &format!(
+                    "--initial-advertise-peer-urls=https://{}",
+                    network.etcd_peer()
+                ),
                 "--initial-cluster-state=new",
                 "--initial-cluster-token=etcd-cluster",
-                &format!("--initial-cluster=etcd={}", etcd_localhost_peer),
-                &format!("--listen-client-urls={}", etcd_localhost),
-                &format!("--listen-peer-urls={}", etcd_localhost_peer),
+                &format!("--initial-cluster=etcd=https://{}", network.etcd_peer()),
+                &format!("--listen-client-urls=https://{}", network.etcd_client()),
+                &format!("--listen-peer-urls=https://{}", network.etcd_peer()),
                 "--name=etcd",
                 "--peer-client-cert-auth",
                 &format!("--cert-file={}", pki.apiserver().cert().display()),
@@ -80,7 +77,7 @@ mod tests {
         let s = System::default();
         let p = Pki::new(&c, &s, &n)?;
 
-        let mut etcd = Etcd::start(&c, &p)?;
+        let mut etcd = Etcd::start(&c, &n, &p)?;
         etcd.stop()
     }
 }

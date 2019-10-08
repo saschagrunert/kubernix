@@ -26,7 +26,7 @@ impl Proxy {
         let yml = format!(
             include_str!("assets/proxy.yml"),
             kubeconfig.proxy().display(),
-            network.cluster(),
+            network.cluster_cidr(),
         );
         let yml_file = dir.join("config.yml");
         fs::write(&yml_file, yml)?;

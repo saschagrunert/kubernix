@@ -7,10 +7,7 @@ use crate::{
 };
 use failure::Fallible;
 use log::info;
-use std::{
-    fs::{self, create_dir_all},
-    path::Path,
-};
+use std::fs::{self, create_dir_all};
 
 pub struct Kubelet {
     process: Process,
@@ -22,7 +19,6 @@ impl Kubelet {
         network: &Network,
         pki: &Pki,
         kubeconfig: &KubeConfig,
-        socket: &Path,
     ) -> Fallible<Startable> {
         info!("Starting Kubelet");
 
@@ -33,7 +29,7 @@ impl Kubelet {
             include_str!("assets/kubelet.yml"),
             pki.ca().cert().display(),
             network.dns()?,
-            network.crio(),
+            network.crio_cidr(),
             pki.kubelet().cert().display(),
             pki.kubelet().key().display(),
         );
@@ -48,7 +44,10 @@ impl Kubelet {
                 &format!("--config={}", yml_file.display()),
                 &format!("--root-dir={}", dir.join("run").display()),
                 "--container-runtime=remote",
-                &format!("--container-runtime-endpoint=unix://{}", socket.display()),
+                &format!(
+                    "--container-runtime-endpoint={}",
+                    network.crio_socket().to_socket_string()
+                ),
                 &format!("--kubeconfig={}", kubeconfig.kubelet().display()),
                 "--image-pull-progress-deadline=2m",
                 "--network-plugin=cni",

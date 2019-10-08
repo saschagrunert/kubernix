@@ -57,17 +57,12 @@ const CRIO_DIR: &str = "crio";
 const NIX_DIR: &str = "nix";
 const KUBERNIX_ENV: &str = "kubernix.env";
 
-const KUBECONFIG_ENV: &str = "KUBECONFIG";
-const NIX_SHELL_ENV: &str = "IN_NIX_SHELL";
-const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
-
 type Stoppables = Vec<Startable>;
 
 /// The main entry point for the application
 pub struct Kubernix {
     config: Config,
     network: Network,
-    crio_socket: PathBuf,
     kubeconfig: KubeConfig,
     processes: Stoppables,
 }
@@ -78,7 +73,7 @@ impl Kubernix {
         Self::prepare_env(&mut config)?;
 
         // Bootstrap if we're not inside a nix shell
-        if var(NIX_SHELL_ENV).is_err() {
+        if var("IN_NIX_SHELL").is_err() {
             info!("Nix environment not found, bootstrapping one");
             Self::bootstrap_nix(config)
         } else {
@@ -154,9 +149,6 @@ impl Kubernix {
         let kubeconfig = KubeConfig::new(&config, &system, &pki)?;
         let encryptionconfig = EncryptionConfig::new(&config)?;
 
-        // Full path to the CRI socket
-        let crio_socket = config.root().join(CRIO_DIR).join("crio.sock");
-
         // All processes
         let mut crio = Process::stopped();
         let mut etcd = Process::stopped();
@@ -169,9 +161,9 @@ impl Kubernix {
         // Spawn the processes
         info!("Starting processes");
         scope(|s| {
-            s.spawn(|_| crio = Crio::start(&config, &network, &crio_socket));
+            s.spawn(|_| crio = Crio::start(&config, &network));
             s.spawn(|_| {
-                etcd = Etcd::start(&config, &pki);
+                etcd = Etcd::start(&config, &network, &pki);
                 api_server = ApiServer::start(
                     &config,
                     &system,
@@ -185,9 +177,7 @@ impl Kubernix {
                 controller_manager = ControllerManager::start(&config, &network, &pki, &kubeconfig)
             });
             s.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
-            s.spawn(|_| {
-                kubelet = Kubelet::start(&config, &network, &pki, &kubeconfig, &crio_socket)
-            });
+            s.spawn(|_| kubelet = Kubelet::start(&config, &network, &pki, &kubeconfig));
             s.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
         });
 
@@ -217,7 +207,6 @@ impl Kubernix {
         let mut kubernix = Kubernix {
             config,
             network,
-            crio_socket,
             kubeconfig,
             processes,
         };
@@ -306,9 +295,9 @@ impl Kubernix {
             &env_file,
             format!(
                 "PS1='> '\nexport {}={}\nexport {}={}",
-                RUNTIME_ENV,
-                format!("unix://{}", self.crio_socket.display()),
-                KUBECONFIG_ENV,
+                "CONTAINER_RUNTIME_ENDPOINT",
+                self.network.crio_socket().to_socket_string(),
+                "KUBECONFIG",
                 self.kubeconfig.admin().display(),
             ),
         )?;

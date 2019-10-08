@@ -1,20 +1,46 @@
-use crate::Config;
+use crate::{Config, CRIO_DIR};
 use failure::{bail, format_err, Fallible};
 use getset::Getters;
 use ipnetwork::Ipv4Network;
 use log::{debug, warn};
-use std::{net::Ipv4Addr, process::Command};
+use std::{
+    net::{Ipv4Addr, SocketAddr},
+    path::PathBuf,
+    process::Command,
+};
 
 #[derive(Getters)]
 pub struct Network {
     #[get = "pub"]
-    crio: Ipv4Network,
+    cluster_cidr: Ipv4Network,
 
     #[get = "pub"]
-    cluster: Ipv4Network,
+    crio_cidr: Ipv4Network,
 
     #[get = "pub"]
-    service: Ipv4Network,
+    service_cidr: Ipv4Network,
+
+    #[get = "pub"]
+    etcd_client: SocketAddr,
+
+    #[get = "pub"]
+    etcd_peer: SocketAddr,
+
+    #[get = "pub"]
+    crio_socket: CrioSocket,
+}
+
+/// Simple CRI-O socket abstraction
+pub struct CrioSocket(PathBuf);
+
+impl CrioSocket {
+    pub fn to_string(&self) -> String {
+        format!("{}", self.0.display())
+    }
+
+    pub fn to_socket_string(&self) -> String {
+        format!("unix://{}", self.0.display())
+    }
 }
 
 impl Network {
@@ -23,40 +49,49 @@ impl Network {
 
     /// Create a new network from the provided config
     pub fn new(config: &Config) -> Fallible<Self> {
+        // Preflight checks
         if config.cidr().prefix() > 24 {
             bail!(
                 "Specified IP network {} is too small, please use at least a /24 subnet",
                 config.cidr()
             )
         }
-
         Self::warn_overlapping_route(*config.cidr())?;
 
-        let crio = Ipv4Network::new(config.cidr().ip(), config.cidr().prefix() + 1)?;
-        debug!("Using crio CIDR {}", crio);
+        // Calculate the CIDRs
+        let crio_cidr = Ipv4Network::new(config.cidr().ip(), config.cidr().prefix() + 1)?;
+        debug!("Using crio CIDR {}", crio_cidr);
 
-        let cluster = Ipv4Network::new(
+        let cluster_cidr = Ipv4Network::new(
             config
                 .cidr()
                 .nth(config.cidr().size() / 2)
                 .ok_or_else(|| format_err!("Unable to retrieve cluster CIDR start IP"))?,
             config.cidr().prefix() + 2,
         )?;
-        debug!("Using cluster CIDR {}", cluster);
+        debug!("Using cluster CIDR {}", cluster_cidr);
 
-        let service = Ipv4Network::new(
+        let service_cidr = Ipv4Network::new(
             config
                 .cidr()
-                .nth(config.cidr().size() / 2 + cluster.size())
+                .nth(config.cidr().size() / 2 + cluster_cidr.size())
                 .ok_or_else(|| format_err!("Unable to retrieve service CIDR start IP"))?,
             config.cidr().prefix() + 3,
         )?;
-        debug!("Using service CIDR {}", service);
+        debug!("Using service CIDR {}", service_cidr);
+
+        // Set the rest of the networking related adresses and paths
+        let crio_socket = CrioSocket(config.root().join(CRIO_DIR).join("crio.sock"));
+        let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2379);
+        let etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2380);
 
         Ok(Self {
-            crio,
-            cluster,
-            service,
+            cluster_cidr,
+            crio_cidr,
+            service_cidr,
+            crio_socket,
+            etcd_client,
+            etcd_peer,
         })
     }
 
@@ -83,20 +118,20 @@ impl Network {
 
     /// Retrieve the DNS address from the service CIDR
     pub fn api(&self) -> Fallible<Ipv4Addr> {
-        self.service().nth(1).ok_or_else(|| {
+        self.service_cidr().nth(1).ok_or_else(|| {
             format_err!(
                 "Unable to retrieve first IP from service CIDR: {}",
-                self.service()
+                self.service_cidr()
             )
         })
     }
 
     /// Retrieve the DNS address from the service CIDR
     pub fn dns(&self) -> Fallible<Ipv4Addr> {
-        self.service().nth(2).ok_or_else(|| {
+        self.service_cidr().nth(2).ok_or_else(|| {
             format_err!(
                 "Unable to retrieve second IP from service CIDR: {}",
-                self.service()
+                self.service_cidr()
             )
         })
     }

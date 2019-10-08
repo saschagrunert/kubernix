@@ -11,7 +11,6 @@ use failure::{bail, Fallible};
 use log::{debug, info};
 use std::{
     fs::{self, create_dir_all},
-    net::Ipv4Addr,
     path::Path,
     process::Command,
 };
@@ -51,10 +50,7 @@ impl ApiServer {
                 &format!("--etcd-cafile={}", pki.ca().cert().display()),
                 &format!("--etcd-certfile={}", pki.apiserver().cert().display()),
                 &format!("--etcd-keyfile={}", pki.apiserver().key().display()),
-                &format!(
-                    "--etcd-servers=https://{}:2379",
-                    Ipv4Addr::LOCALHOST.to_string(),
-                ),
+                &format!("--etcd-servers=https://{}", network.etcd_client()),
                 "--event-ttl=1h",
                 &format!(
                     "--encryption-provider-config={}",
@@ -75,7 +71,7 @@ impl ApiServer {
                     "--service-account-key-file={}",
                     pki.service_account().cert().display()
                 ),
-                &format!("--service-cluster-ip-range={}", network.service()),
+                &format!("--service-cluster-ip-range={}", network.service_cidr()),
                 &format!("--tls-cert-file={}", pki.apiserver().cert().display()),
                 &format!("--tls-private-key-file={}", pki.apiserver().key().display()),
                 "--v=2",
