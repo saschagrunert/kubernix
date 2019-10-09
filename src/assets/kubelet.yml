@@ -18,3 +18,5 @@ runtimeRequestTimeout: "15m"
 tlsCertFile: "{}"
 tlsPrivateKeyFile: "{}"
 failSwapOn: false
+featureGates:
+  DevicePlugins: false
