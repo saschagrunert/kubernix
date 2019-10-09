@@ -1,4 +1,5 @@
 //! Configuration related structures
+use crate::system::System;
 use clap::{crate_version, AppSettings, Clap};
 use failure::{format_err, Fallible};
 use getset::Getters;
@@ -77,15 +78,6 @@ pub struct Config {
 
     #[get = "pub"]
     #[clap(
-        help = "Do not clear the current env during bootstrap",
-        long = "impure",
-        short = "i"
-    )]
-    /// Do not clear the current env during bootstrap
-    impure: bool,
-
-    #[get = "pub"]
-    #[clap(
         env = "KUBERNIX_PACKAGES",
         help = "Additional Nix dependencies to be added to the environment",
         long = "packages",
@@ -95,6 +87,17 @@ pub struct Config {
     )]
     /// Additional dependencies to be added to the environment
     packages: Vec<String>,
+
+    #[get = "pub"]
+    #[clap(
+        env = "KUBERNIX_SHELL",
+        help = "The shell executable to be used",
+        long = "shell",
+        short = "s",
+        value_name = "SHELL"
+    )]
+    /// Additional dependencies to be added to the environment
+    shell: Option<String>,
 }
 
 /// Possible subcommands
@@ -107,7 +110,11 @@ pub enum SubCommand {
 
 impl Default for Config {
     fn default() -> Self {
-        Self::parse()
+        let mut config = Self::parse();
+        if config.shell.is_none() {
+            config.shell = System::shell().ok();
+        }
+        config
     }
 }
 
@@ -142,6 +149,15 @@ impl Config {
         })?)
         .map_err(|e| format_err!("Unable to load config file '{}': {}", file.display(), e))?;
         Ok(())
+    }
+
+    /// Return the set shell as result type
+    pub fn shell_ok(&self) -> Fallible<String> {
+        let shell = self
+            .shell()
+            .as_ref()
+            .ok_or_else(|| format_err!("No shell set"))?;
+        Ok(shell.to_owned())
     }
 
     fn create_root_dir(&self) -> Fallible<()> {
@@ -213,7 +229,6 @@ pub mod tests {
 root = "root"
 log-level = "DEBUG"
 cidr = "1.1.1.1/16"
-impure = false
 packages = []
             "#,
         )?;

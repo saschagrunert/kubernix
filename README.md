@@ -95,7 +95,7 @@ data for the cluster.
 
 #### Shell Environment
 
-If everything went fine, you should be dropped into a new bash-shell session,
+If everything went fine, you should be dropped into a new shell session,
 like this:
 
 ```
@@ -164,8 +164,8 @@ This means that you can spawn as many shells as you want to.
 
 #### Cleanup
 
-The whole cluster gets automatically destroyed if you exit the bash session from
-the initial process:
+The whole cluster gets automatically destroyed if you exit the shell session
+from the initial process:
 
 ```
 > exit
@@ -185,9 +185,9 @@ KuberNix has some configuration possibilities, which are currently:
 | `-r, --root`      | Path where all the runtime data is stored                  | `kubernix-run` | `KUBERNIX_ROOT`      |
 | `-l, --log-level` | Logging verbosity                                          | `info`         | `KUBERNIX_LOG_LEVEL` |
 | `-c, --cidr`      | CIDR used for the cluster network                          | `10.10.0.0/16` | `KUBERNIX_CIDR`      |
+| `-s, --shell`     | The shell executable to be used                            | `$SHELL`       | `KUBERNIX_SHELL`     |
 | `-o, --overlay`   | Nix package overlay to be used                             |                | `KUBERNIX_OVERLAY`   |
 | `-p, --packages`  | Additional Nix dependencies to be added to the environment |                | `KUBERNIX_PACKAGES`  |
-| `-i, --impure`    | Do not clear the current env during bootstrap              | `false`        |                      |
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
@@ -244,13 +244,6 @@ All available packages are listed in the [official Nix website][21].
 
 [20]: https://helm.sh
 [21]: https://nixos.org/nixos/packages.html?channel=nixpkgs-unstable
-
-#### Purity
-
-If you still want to access some system packages inside the interactive shell,
-then it is possible to run KuberNix in non-pure mode via the command line flag
-`--impure, -i`. This is not recommended and can have negative impact on the
-overall cluster bootstrapping process.
 
 ## Contributing
 
