@@ -185,7 +185,7 @@ KuberNix has some configuration possibilities, which are currently:
 | `-r, --root`      | Path where all the runtime data is stored                  | `kubernix-run` | `KUBERNIX_ROOT`      |
 | `-l, --log-level` | Logging verbosity                                          | `info`         | `KUBERNIX_LOG_LEVEL` |
 | `-c, --cidr`      | CIDR used for the cluster network                          | `10.10.0.0/16` | `KUBERNIX_CIDR`      |
-| `-s, --shell`     | The shell executable to be used                            | `$SHELL`       | `KUBERNIX_SHELL`     |
+| `-s, --shell`     | The shell executable to be used                            | `$SHELL`/`sh`  | `KUBERNIX_SHELL`     |
 | `-o, --overlay`   | Nix package overlay to be used                             |                | `KUBERNIX_OVERLAY`   |
 | `-p, --packages`  | Additional Nix dependencies to be added to the environment |                | `KUBERNIX_PACKAGES`  |
 
