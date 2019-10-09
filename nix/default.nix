@@ -1,9 +1,21 @@
-# Contains only the needed runtime dependencies
 let
-  pkgs = import ./nixpkgs.nix {};
-in
-pkgs.stdenv.mkDerivation {
-  buildInputs = import ./deps.nix;
-  LANG = "en_US.UTF-8";
-  name = "kubernix-shell";
-}
+  pkgs = import ./nixpkgs.nix { overlays = [(import ./overlay.nix)]; };
+  packages = with pkgs; [
+    cacert
+    cfssl
+    cni-plugins
+    conmon
+    conntrack-tools
+    cri-o
+    cri-tools
+    etcd
+    iproute
+    iptables
+    kmod
+    kubernetes
+    runc
+    socat
+    sysctl
+    utillinux
+  ] ++ [ /* PACKAGES */ ];
+in packages

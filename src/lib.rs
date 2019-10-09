@@ -11,6 +11,7 @@ mod etcd;
 mod kubeconfig;
 mod kubelet;
 mod network;
+mod nix;
 mod pki;
 mod process;
 mod proxy;
@@ -19,6 +20,7 @@ mod system;
 
 pub use config::Config;
 
+use crate::nix::Nix;
 use apiserver::ApiServer;
 use controllermanager::ControllerManager;
 use coredns::CoreDNS;
@@ -34,28 +36,25 @@ use proxy::Proxy;
 use scheduler::Scheduler;
 use system::System;
 
-use env_logger::Builder;
-use failure::{bail, format_err, Fallible};
-use log::{debug, error, info, LevelFilter};
-use nix::{
+use ::nix::{
     mount::{umount2, MntFlags},
     unistd::getuid,
 };
+use env_logger::Builder;
+use failure::{bail, Fallible};
+use log::{debug, error, info};
 use proc_mounts::MountIter;
 use rayon::scope;
 use std::{
-    env::{current_exe, split_paths, var, var_os},
-    fmt::Display,
-    fs::{self, create_dir_all},
-    path::{Path, PathBuf},
+    fs,
     process::Command,
     thread::sleep,
     time::{Duration, Instant},
 };
 
 const CRIO_DIR: &str = "crio";
-const NIX_DIR: &str = "nix";
 const KUBERNIX_ENV: &str = "kubernix.env";
+const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
 type Stoppables = Vec<Startable>;
 
@@ -73,12 +72,12 @@ impl Kubernix {
         Self::prepare_env(&mut config)?;
 
         // Bootstrap if we're not inside a nix shell
-        if var("IN_NIX_SHELL").is_err() {
-            info!("Nix environment not found, bootstrapping one");
-            Self::bootstrap_nix(config)
-        } else {
+        if Nix::is_active() {
             info!("Bootstrapping cluster inside nix environment");
             Self::bootstrap_cluster(config)
+        } else {
+            info!("Nix environment not found, bootstrapping one");
+            Nix::bootstrap(config)
         }
     }
 
@@ -91,13 +90,21 @@ impl Kubernix {
             config.root().display()
         );
 
-        Self::nix_shell_run(
+        Nix::run(
             &config,
-            &format!(
-                "bash --init-file {}",
-                config.root().join(KUBERNIX_ENV).display()
-            ),
-        )
+            &[
+                &config.shell_ok()?,
+                "-c",
+                &format!(
+                    "source {} && {}",
+                    config.root().join(KUBERNIX_ENV).display(),
+                    config.shell_ok()?,
+                ),
+            ],
+        )?;
+
+        info!("Bye, leaving the Kubernix environment");
+        Ok(())
     }
 
     /// Prepare the environment based on the provided config
@@ -232,61 +239,7 @@ impl Kubernix {
         Ok(())
     }
 
-    /// Bootstrap the nix environment
-    fn bootstrap_nix(config: Config) -> Fallible<()> {
-        // Prepare the nix dir
-        let nix_dir = config.root().join(NIX_DIR);
-        create_dir_all(&nix_dir)?;
-
-        // Write the configuration
-        fs::write(
-            nix_dir.join("nixpkgs.json"),
-            include_str!("../nix/nixpkgs.json"),
-        )?;
-        fs::write(
-            nix_dir.join("nixpkgs.nix"),
-            include_str!("../nix/nixpkgs.nix"),
-        )?;
-        fs::write(
-            nix_dir.join("default.nix"),
-            include_str!("../nix/default.nix"),
-        )?;
-
-        let packages = &config.packages().join(" ");
-        debug!("Adding additional packages: {}", packages);
-        fs::write(
-            nix_dir.join("deps.nix"),
-            include_str!("../nix/deps.nix").replace("/* PACKAGES */", packages),
-        )?;
-
-        // Apply the overlay if existing
-        let target_overlay = nix_dir.join("overlay.nix");
-        match config.overlay() {
-            // User defined overlay
-            Some(overlay) => {
-                info!("Using custom overlay '{}'", overlay.display());
-                fs::copy(overlay, target_overlay)?;
-            }
-
-            // The default overlay
-            None => {
-                debug!("Using default overlay");
-                fs::write(target_overlay, include_str!("../nix/overlay.nix"))?;
-            }
-        }
-
-        // Run the shell
-        Self::nix_shell_run(
-            &config,
-            &format!(
-                "{} --root {}",
-                current_exe()?.display(),
-                config.root().display()
-            ),
-        )
-    }
-
-    /// Spawn a new interactive nix shell
+    /// Spawn a new interactive default system shell
     fn spawn_shell(&self) -> Fallible<()> {
         info!("Spawning interactive shell");
         info!("Please be aware that the cluster gets destroyed if you exit the shell");
@@ -294,67 +247,24 @@ impl Kubernix {
         fs::write(
             &env_file,
             format!(
-                "PS1='> '\nexport {}={}\nexport {}={}",
-                "CONTAINER_RUNTIME_ENDPOINT",
+                "export {}={}\nexport {}={}",
+                RUNTIME_ENV,
                 self.network.crio_socket().to_socket_string(),
                 "KUBECONFIG",
                 self.kubeconfig.admin().display(),
             ),
         )?;
 
-        Command::new("bash")
+        Command::new(self.config.shell_ok()?)
             .current_dir(self.config.root())
-            .arg("--init-file")
-            .arg(env_file)
+            .arg("-c")
+            .arg(format!(
+                "source {} && {}",
+                env_file.display(),
+                self.config.shell_ok()?,
+            ))
             .status()?;
         Ok(())
-    }
-
-    /// Run a pure nix shell command
-    fn nix_shell_run(config: &Config, arg: &str) -> Fallible<()> {
-        let purity = if !*config.impure() {
-            debug!("Runnig pure nix-shell");
-            "--pure"
-        } else {
-            info!("Runnig impure nix-shell");
-            "--impure"
-        };
-        let verbosity = match *config.log_level() {
-            LevelFilter::Trace => "-vvvvv",
-            LevelFilter::Debug => "--verbose",
-            LevelFilter::Info => "-Q", // just no build output
-            _ => "--quiet",
-        };
-        Command::new(Self::find_executable("nix-shell")?)
-            .arg(config.root().join(NIX_DIR))
-            .arg(purity)
-            .arg(verbosity)
-            .arg(format!("-j{}", num_cpus::get()))
-            .arg("--run")
-            .arg(arg)
-            .status()?;
-        Ok(())
-    }
-
-    /// Find an executable inside the current $PATH environment
-    fn find_executable<P>(name: P) -> Fallible<PathBuf>
-    where
-        P: AsRef<Path> + Display,
-    {
-        var_os("PATH")
-            .and_then(|paths| {
-                split_paths(&paths)
-                    .filter_map(|dir| {
-                        let full_path = dir.join(&name);
-                        if full_path.is_file() {
-                            Some(full_path)
-                        } else {
-                            None
-                        }
-                    })
-                    .next()
-            })
-            .ok_or_else(|| format_err!("Unable to find {} in $PATH", name))
     }
 
     /// Remove all stale mounts

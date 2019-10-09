@@ -129,7 +129,10 @@ impl Process {
 
         // Cleanup since process is not ready
         self.stop()?;
-        bail!("Timed out waiting for process to become ready")
+        bail!(
+            "Timed out waiting for process '{}' to become ready",
+            self.command
+        )
     }
 
     /// Retrieve a pseudo state for stopped processes

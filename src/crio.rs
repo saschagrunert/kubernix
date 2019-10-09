@@ -1,7 +1,8 @@
 use crate::{
     network::Network,
     process::{Process, Startable, Stoppable},
-    Config, Kubernix, CRIO_DIR,
+    system::System,
+    Config, CRIO_DIR, RUNTIME_ENV,
 };
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
@@ -20,14 +21,15 @@ use std::{
 
 pub struct Crio {
     process: Process,
+    socket: String,
 }
 
 impl Crio {
     pub fn start(config: &Config, network: &Network) -> Fallible<Startable> {
         info!("Starting CRI-O");
-        let conmon = Kubernix::find_executable("conmon")?;
-        let bridge = Kubernix::find_executable("bridge")?;
-        let cni = bridge
+        let conmon = System::find_executable("conmon")?;
+        let loopback = System::find_executable("loopback")?;
+        let cni_plugin = loopback
             .parent()
             .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
 
@@ -36,9 +38,8 @@ impl Crio {
 
         let cni_config = dir.join("cni");
         create_dir_all(&cni_config)?;
-        let bridge_json = cni_config.join("bridge.json");
         fs::write(
-            bridge_json,
+            cni_config.join("bridge.json"),
             to_string_pretty(&json!({
               "cniVersion": "0.3.1",
               "name": "crio-kubernix",
@@ -52,6 +53,13 @@ impl Crio {
                 "routes": [{ "dst": "0.0.0.0/0" }],
                 "ranges": [[{ "subnet": network.crio_cidr() }]]
               }
+            }))?,
+        )?;
+        fs::write(
+            cni_config.join("loopback.json"),
+            to_string_pretty(&json!({
+              "cniVersion": "0.3.1",
+              "type": "loopback",
             }))?,
         )?;
 
@@ -80,12 +88,12 @@ impl Crio {
                 &format!("--root={}", dir.join("storage").display()),
                 &format!("--runroot={}", dir.join("run").display()),
                 &format!("--cni-config-dir={}", cni_config.display()),
-                &format!("--cni-plugin-dir={}", cni.display()),
+                &format!("--cni-plugin-dir={}", cni_plugin.display()),
                 "--registry=docker.io",
                 &format!("--signature-policy={}", policy_json.display()),
                 &format!(
                     "--runtimes=local-runc:{}:{}",
-                    Kubernix::find_executable("runc")?.display(),
+                    System::find_executable("runc")?.display(),
                     dir.join("runc").display()
                 ),
                 "--default-runtime=local-runc",
@@ -94,7 +102,10 @@ impl Crio {
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready");
-        Ok(Box::new(Crio { process }))
+        Ok(Box::new(Crio {
+            process,
+            socket: network.crio_socket().to_socket_string(),
+        }))
     }
 
     /// Try to cleanup all related resources
@@ -131,7 +142,11 @@ impl Crio {
     fn remove_all_containers(&self) -> Fallible<()> {
         debug!("Removing all CRI-O workloads");
 
-        let output = Command::new("crictl").arg("pods").arg("-q").output()?;
+        let output = Command::new("crictl")
+            .env(RUNTIME_ENV, &self.socket)
+            .arg("pods")
+            .arg("-q")
+            .output()?;
         let stdout = String::from_utf8(output.stdout)?;
         if !output.status.success() {
             debug!("critcl stdout: {}", stdout);
@@ -142,6 +157,7 @@ impl Crio {
         for x in stdout.lines() {
             debug!("Removing pod {}", x);
             let output = Command::new("crictl")
+                .env(RUNTIME_ENV, &self.socket)
                 .arg("rmp")
                 .arg("-f")
                 .arg(x)

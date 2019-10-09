@@ -12,16 +12,16 @@ let
       "rustfmt-preview"
     ];
   });
-  deps = import ./deps.nix;
   cargo-kcov = pkgs.callPackage ./cargo-kcov.nix {};
-in
-pkgs.stdenv.mkDerivation {
-  buildInputs = with pkgs; deps ++ [
+  deps = with pkgs; (import ./default.nix) ++ [
+    binutils
     cargo-kcov
+    coreutils
+    curl
+    gcc
     git
     kcov
+    nix-prefetch-git
     ruststable
   ];
-  LANG = "en_US.UTF-8";
-  name = "build-shell";
-}
+in deps

@@ -1,7 +1,13 @@
 use failure::{bail, format_err, Fallible};
 use getset::Getters;
 use log::{debug, info};
-use std::{net::IpAddr, process::Command};
+use std::{
+    env::{split_paths, var, var_os},
+    fmt::Display,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[derive(Default, Getters)]
 pub struct System {
@@ -87,11 +93,49 @@ impl System {
         }
         Ok(())
     }
+
+    /// Find an executable inside the current $PATH environment
+    pub fn find_executable<P>(name: P) -> Fallible<PathBuf>
+    where
+        P: AsRef<Path> + Display,
+    {
+        var_os("PATH")
+            .and_then(|paths| {
+                split_paths(&paths)
+                    .filter_map(|dir| {
+                        let full_path = dir.join(&name);
+                        if full_path.is_file() {
+                            Some(full_path)
+                        } else {
+                            None
+                        }
+                    })
+                    .next()
+            })
+            .ok_or_else(|| format_err!("Unable to find {} in $PATH", name))
+    }
+
+    /// Return the full path to the default system shell
+    pub fn shell() -> Fallible<String> {
+        Ok(format!(
+            "{}",
+            Self::find_executable(
+                var("SHELL")
+                    .map_err(|e| format_err!("Unable to retrieve $SHELL variable: {}", e))?
+            )
+            .map_err(|e| format_err!("Unable to find system shell {}", e))?
+            .display()
+        ))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env::set_var;
+
+    const VALID_EXECUTABLE: &str = "runc";
+    const INVALID_EXECUTABLE: &str = "should-not-exist";
 
     #[test]
     fn module_failure() {
@@ -111,5 +155,21 @@ mod tests {
     #[test]
     fn hostname_success() {
         assert!(System::get_hostname().is_ok());
+    }
+
+    #[test]
+    fn find_executable_success() {
+        assert!(System::find_executable(VALID_EXECUTABLE).is_ok());
+    }
+
+    #[test]
+    fn find_executable_failure() {
+        assert!(System::find_executable(INVALID_EXECUTABLE).is_err());
+    }
+
+    #[test]
+    fn find_shell_success() {
+        set_var("SHELL", VALID_EXECUTABLE);
+        assert!(System::shell().is_ok());
     }
 }
