@@ -16,7 +16,11 @@ purposes.
 
 [1]: https://kubernetes.io
 
-### About
+Moving pictures are more worth a thousand words, so here is the demo:
+
+![demo](.github/kubernix.svg)
+
+### Nix?
 
 Do you ever heard from [Nix][2], the functional package manager? Don’t worry if
 not, all you need to know is that it provides all the third party dependencies
