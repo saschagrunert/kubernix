@@ -233,6 +233,9 @@
 <span id="233">233</span>
 <span id="234">234</span>
 <span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">Config</span>;
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
@@ -365,7 +368,10 @@
 
         <span class="comment">// Cleanup since process is not ready</span>
         <span class="self">self</span>.<span class="ident">stop</span>()<span class="question-mark">?</span>;
-        <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Timed out waiting for process to become ready&quot;</span>)
+        <span class="macro">bail</span><span class="macro">!</span>(
+            <span class="string">&quot;Timed out waiting for process &#39;{}&#39; to become ready&quot;</span>,
+            <span class="self">self</span>.<span class="ident">command</span>
+        )
     }
 
     <span class="doccomment">/// Retrieve a pseudo state for stopped processes</span>

@@ -233,8 +233,24 @@
 <span id="233">233</span>
 <span id="234">234</span>
 <span id="235">235</span>
+<span id="236">236</span>
+<span id="237">237</span>
+<span id="238">238</span>
+<span id="239">239</span>
+<span id="240">240</span>
+<span id="241">241</span>
+<span id="242">242</span>
+<span id="243">243</span>
+<span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
+<span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">system</span>::<span class="ident">System</span>;
 <span class="kw">use</span> <span class="ident">clap</span>::{<span class="ident">crate_version</span>, <span class="ident">AppSettings</span>, <span class="ident">Clap</span>};
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">format_err</span>, <span class="ident">Fallible</span>};
 <span class="kw">use</span> <span class="ident">getset</span>::<span class="ident">Getters</span>;
@@ -313,15 +329,6 @@
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">help</span> <span class="op">=</span> <span class="string">&quot;Do not clear the current env during bootstrap&quot;</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;impure&quot;</span>,
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;i&quot;</span>
-    )]</span>
-    <span class="doccomment">/// Do not clear the current env during bootstrap</span>
-    <span class="ident">impure</span>: <span class="ident">bool</span>,
-
-    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="attribute">#[<span class="ident">clap</span>(
         <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_PACKAGES&quot;</span>,
         <span class="ident">help</span> <span class="op">=</span> <span class="string">&quot;Additional Nix dependencies to be added to the environment&quot;</span>,
         <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;packages&quot;</span>,
@@ -331,6 +338,17 @@
     )]</span>
     <span class="doccomment">/// Additional dependencies to be added to the environment</span>
     <span class="ident">packages</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>,
+
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
+    <span class="attribute">#[<span class="ident">clap</span>(
+        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_SHELL&quot;</span>,
+        <span class="ident">help</span> <span class="op">=</span> <span class="string">&quot;The shell executable to be used&quot;</span>,
+        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;shell&quot;</span>,
+        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;s&quot;</span>,
+        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;SHELL&quot;</span>
+    )]</span>
+    <span class="doccomment">/// Additional dependencies to be added to the environment</span>
+    <span class="ident">shell</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>,
 }
 
 <span class="doccomment">/// Possible subcommands</span>
@@ -343,7 +361,11 @@
 
 <span class="kw">impl</span> <span class="ident">Default</span> <span class="kw">for</span> <span class="ident">Config</span> {
     <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
-        <span class="self">Self</span>::<span class="ident">parse</span>()
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">config</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">parse</span>();
+        <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">shell</span>.<span class="ident">is_none</span>() {
+            <span class="ident">config</span>.<span class="ident">shell</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">shell</span>().<span class="ident">ok</span>();
+        }
+        <span class="ident">config</span>
     }
 }
 
@@ -378,6 +400,15 @@
         })<span class="question-mark">?</span>)
         .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to load config file &#39;{}&#39;: {}&quot;</span>, <span class="ident">file</span>.<span class="ident">display</span>(), <span class="ident">e</span>))<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="doccomment">/// Return the set shell as result type</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">shell_ok</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="ident">shell</span> <span class="op">=</span> <span class="self">self</span>
+            .<span class="ident">shell</span>()
+            .<span class="ident">as_ref</span>()
+            .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;No shell set&quot;</span>))<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(<span class="ident">shell</span>.<span class="ident">to_owned</span>())
     }
 
     <span class="kw">fn</span> <span class="ident">create_root_dir</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
@@ -449,7 +480,6 @@
 root = &quot;root&quot;
 log-level = &quot;DEBUG&quot;
 cidr = &quot;1.1.1.1/16&quot;
-impure = false
 packages = []
             &quot;#</span>,
         )<span class="question-mark">?</span>;
