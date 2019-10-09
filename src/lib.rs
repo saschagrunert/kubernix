@@ -149,7 +149,7 @@ impl Kubernix {
         // Setup the network
         let network = Network::new(&config)?;
 
-        // Setup the PKI
+        // Setup the public key infrastructure
         let pki = Pki::new(&config, &system, &network)?;
 
         // Setup the configs
@@ -190,7 +190,7 @@ impl Kubernix {
 
         let mut processes = vec![];
 
-        // This order is important since we will shut down the processes in its reverse
+        // This order is important since we will shut down the processes in order
         let results = vec![
             kubelet,
             scheduler,
