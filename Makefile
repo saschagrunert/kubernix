@@ -38,8 +38,8 @@ nix:
 
 .PHONY: nixpkgs
 nixpkgs:
-	nix-shell -p nix-prefetch-git --run "nix-prefetch-git --no-deepClone \
-		https://github.com/nixos/nixpkgs > nix/nixpkgs.json"
+	nix run -f channel:nixpkgs-unstable nix-prefetch-git -c nix-prefetch-git \
+		--no-deepClone https://github.com/nixos/nixpkgs > nix/nixpkgs.json
 
 .PHONY: run
 run: build-release

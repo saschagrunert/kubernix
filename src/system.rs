@@ -172,10 +172,4 @@ mod tests {
         set_var("SHELL", VALID_EXECUTABLE);
         assert!(System::shell().is_ok());
     }
-
-    #[test]
-    fn find_shell_failure() {
-        set_var("SHELL", INVALID_EXECUTABLE);
-        assert!(System::shell().is_err());
-    }
 }

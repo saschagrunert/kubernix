@@ -21,6 +21,7 @@ let
     gcc
     git
     kcov
+    nix-prefetch-git
     ruststable
   ];
 in deps
