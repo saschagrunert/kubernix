@@ -91,7 +91,7 @@ pub struct Config {
     #[get = "pub"]
     #[clap(
         env = "KUBERNIX_SHELL",
-        help = "The shell executable to be used",
+        help = "The shell executable to be used, defaults to $SHELL",
         long = "shell",
         short = "s",
         value_name = "SHELL"
