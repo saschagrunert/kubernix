@@ -117,14 +117,12 @@ impl System {
 
     /// Return the full path to the default system shell
     pub fn shell() -> Fallible<String> {
+        let shell = var("SHELL").unwrap_or_else(|_| "sh".to_owned());
         Ok(format!(
             "{}",
-            Self::find_executable(
-                var("SHELL")
-                    .map_err(|e| format_err!("Unable to retrieve $SHELL variable: {}", e))?
-            )
-            .map_err(|e| format_err!("Unable to find system shell {}", e))?
-            .display()
+            Self::find_executable(&shell)
+                .map_err(|e| format_err!("Unable to find system shell '{}': {}", shell, e))?
+                .display()
         ))
     }
 }

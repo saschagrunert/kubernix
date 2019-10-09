@@ -2,3 +2,4 @@
 .kube
 /target
 kubernix-run
+kubernix
