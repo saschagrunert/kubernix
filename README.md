@@ -200,7 +200,7 @@ up over the necessary cluster components.
 #### Overlays
 
 Overlays provide a method to extend and change Nix derivations. This means, that
-we're able to change dependencies during the cluster bootstrapping process. For
+we’re able to change dependencies during the cluster bootstrapping process. For
 example, we can exchange the used CRI-O version to use a local checkout by
 writing this simple `overlay.nix`:
 
