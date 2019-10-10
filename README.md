@@ -94,7 +94,7 @@ $ sudo kubernix
 
 KuberNix will now take care that the Nix environment gets correctly setup,
 downloads the needed binaries and starts the cluster. Per default it will create
-a directory called `kubernix` in the current path which contains all necessary
+a directory called `kubernix-run` in the current path which contains all necessary
 data for the cluster.
 
 #### Shell Environment
