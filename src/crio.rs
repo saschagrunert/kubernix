@@ -36,30 +36,21 @@ impl Crio {
         let dir = config.root().join(CRIO_DIR);
         create_dir_all(&dir)?;
 
-        let cni_config = dir.join("cni");
-        create_dir_all(&cni_config)?;
         fs::write(
-            cni_config.join("10-bridge.json"),
+            network.cni().join("10-bridge.json"),
             to_string_pretty(&json!({
-              "cniVersion": "0.3.1",
-              "name": "crio-kubernix",
-              "type": "bridge",
-              "bridge": Network::BRIDGE,
-              "isGateway": true,
-              "ipMasq": true,
-              "hairpinMode": true,
-              "ipam": {
-                "type": "host-local",
-                "routes": [{ "dst": "0.0.0.0/0" }],
-                "ranges": [[{ "subnet": network.crio_cidr() }]]
-              }
-            }))?,
-        )?;
-        fs::write(
-            cni_config.join("20-loopback.json"),
-            to_string_pretty(&json!({
-              "cniVersion": "0.3.1",
-              "type": "loopback",
+                "cniVersion": "0.3.1",
+                "name": "crio-kubernix",
+                "type": "bridge",
+                "bridge": Network::INTERFACE,
+                "isGateway": true,
+                "ipMasq": true,
+                "hairpinMode": true,
+                "ipam": {
+                    "type": "host-local",
+                    "routes": [{ "dst": "0.0.0.0/0" }],
+                    "ranges": [[{ "subnet": network.crio_cidr() }]]
+                }
             }))?,
         )?;
 
@@ -87,7 +78,7 @@ impl Crio {
                 &format!("--listen={}", network.crio_socket()),
                 &format!("--root={}", dir.join("storage").display()),
                 &format!("--runroot={}", dir.join("run").display()),
-                &format!("--cni-config-dir={}", cni_config.display()),
+                &format!("--cni-config-dir={}", network.cni().display()),
                 &format!("--cni-plugin-dir={}", cni_plugin.display()),
                 "--registry=docker.io",
                 &format!("--signature-policy={}", policy_json.display()),
