@@ -172,6 +172,15 @@
 <span id="172">172</span>
 <span id="173">173</span>
 <span id="174">174</span>
+<span id="175">175</span>
+<span id="176">176</span>
+<span id="177">177</span>
+<span id="178">178</span>
+<span id="179">179</span>
+<span id="180">180</span>
+<span id="181">181</span>
+<span id="182">182</span>
+<span id="183">183</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">Config</span>, <span class="ident">CRIO_DIR</span>};
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
@@ -180,6 +189,7 @@
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">warn</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">fmt</span>::{<span class="ident">Display</span>, <span class="ident">Formatter</span>, <span class="prelude-ty">Result</span>},
+    <span class="ident">fs</span>::<span class="ident">create_dir_all</span>,
     <span class="ident">net</span>::{<span class="ident">Ipv4Addr</span>, <span class="ident">SocketAddr</span>},
     <span class="ident">path</span>::<span class="ident">PathBuf</span>,
     <span class="ident">process</span>::<span class="ident">Command</span>,
@@ -203,27 +213,30 @@
     <span class="ident">etcd_peer</span>: <span class="ident">SocketAddr</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">crio_socket</span>: <span class="ident">CrioSocket</span>,
+    <span class="ident">crio_socket</span>: <span class="ident">CriSocket</span>,
+
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
+    <span class="ident">cni</span>: <span class="ident">PathBuf</span>,
 }
 
-<span class="doccomment">/// Simple CRI-O socket abstraction</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">CrioSocket</span>(<span class="ident">PathBuf</span>);
+<span class="doccomment">/// Simple CRI socket abstraction</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">CriSocket</span>(<span class="ident">PathBuf</span>);
 
-<span class="kw">impl</span> <span class="ident">Display</span> <span class="kw">for</span> <span class="ident">CrioSocket</span> {
+<span class="kw">impl</span> <span class="ident">Display</span> <span class="kw">for</span> <span class="ident">CriSocket</span> {
     <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span> {
         <span class="macro">write</span><span class="macro">!</span>(<span class="ident">f</span>, <span class="string">&quot;{}&quot;</span>, <span class="self">self</span>.<span class="number">0</span>.<span class="ident">display</span>())
     }
 }
 
-<span class="kw">impl</span> <span class="ident">CrioSocket</span> {
+<span class="kw">impl</span> <span class="ident">CriSocket</span> {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">to_socket_string</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">String</span> {
         <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;unix://{}&quot;</span>, <span class="self">self</span>.<span class="number">0</span>.<span class="ident">display</span>())
     }
 }
 
 <span class="kw">impl</span> <span class="ident">Network</span> {
-    <span class="doccomment">/// The global name for the bridged interface</span>
-    <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">BRIDGE</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernix1&quot;</span>;
+    <span class="doccomment">/// The global name for the interface</span>
+    <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">INTERFACE</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernix1&quot;</span>;
 
     <span class="doccomment">/// Create a new network from the provided config</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
@@ -259,9 +272,13 @@
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Using service CIDR {}&quot;</span>, <span class="ident">service_cidr</span>);
 
         <span class="comment">// Set the rest of the networking related adresses and paths</span>
-        <span class="kw">let</span> <span class="ident">crio_socket</span> <span class="op">=</span> <span class="ident">CrioSocket</span>(<span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="ident">CRIO_DIR</span>).<span class="ident">join</span>(<span class="string">&quot;crio.sock&quot;</span>));
+        <span class="kw">let</span> <span class="ident">crio_socket</span> <span class="op">=</span> <span class="ident">CriSocket</span>(<span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="ident">CRIO_DIR</span>).<span class="ident">join</span>(<span class="string">&quot;crio.sock&quot;</span>));
         <span class="kw">let</span> <span class="ident">etcd_client</span> <span class="op">=</span> <span class="ident">SocketAddr</span>::<span class="ident">new</span>(<span class="ident">Ipv4Addr</span>::<span class="ident">LOCALHOST</span>.<span class="ident">into</span>(), <span class="number">2379</span>);
         <span class="kw">let</span> <span class="ident">etcd_peer</span> <span class="op">=</span> <span class="ident">SocketAddr</span>::<span class="ident">new</span>(<span class="ident">Ipv4Addr</span>::<span class="ident">LOCALHOST</span>.<span class="ident">into</span>(), <span class="number">2380</span>);
+
+        <span class="comment">// Setup the CNI config dir</span>
+        <span class="kw">let</span> <span class="ident">cni</span> <span class="op">=</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="string">&quot;cni&quot;</span>);
+        <span class="ident">create_dir_all</span>(<span class="kw-2">&amp;</span><span class="ident">cni</span>)<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(<span class="self">Self</span> {
             <span class="ident">cluster_cidr</span>,
@@ -270,6 +287,7 @@
             <span class="ident">crio_socket</span>,
             <span class="ident">etcd_client</span>,
             <span class="ident">etcd_peer</span>,
+            <span class="ident">cni</span>,
         })
     }
 
@@ -281,7 +299,7 @@
         }
         <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">cmd</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>
             .<span class="ident">lines</span>()
-            .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="op">!</span><span class="ident">x</span>.<span class="ident">contains</span>(<span class="self">Self</span>::<span class="ident">BRIDGE</span>))
+            .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="op">!</span><span class="ident">x</span>.<span class="ident">contains</span>(<span class="self">Self</span>::<span class="ident">INTERFACE</span>))
             .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">split_whitespace</span>().<span class="ident">nth</span>(<span class="number">0</span>))
             .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">parse</span>::<span class="op">&lt;</span><span class="ident">Ipv4Network</span><span class="op">&gt;</span>().<span class="ident">ok</span>())
             .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">is_supernet_of</span>(<span class="ident">cidr</span>))
