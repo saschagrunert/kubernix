@@ -49,9 +49,6 @@ impl Kubelet {
                     network.crio_socket().to_socket_string()
                 ),
                 &format!("--kubeconfig={}", kubeconfig.kubelet().display()),
-                "--image-pull-progress-deadline=2m",
-                "--network-plugin=cni",
-                "--register-node=true",
                 "--v=2",
             ],
         )?;

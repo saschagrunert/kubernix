@@ -39,7 +39,7 @@ impl Crio {
         let cni_config = dir.join("cni");
         create_dir_all(&cni_config)?;
         fs::write(
-            cni_config.join("bridge.json"),
+            cni_config.join("10-bridge.json"),
             to_string_pretty(&json!({
               "cniVersion": "0.3.1",
               "name": "crio-kubernix",
@@ -56,7 +56,7 @@ impl Crio {
             }))?,
         )?;
         fs::write(
-            cni_config.join("loopback.json"),
+            cni_config.join("20-loopback.json"),
             to_string_pretty(&json!({
               "cniVersion": "0.3.1",
               "type": "loopback",
