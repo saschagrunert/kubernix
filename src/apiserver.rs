@@ -5,7 +5,6 @@ use crate::{
     network::Network,
     pki::Pki,
     process::{Process, Startable, Stoppable},
-    system::System,
 };
 use failure::{bail, Fallible};
 use log::{debug, info};
@@ -22,7 +21,6 @@ pub struct ApiServer {
 impl ApiServer {
     pub fn start(
         config: &Config,
-        system: &System,
         network: &Network,
         pki: &Pki,
         encryptionconfig: &EncryptionConfig,
@@ -38,7 +36,6 @@ impl ApiServer {
             &dir,
             "kube-apiserver",
             &[
-                &format!("--advertise-address={}", system.ip()),
                 "--allow-privileged=true",
                 "--audit-log-maxage=30",
                 "--audit-log-maxbackup=3",

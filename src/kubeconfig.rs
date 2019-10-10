@@ -1,4 +1,7 @@
-use crate::{pki::Pki, system::System, Config};
+use crate::{
+    pki::{Idendity, Pki},
+    Config,
+};
 use failure::{bail, Fallible};
 use getset::Getters;
 use log::{debug, info};
@@ -9,7 +12,7 @@ use std::{
     process::Command,
 };
 
-#[derive(Default, Getters)]
+#[derive(Getters)]
 pub struct KubeConfig {
     #[get = "pub"]
     kubelet: PathBuf,
@@ -28,98 +31,29 @@ pub struct KubeConfig {
 }
 
 impl KubeConfig {
-    pub fn new(config: &Config, system: &System, pki: &Pki) -> Fallible<KubeConfig> {
+    pub fn new(config: &Config, pki: &Pki) -> Fallible<KubeConfig> {
         info!("Creating kubeconfigs");
 
         // Create the target dir
         let dir = config.root().join("kubeconfig");
         create_dir_all(&dir)?;
 
-        let mut kube = KubeConfig::default();
-        kube.kubelet = Self::setup_kubelet(&dir, &pki, system.ip(), system.hostname())?;
-        kube.proxy = Self::setup_proxy(&dir, &pki, system.ip())?;
-        kube.controller_manager = Self::setup_controller_manager(&dir, &pki)?;
-        kube.scheduler = Self::setup_scheduler(&dir, &pki)?;
-        kube.admin = Self::setup_admin(&dir, &pki)?;
-
-        Ok(kube)
+        Ok(KubeConfig {
+            kubelet: Self::setup_kubeconfig(&dir, pki.kubelet(), pki.ca().cert())?,
+            proxy: Self::setup_kubeconfig(&dir, pki.proxy(), pki.ca().cert())?,
+            controller_manager: Self::setup_kubeconfig(
+                &dir,
+                pki.controller_manager(),
+                pki.ca().cert(),
+            )?,
+            scheduler: Self::setup_kubeconfig(&dir, pki.scheduler(), pki.ca().cert())?,
+            admin: Self::setup_kubeconfig(&dir, pki.admin(), pki.ca().cert())?,
+        })
     }
 
-    fn setup_kubelet(dir: &Path, pki: &Pki, ip: &str, hostname: &str) -> Fallible<PathBuf> {
-        Ok(Self::setup_kubeconfig(
-            dir,
-            ip,
-            hostname,
-            &format!("system:node:{}", hostname),
-            pki.ca().cert(),
-            pki.kubelet().cert(),
-            pki.kubelet().key(),
-        )?)
-    }
-
-    fn setup_proxy(dir: &Path, pki: &Pki, ip: &str) -> Fallible<PathBuf> {
-        const NAME: &str = "kube-proxy";
-        Ok(Self::setup_kubeconfig(
-            dir,
-            ip,
-            NAME,
-            &format!("system:{}", NAME),
-            pki.ca().cert(),
-            pki.proxy().cert(),
-            pki.proxy().key(),
-        )?)
-    }
-
-    fn setup_controller_manager(dir: &Path, pki: &Pki) -> Fallible<PathBuf> {
-        const NAME: &str = "kube-controller-manager";
-        Ok(Self::setup_kubeconfig(
-            dir,
-            &Ipv4Addr::LOCALHOST.to_string(),
-            NAME,
-            &format!("system:{}", NAME),
-            pki.ca().cert(),
-            pki.controller_manager().cert(),
-            pki.controller_manager().key(),
-        )?)
-    }
-
-    fn setup_scheduler(dir: &Path, pki: &Pki) -> Fallible<PathBuf> {
-        const NAME: &str = "kube-scheduler";
-        Ok(Self::setup_kubeconfig(
-            dir,
-            &Ipv4Addr::LOCALHOST.to_string(),
-            NAME,
-            &format!("system:{}", NAME),
-            pki.ca().cert(),
-            pki.scheduler().cert(),
-            pki.scheduler().key(),
-        )?)
-    }
-
-    fn setup_admin(dir: &Path, pki: &Pki) -> Fallible<PathBuf> {
-        const NAME: &str = "admin";
-        Ok(Self::setup_kubeconfig(
-            dir,
-            &Ipv4Addr::LOCALHOST.to_string(),
-            NAME,
-            NAME,
-            pki.ca().cert(),
-            pki.admin().cert(),
-            pki.admin().key(),
-        )?)
-    }
-
-    fn setup_kubeconfig(
-        dir: &Path,
-        ip: &str,
-        name: &str,
-        user: &str,
-        ca: &Path,
-        cert: &Path,
-        key: &Path,
-    ) -> Fallible<PathBuf> {
-        debug!("Creating kubeconfig for {}", name);
-        let target = dir.join(format!("{}.kubeconfig", name));
+    fn setup_kubeconfig(dir: &Path, idendity: &Idendity, ca: &Path) -> Fallible<PathBuf> {
+        debug!("Creating kubeconfig for {}", idendity.name());
+        let target = dir.join(format!("{}.kubeconfig", idendity.name()));
         let kubeconfig_arg = format!("--kubeconfig={}", target.display());
 
         let output = Command::new("kubectl")
@@ -128,7 +62,7 @@ impl KubeConfig {
             .arg("kubernetes")
             .arg(format!("--certificate-authority={}", ca.display()))
             .arg("--embed-certs=true")
-            .arg(format!("--server=https://{}:6443", ip))
+            .arg(format!("--server=https://{}:6443", &Ipv4Addr::LOCALHOST))
             .arg(&kubeconfig_arg)
             .output()?;
         if !output.status.success() {
@@ -146,9 +80,12 @@ impl KubeConfig {
         let output = Command::new("kubectl")
             .arg("config")
             .arg("set-credentials")
-            .arg(user)
-            .arg(format!("--client-certificate={}", cert.display()))
-            .arg(format!("--client-key={}", key.display()))
+            .arg(idendity.user())
+            .arg(format!(
+                "--client-certificate={}",
+                idendity.cert().display()
+            ))
+            .arg(format!("--client-key={}", idendity.key().display()))
             .arg("--embed-certs=true")
             .arg(&kubeconfig_arg)
             .output()?;
@@ -169,7 +106,7 @@ impl KubeConfig {
             .arg("set-context")
             .arg("default")
             .arg("--cluster=kubernetes")
-            .arg(format!("--user={}", user))
+            .arg(format!("--user={}", idendity.user()))
             .arg(&kubeconfig_arg)
             .output()?;
         if !output.status.success() {
@@ -202,7 +139,7 @@ impl KubeConfig {
             bail!("Kubectl use-context command failed");
         }
 
-        debug!("Kubeconfig created for {}", name);
+        debug!("Kubeconfig created for {}", idendity.name());
         Ok(target)
     }
 }
@@ -216,9 +153,8 @@ mod tests {
     fn new_success() -> Fallible<()> {
         let c = test_config()?;
         let n = test_network()?;
-        let s = System::default();
-        let p = Pki::new(&c, &s, &n)?;
-        KubeConfig::new(&c, &s, &p)?;
+        let p = Pki::new(&c, &n)?;
+        KubeConfig::new(&c, &p)?;
         Ok(())
     }
 }

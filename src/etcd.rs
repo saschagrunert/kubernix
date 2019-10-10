@@ -68,14 +68,13 @@ impl Stoppable for Etcd {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{config::tests::test_config, network::tests::test_network, system::System};
+    use crate::{config::tests::test_config, network::tests::test_network};
 
     #[test]
     fn new_success() -> Fallible<()> {
         let c = test_config()?;
         let n = test_network()?;
-        let s = System::default();
-        let p = Pki::new(&c, &s, &n)?;
+        let p = Pki::new(&c, &n)?;
 
         let mut etcd = Etcd::start(&c, &n, &p)?;
         etcd.stop()
