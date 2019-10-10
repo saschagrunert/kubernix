@@ -376,7 +376,7 @@
 
     <span class="doccomment">/// Retrieve a pseudo state for stopped processes</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">stopped</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Startable</span><span class="op">&gt;</span> {
-        <span class="prelude-val">Err</span>(<span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Stopped&quot;</span>))
+        <span class="prelude-val">Err</span>(<span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Found stopped process&quot;</span>))
     }
 }
 
