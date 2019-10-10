@@ -109,7 +109,7 @@ impl Pki {
             admin: Self::setup_admin(&pki_config)?,
             apiserver: Self::setup_apiserver(&pki_config)?,
             controller_manager: Self::setup_controller_manager(&pki_config)?,
-            kubelet: Self::setup_kubelet(&pki_config, "node-0")?,
+            kubelet: Self::setup_kubelet(&pki_config, "node")?,
             proxy: Self::setup_proxy(&pki_config)?,
             scheduler: Self::setup_scheduler(&pki_config)?,
             service_account: Self::setup_service_account(&pki_config)?,
