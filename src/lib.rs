@@ -144,16 +144,16 @@ impl Kubernix {
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config) -> Fallible<()> {
         // Ensure that the system is prepared
-        let system = System::new()?;
+        System::setup()?;
 
         // Setup the network
         let network = Network::new(&config)?;
 
         // Setup the public key infrastructure
-        let pki = Pki::new(&config, &system, &network)?;
+        let pki = Pki::new(&config, &network)?;
 
         // Setup the configs
-        let kubeconfig = KubeConfig::new(&config, &system, &pki)?;
+        let kubeconfig = KubeConfig::new(&config, &pki)?;
         let encryptionconfig = EncryptionConfig::new(&config)?;
 
         // All processes
@@ -171,14 +171,8 @@ impl Kubernix {
             s.spawn(|_| crio = Crio::start(&config, &network));
             s.spawn(|_| {
                 etcd = Etcd::start(&config, &network, &pki);
-                api_server = ApiServer::start(
-                    &config,
-                    &system,
-                    &network,
-                    &pki,
-                    &encryptionconfig,
-                    &kubeconfig,
-                )
+                api_server =
+                    ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubeconfig)
             });
             s.spawn(|_| {
                 controller_manager = ControllerManager::start(&config, &network, &pki, &kubeconfig)

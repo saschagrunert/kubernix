@@ -76,7 +76,7 @@ impl Process {
             if kill_rx.try_recv().is_err() {
                 error!("Process '{}' died unexpectedly", c);
             } else {
-                info!("Process '{}' exited", c);
+                info!("Process '{}' stopped", c);
             }
             debug!("{} {}", c, status);
             Ok(())
