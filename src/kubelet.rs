@@ -43,7 +43,6 @@ impl Kubelet {
             &[
                 &format!("--config={}", yml_file.display()),
                 &format!("--root-dir={}", dir.join("run").display()),
-                &format!("--hostname-override={}", pki.kubelet().name()),
                 "--container-runtime=remote",
                 &format!(
                     "--container-runtime-endpoint={}",
