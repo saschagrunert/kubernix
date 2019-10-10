@@ -137,7 +137,7 @@ impl Process {
 
     /// Retrieve a pseudo state for stopped processes
     pub fn stopped() -> Fallible<Startable> {
-        Err(format_err!("Stopped"))
+        Err(format_err!("Found stopped process"))
     }
 }
 

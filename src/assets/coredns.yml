@@ -75,7 +75,7 @@ metadata:
   name: coredns
   namespace: kube-system
   labels:
-    k8s-app: core-dns
+    k8s-app: coredns
     kubernetes.io/name: "CoreDNS"
 spec:
   replicas: 1
@@ -85,11 +85,11 @@ spec:
       maxUnavailable: 1
   selector:
     matchLabels:
-      k8s-app: core-dns
+      k8s-app: coredns
   template:
     metadata:
       labels:
-        k8s-app: core-dns
+        k8s-app: coredns
     spec:
       priorityClassName: system-cluster-critical
       serviceAccountName: coredns
@@ -157,18 +157,18 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: core-dns
+  name: coredns
   namespace: kube-system
   annotations:
     prometheus.io/port: "9153"
     prometheus.io/scrape: "true"
   labels:
-    k8s-app: core-dns
+    k8s-app: coredns
     kubernetes.io/cluster-service: "true"
     kubernetes.io/name: "CoreDNS"
 spec:
   selector:
-    k8s-app: core-dns
+    k8s-app: coredns
   clusterIP: {}
   ports:
   - name: dns

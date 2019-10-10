@@ -2,6 +2,7 @@ use crate::{
     config::Config,
     kubeconfig::KubeConfig,
     network::Network,
+    pki::Pki,
     process::{Process, Startable, Stoppable},
 };
 use failure::Fallible;
@@ -15,6 +16,7 @@ pub struct Proxy {
 impl Proxy {
     pub fn start(
         config: &Config,
+        pki: &Pki,
         network: &Network,
         kubeconfig: &KubeConfig,
     ) -> Fallible<Startable> {
@@ -35,7 +37,10 @@ impl Proxy {
             config,
             &dir,
             "kube-proxy",
-            &[&format!("--config={}", yml_file.display())],
+            &[
+                &format!("--config={}", yml_file.display()),
+                &format!("--hostname-override={}", pki.kubelet().name()),
+            ],
         )?;
 
         process.wait_ready("Caches are synced")?;

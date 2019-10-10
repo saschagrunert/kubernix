@@ -179,7 +179,7 @@ impl Kubernix {
             });
             s.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
             s.spawn(|_| kubelet = Kubelet::start(&config, &network, &pki, &kubeconfig));
-            s.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
+            s.spawn(|_| proxy = Proxy::start(&config, &pki, &network, &kubeconfig));
         });
 
         let mut processes = vec![];
