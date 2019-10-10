@@ -300,8 +300,11 @@
 <span id="300">300</span>
 <span id="301">301</span>
 <span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
 </pre><div class="example-wrap"><pre class="rust ">
-<span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">network</span>::<span class="ident">Network</span>, <span class="ident">system</span>::<span class="ident">System</span>, <span class="ident">Config</span>};
+<span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">network</span>::<span class="ident">Network</span>, <span class="ident">Config</span>};
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
 <span class="kw">use</span> <span class="ident">getset</span>::<span class="ident">Getters</span>;
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">info</span>};
@@ -316,32 +319,38 @@
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Getters</span>)]</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Pki</span> {
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">admin</span>: <span class="ident">Pair</span>,
+    <span class="ident">admin</span>: <span class="ident">Idendity</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">apiserver</span>: <span class="ident">Pair</span>,
+    <span class="ident">apiserver</span>: <span class="ident">Idendity</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">ca</span>: <span class="ident">Pair</span>,
+    <span class="ident">ca</span>: <span class="ident">Idendity</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">controller_manager</span>: <span class="ident">Pair</span>,
+    <span class="ident">controller_manager</span>: <span class="ident">Idendity</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">kubelet</span>: <span class="ident">Pair</span>,
+    <span class="ident">kubelet</span>: <span class="ident">Idendity</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">proxy</span>: <span class="ident">Pair</span>,
+    <span class="ident">proxy</span>: <span class="ident">Idendity</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">scheduler</span>: <span class="ident">Pair</span>,
+    <span class="ident">scheduler</span>: <span class="ident">Idendity</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">service_account</span>: <span class="ident">Pair</span>,
+    <span class="ident">service_account</span>: <span class="ident">Idendity</span>,
 }
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Getters</span>)]</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Pair</span> {
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Idendity</span> {
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
+    <span class="ident">name</span>: <span class="ident">String</span>,
+
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
+    <span class="ident">user</span>: <span class="ident">String</span>,
+
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">cert</span>: <span class="ident">PathBuf</span>,
 
@@ -349,18 +358,21 @@
     <span class="ident">key</span>: <span class="ident">PathBuf</span>,
 }
 
-<span class="kw">impl</span> <span class="ident">Pair</span> {
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">dir</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>, <span class="ident">name</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-&gt;</span> <span class="ident">Pair</span> {
-        <span class="kw">let</span> <span class="ident">cert</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;{}.pem&quot;</span>, <span class="ident">name</span>));
-        <span class="kw">let</span> <span class="ident">key</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;{}-key.pem&quot;</span>, <span class="ident">name</span>));
-        <span class="ident">Pair</span> { <span class="ident">cert</span>, <span class="ident">key</span> }
+<span class="kw">impl</span> <span class="ident">Idendity</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">dir</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>, <span class="ident">name</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">user</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-&gt;</span> <span class="ident">Idendity</span> {
+        <span class="ident">Idendity</span> {
+            <span class="ident">cert</span>: <span class="ident">dir</span>.<span class="ident">join</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;{}.pem&quot;</span>, <span class="ident">name</span>)),
+            <span class="ident">key</span>: <span class="ident">dir</span>.<span class="ident">join</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;{}-key.pem&quot;</span>, <span class="ident">name</span>)),
+            <span class="ident">name</span>: <span class="ident">name</span>.<span class="ident">to_owned</span>(),
+            <span class="ident">user</span>: <span class="ident">user</span>.<span class="ident">to_owned</span>(),
+        }
     }
 }
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Getters</span>)]</span>
 <span class="kw">struct</span> <span class="ident">PkiConfig</span><span class="op">&lt;</span><span class="lifetime">&#39;a</span><span class="op">&gt;</span> {
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">ca</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">Pair</span>,
+    <span class="ident">ca</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;a</span> <span class="ident">Idendity</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">ca_config</span>: <span class="ident">PathBuf</span>,
@@ -373,7 +385,7 @@
 }
 
 <span class="kw">impl</span> <span class="ident">Pki</span> {
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">system</span>: <span class="kw-2">&amp;</span><span class="ident">System</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pki</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pki</span><span class="op">&gt;</span> {
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Generating certificates&quot;</span>);
 
         <span class="comment">// Create the target dir</span>
@@ -382,10 +394,8 @@
 
         <span class="comment">// Set the hostnames</span>
         <span class="kw">let</span> <span class="ident">hostnames</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
-            <span class="ident">system</span>.<span class="ident">ip</span>(),
             <span class="kw-2">&amp;</span><span class="ident">network</span>.<span class="ident">api</span>()<span class="question-mark">?</span>.<span class="ident">to_string</span>(),
             <span class="kw-2">&amp;</span><span class="ident">Ipv4Addr</span>::<span class="ident">LOCALHOST</span>.<span class="ident">to_string</span>(),
-            <span class="ident">system</span>.<span class="ident">hostname</span>(),
             <span class="string">&quot;kubernetes&quot;</span>,
             <span class="string">&quot;kubernetes.default&quot;</span>,
             <span class="string">&quot;kubernetes.default.svc&quot;</span>,
@@ -405,7 +415,7 @@
             <span class="ident">admin</span>: <span class="self">Self</span>::<span class="ident">setup_admin</span>(<span class="kw-2">&amp;</span><span class="ident">pki_config</span>)<span class="question-mark">?</span>,
             <span class="ident">apiserver</span>: <span class="self">Self</span>::<span class="ident">setup_apiserver</span>(<span class="kw-2">&amp;</span><span class="ident">pki_config</span>)<span class="question-mark">?</span>,
             <span class="ident">controller_manager</span>: <span class="self">Self</span>::<span class="ident">setup_controller_manager</span>(<span class="kw-2">&amp;</span><span class="ident">pki_config</span>)<span class="question-mark">?</span>,
-            <span class="ident">kubelet</span>: <span class="self">Self</span>::<span class="ident">setup_kubelet</span>(<span class="kw-2">&amp;</span><span class="ident">pki_config</span>, <span class="ident">system</span>.<span class="ident">hostname</span>())<span class="question-mark">?</span>,
+            <span class="ident">kubelet</span>: <span class="self">Self</span>::<span class="ident">setup_kubelet</span>(<span class="kw-2">&amp;</span><span class="ident">pki_config</span>, <span class="string">&quot;node-0&quot;</span>)<span class="question-mark">?</span>,
             <span class="ident">proxy</span>: <span class="self">Self</span>::<span class="ident">setup_proxy</span>(<span class="kw-2">&amp;</span><span class="ident">pki_config</span>)<span class="question-mark">?</span>,
             <span class="ident">scheduler</span>: <span class="self">Self</span>::<span class="ident">setup_scheduler</span>(<span class="kw-2">&amp;</span><span class="ident">pki_config</span>)<span class="question-mark">?</span>,
             <span class="ident">service_account</span>: <span class="self">Self</span>::<span class="ident">setup_service_account</span>(<span class="kw-2">&amp;</span><span class="ident">pki_config</span>)<span class="question-mark">?</span>,
@@ -413,10 +423,10 @@
         })
     }
 
-    <span class="kw">fn</span> <span class="ident">setup_ca</span>(<span class="ident">dir</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pair</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">setup_ca</span>(<span class="ident">dir</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span> {
         <span class="kw">const</span> <span class="ident">NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;ca&quot;</span>;
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Creating CA certificates&quot;</span>);
-        <span class="kw">const</span> <span class="ident">CN</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;Kubernetes&quot;</span>;
+        <span class="kw">const</span> <span class="ident">CN</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernetes&quot;</span>;
         <span class="kw">let</span> <span class="ident">csr</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;ca-csr.json&quot;</span>);
         <span class="self">Self</span>::<span class="ident">write_csr</span>(<span class="ident">CN</span>, <span class="ident">CN</span>, <span class="kw-2">&amp;</span><span class="ident">csr</span>)<span class="question-mark">?</span>;
 
@@ -443,70 +453,71 @@
             <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;CA certificate generation failed&quot;</span>);
         }
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;CA certificates created&quot;</span>);
-        <span class="prelude-val">Ok</span>(<span class="ident">Pair</span>::<span class="ident">new</span>(<span class="ident">dir</span>, <span class="ident">NAME</span>))
+        <span class="prelude-val">Ok</span>(<span class="ident">Idendity</span>::<span class="ident">new</span>(<span class="ident">dir</span>, <span class="ident">NAME</span>, <span class="ident">NAME</span>))
     }
 
-    <span class="kw">fn</span> <span class="ident">setup_kubelet</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>, <span class="ident">hostname</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pair</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">name</span> <span class="op">=</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;system:node:{}&quot;</span>, <span class="ident">hostname</span>);
-        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;node-csr.json&quot;</span>);
+    <span class="kw">fn</span> <span class="ident">setup_kubelet</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>, <span class="ident">node</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="ident">name</span> <span class="op">=</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;system:node:{}&quot;</span>, <span class="ident">node</span>);
+        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>().<span class="ident">join</span>(<span class="string">&quot;node-csr.json&quot;</span>);
         <span class="self">Self</span>::<span class="ident">write_csr</span>(<span class="kw-2">&amp;</span><span class="ident">name</span>, <span class="string">&quot;system:nodes&quot;</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">hostname</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>)
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">node</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>, <span class="kw-2">&amp;</span><span class="ident">name</span>)<span class="question-mark">?</span>)
     }
 
-    <span class="kw">fn</span> <span class="ident">setup_admin</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pair</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">setup_admin</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span> {
         <span class="kw">const</span> <span class="ident">NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;admin&quot;</span>;
-        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;admin-csr.json&quot;</span>);
+        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>().<span class="ident">join</span>(<span class="string">&quot;admin-csr.json&quot;</span>);
         <span class="self">Self</span>::<span class="ident">write_csr</span>(<span class="ident">NAME</span>, <span class="string">&quot;system:masters&quot;</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>)
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>, <span class="ident">NAME</span>)<span class="question-mark">?</span>)
     }
 
-    <span class="kw">fn</span> <span class="ident">setup_controller_manager</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pair</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">setup_controller_manager</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span> {
         <span class="kw">const</span> <span class="ident">NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kube-controller-manager&quot;</span>;
         <span class="kw">const</span> <span class="ident">CN</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;system:kube-controller-manager&quot;</span>;
-        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;kube-controller-manager-csr.json&quot;</span>);
+        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>().<span class="ident">join</span>(<span class="string">&quot;kube-controller-manager-csr.json&quot;</span>);
         <span class="self">Self</span>::<span class="ident">write_csr</span>(<span class="ident">CN</span>, <span class="ident">CN</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>)
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>, <span class="ident">CN</span>)<span class="question-mark">?</span>)
     }
 
-    <span class="kw">fn</span> <span class="ident">setup_proxy</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pair</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">setup_proxy</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span> {
         <span class="kw">const</span> <span class="ident">NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kube-proxy&quot;</span>;
-        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;admin-csr.json&quot;</span>);
+        <span class="kw">const</span> <span class="ident">CN</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;system:kube-proxy&quot;</span>;
+        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>().<span class="ident">join</span>(<span class="string">&quot;admin-csr.json&quot;</span>);
         <span class="self">Self</span>::<span class="ident">write_csr</span>(<span class="string">&quot;system:kube-proxy&quot;</span>, <span class="string">&quot;system:node-proxier&quot;</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>)
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>, <span class="ident">CN</span>)<span class="question-mark">?</span>)
     }
 
-    <span class="kw">fn</span> <span class="ident">setup_scheduler</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pair</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">setup_scheduler</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span> {
         <span class="kw">const</span> <span class="ident">NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kube-scheduler&quot;</span>;
-        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;kube-scheduler-csr.json&quot;</span>);
         <span class="kw">const</span> <span class="ident">CN</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;system:kube-scheduler&quot;</span>;
+        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>().<span class="ident">join</span>(<span class="string">&quot;kube-scheduler-csr.json&quot;</span>);
         <span class="self">Self</span>::<span class="ident">write_csr</span>(<span class="ident">CN</span>, <span class="ident">CN</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>)
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>, <span class="ident">CN</span>)<span class="question-mark">?</span>)
     }
 
-    <span class="kw">fn</span> <span class="ident">setup_apiserver</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pair</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">setup_apiserver</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span> {
         <span class="kw">const</span> <span class="ident">NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernetes&quot;</span>;
-        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;kubernetes-csr.json&quot;</span>);
+        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>().<span class="ident">join</span>(<span class="string">&quot;kubernetes-csr.json&quot;</span>);
         <span class="self">Self</span>::<span class="ident">write_csr</span>(<span class="ident">NAME</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>)
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>, <span class="ident">NAME</span>)<span class="question-mark">?</span>)
     }
 
-    <span class="kw">fn</span> <span class="ident">setup_service_account</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pair</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">setup_service_account</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span> {
         <span class="kw">const</span> <span class="ident">NAME</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;service-account&quot;</span>;
-        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;service-account-csr.json&quot;</span>);
-        <span class="self">Self</span>::<span class="ident">write_csr</span>(<span class="string">&quot;service-accounts&quot;</span>, <span class="string">&quot;Kubernetes&quot;</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>)
+        <span class="kw">let</span> <span class="ident">csr_file</span> <span class="op">=</span> <span class="ident">pki_config</span>.<span class="ident">dir</span>().<span class="ident">join</span>(<span class="string">&quot;service-account-csr.json&quot;</span>);
+        <span class="self">Self</span>::<span class="ident">write_csr</span>(<span class="string">&quot;service-accounts&quot;</span>, <span class="string">&quot;kubernetes&quot;</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>)<span class="question-mark">?</span>;
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>::<span class="ident">generate</span>(<span class="ident">pki_config</span>, <span class="ident">NAME</span>, <span class="kw-2">&amp;</span><span class="ident">csr_file</span>, <span class="ident">NAME</span>)<span class="question-mark">?</span>)
     }
 
-    <span class="kw">fn</span> <span class="ident">generate</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>, <span class="ident">name</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">csr</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pair</span><span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">generate</span>(<span class="ident">pki_config</span>: <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span>, <span class="ident">name</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">csr</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>, <span class="ident">user</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span> {
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Creating certificate for {}&quot;</span>, <span class="ident">name</span>);
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">cfssl</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;cfssl&quot;</span>)
             .<span class="ident">arg</span>(<span class="string">&quot;gencert&quot;</span>)
-            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;-ca={}&quot;</span>, <span class="ident">pki_config</span>.<span class="ident">ca</span>.<span class="ident">cert</span>().<span class="ident">display</span>()))
-            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;-ca-key={}&quot;</span>, <span class="ident">pki_config</span>.<span class="ident">ca</span>.<span class="ident">key</span>().<span class="ident">display</span>()))
-            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;-config={}&quot;</span>, <span class="ident">pki_config</span>.<span class="ident">ca_config</span>.<span class="ident">display</span>()))
+            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;-ca={}&quot;</span>, <span class="ident">pki_config</span>.<span class="ident">ca</span>().<span class="ident">cert</span>().<span class="ident">display</span>()))
+            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;-ca-key={}&quot;</span>, <span class="ident">pki_config</span>.<span class="ident">ca</span>().<span class="ident">key</span>().<span class="ident">display</span>()))
+            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;-config={}&quot;</span>, <span class="ident">pki_config</span>.<span class="ident">ca_config</span>().<span class="ident">display</span>()))
             .<span class="ident">arg</span>(<span class="string">&quot;-profile=kubernetes&quot;</span>)
-            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;-hostname={}&quot;</span>, <span class="ident">pki_config</span>.<span class="ident">hostnames</span>))
+            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;-hostname={}&quot;</span>, <span class="ident">pki_config</span>.<span class="ident">hostnames</span>()))
             .<span class="ident">arg</span>(<span class="ident">csr</span>)
             .<span class="ident">stdout</span>(<span class="ident">Stdio</span>::<span class="ident">piped</span>())
             .<span class="ident">stderr</span>(<span class="ident">Stdio</span>::<span class="ident">null</span>())
@@ -518,7 +529,7 @@
             .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;unable to get stdout&quot;</span>))<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;cfssljson&quot;</span>)
             .<span class="ident">arg</span>(<span class="string">&quot;-bare&quot;</span>)
-            .<span class="ident">arg</span>(<span class="ident">pki_config</span>.<span class="ident">dir</span>.<span class="ident">join</span>(<span class="ident">name</span>))
+            .<span class="ident">arg</span>(<span class="ident">pki_config</span>.<span class="ident">dir</span>().<span class="ident">join</span>(<span class="ident">name</span>))
             .<span class="ident">stdin</span>(<span class="ident">pipe</span>)
             .<span class="ident">output</span>()<span class="question-mark">?</span>;
         <span class="kw">if</span> <span class="op">!</span><span class="ident">output</span>.<span class="ident">status</span>.<span class="ident">success</span>() {
@@ -528,7 +539,7 @@
         }
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Certificate created for {}&quot;</span>, <span class="ident">name</span>);
 
-        <span class="prelude-val">Ok</span>(<span class="ident">Pair</span>::<span class="ident">new</span>(<span class="kw-2">&amp;</span><span class="ident">pki_config</span>.<span class="ident">dir</span>, <span class="ident">name</span>))
+        <span class="prelude-val">Ok</span>(<span class="ident">Idendity</span>::<span class="ident">new</span>(<span class="ident">pki_config</span>.<span class="ident">dir</span>(), <span class="ident">name</span>, <span class="ident">user</span>))
     }
 
     <span class="kw">fn</span> <span class="ident">write_csr</span>(<span class="ident">cn</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">o</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">dest</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
@@ -540,11 +551,8 @@
           },
           <span class="string">&quot;names&quot;</span>: [
             {
-              <span class="string">&quot;C&quot;</span>: <span class="string">&quot;US&quot;</span>,
-              <span class="string">&quot;L&quot;</span>: <span class="string">&quot;Portland&quot;</span>,
               <span class="string">&quot;O&quot;</span>: <span class="ident">o</span>,
-              <span class="string">&quot;OU&quot;</span>: <span class="string">&quot;Kubernetes&quot;</span>,
-              <span class="string">&quot;ST&quot;</span>: <span class="string">&quot;Oregon&quot;</span>
+              <span class="string">&quot;OU&quot;</span>: <span class="string">&quot;kubernetes&quot;</span>,
             }
           ]
         });
@@ -589,8 +597,7 @@
     <span class="kw">fn</span> <span class="ident">new_success</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">test_config</span>()<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">n</span> <span class="op">=</span> <span class="ident">test_network</span>()<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">s</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">default</span>();
-        <span class="ident">Pki</span>::<span class="ident">new</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>, <span class="kw-2">&amp;</span><span class="ident">s</span>, <span class="kw-2">&amp;</span><span class="ident">n</span>)<span class="question-mark">?</span>;
+        <span class="ident">Pki</span>::<span class="ident">new</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>, <span class="kw-2">&amp;</span><span class="ident">n</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
@@ -598,8 +605,7 @@
     <span class="kw">fn</span> <span class="ident">new_failure</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">test_config_wrong_root</span>()<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">n</span> <span class="op">=</span> <span class="ident">test_network</span>()<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">s</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">default</span>();
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">Pki</span>::<span class="ident">new</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>, <span class="kw-2">&amp;</span><span class="ident">s</span>, <span class="kw-2">&amp;</span><span class="ident">n</span>).<span class="ident">is_err</span>());
+        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">Pki</span>::<span class="ident">new</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>, <span class="kw-2">&amp;</span><span class="ident">n</span>).<span class="ident">is_err</span>());
         <span class="prelude-val">Ok</span>(())
     }
 }
