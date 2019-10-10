@@ -5,6 +5,7 @@ use ipnetwork::Ipv4Network;
 use log::{debug, warn};
 use std::{
     fmt::{Display, Formatter, Result},
+    fs::create_dir_all,
     net::{Ipv4Addr, SocketAddr},
     path::PathBuf,
     process::Command,
@@ -28,27 +29,30 @@ pub struct Network {
     etcd_peer: SocketAddr,
 
     #[get = "pub"]
-    crio_socket: CrioSocket,
+    crio_socket: CriSocket,
+
+    #[get = "pub"]
+    cni: PathBuf,
 }
 
-/// Simple CRI-O socket abstraction
-pub struct CrioSocket(PathBuf);
+/// Simple CRI socket abstraction
+pub struct CriSocket(PathBuf);
 
-impl Display for CrioSocket {
+impl Display for CriSocket {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}", self.0.display())
     }
 }
 
-impl CrioSocket {
+impl CriSocket {
     pub fn to_socket_string(&self) -> String {
         format!("unix://{}", self.0.display())
     }
 }
 
 impl Network {
-    /// The global name for the bridged interface
-    pub const BRIDGE: &'static str = "kubernix1";
+    /// The global name for the interface
+    pub const INTERFACE: &'static str = "kubernix1";
 
     /// Create a new network from the provided config
     pub fn new(config: &Config) -> Fallible<Self> {
@@ -84,9 +88,13 @@ impl Network {
         debug!("Using service CIDR {}", service_cidr);
 
         // Set the rest of the networking related adresses and paths
-        let crio_socket = CrioSocket(config.root().join(CRIO_DIR).join("crio.sock"));
+        let crio_socket = CriSocket(config.root().join(CRIO_DIR).join("crio.sock"));
         let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2379);
         let etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2380);
+
+        // Setup the CNI config dir
+        let cni = config.root().join("cni");
+        create_dir_all(&cni)?;
 
         Ok(Self {
             cluster_cidr,
@@ -95,6 +103,7 @@ impl Network {
             crio_socket,
             etcd_client,
             etcd_peer,
+            cni,
         })
     }
 
@@ -106,7 +115,7 @@ impl Network {
         }
         String::from_utf8(cmd.stdout)?
             .lines()
-            .filter(|x| !x.contains(Self::BRIDGE))
+            .filter(|x| !x.contains(Self::INTERFACE))
             .filter_map(|x| x.split_whitespace().nth(0))
             .filter_map(|x| x.parse::<Ipv4Network>().ok())
             .filter(|x| x.is_supernet_of(cidr))

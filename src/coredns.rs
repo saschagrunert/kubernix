@@ -1,10 +1,7 @@
-use crate::{config::Config, kubeconfig::KubeConfig, network::Network};
-use failure::{bail, Fallible};
-use log::{debug, info};
-use std::{
-    fs::{self, create_dir_all},
-    process::Command,
-};
+use crate::{config::Config, kubeconfig::KubeConfig, kubectl::Kubectl, network::Network};
+use failure::Fallible;
+use log::info;
+use std::fs::{self, create_dir_all};
 
 pub struct CoreDNS;
 
@@ -16,26 +13,10 @@ impl CoreDNS {
         create_dir_all(&dir)?;
 
         let yml = format!(include_str!("assets/coredns.yml"), network.dns()?);
-        let yml_file = dir.join("coredns.yml");
-        fs::write(&yml_file, yml)?;
+        let file = dir.join("coredns.yml");
+        fs::write(&file, yml)?;
 
-        let output = Command::new("kubectl")
-            .arg("apply")
-            .arg(format!("--kubeconfig={}", kubeconfig.admin().display()))
-            .arg("-f")
-            .arg(yml_file)
-            .output()?;
-        if !output.status.success() {
-            debug!(
-                "kubectl apply stdout: {}",
-                String::from_utf8(output.stdout)?
-            );
-            debug!(
-                "kubectl apply stderr: {}",
-                String::from_utf8(output.stderr)?
-            );
-            bail!("kubectl apply command failed");
-        }
+        Kubectl::apply(kubeconfig, &file)?;
 
         info!("CoreDNS deployed");
         Ok(())

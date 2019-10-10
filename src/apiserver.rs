@@ -2,16 +2,16 @@ use crate::{
     config::Config,
     encryptionconfig::EncryptionConfig,
     kubeconfig::KubeConfig,
+    kubectl::Kubectl,
     network::Network,
     pki::Pki,
     process::{Process, Startable, Stoppable},
 };
-use failure::{bail, Fallible};
+use failure::Fallible;
 use log::{debug, info};
 use std::{
     fs::{self, create_dir_all},
     path::Path,
-    process::Command,
 };
 
 pub struct ApiServer {
@@ -76,33 +76,17 @@ impl ApiServer {
         )?;
 
         process.wait_ready("etcd ok")?;
-        Self::setup_rbac(&dir, kubeconfig.admin())?;
+        Self::setup_rbac(&dir, kubeconfig)?;
         info!("API Server is ready");
         Ok(Box::new(ApiServer { process }))
     }
 
-    fn setup_rbac(dir: &Path, admin_config: &Path) -> Fallible<()> {
+    fn setup_rbac(dir: &Path, kubeconfig: &KubeConfig) -> Fallible<()> {
         debug!("Creating API Server RBAC rule for kubelet");
-        let yml_file = dir.join("rbac.yml");
-        fs::write(&yml_file, include_str!("assets/apiserver.yml"))?;
+        let file = dir.join("rbac.yml");
+        fs::write(&file, include_str!("assets/apiserver.yml"))?;
 
-        let output = Command::new("kubectl")
-            .arg("apply")
-            .arg(format!("--kubeconfig={}", admin_config.display()))
-            .arg("-f")
-            .arg(yml_file)
-            .output()?;
-        if !output.status.success() {
-            debug!(
-                "kubectl apply stdout: {}",
-                String::from_utf8(output.stdout)?
-            );
-            debug!(
-                "kubectl apply stderr: {}",
-                String::from_utf8(output.stderr)?
-            );
-            bail!("kubectl apply command failed");
-        }
+        Kubectl::apply(kubeconfig, &file)?;
 
         debug!("API Server RBAC rule created");
         Ok(())

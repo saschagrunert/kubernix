@@ -9,6 +9,7 @@ mod crio;
 mod encryptionconfig;
 mod etcd;
 mod kubeconfig;
+mod kubectl;
 mod kubelet;
 mod network;
 mod nix;
@@ -169,8 +170,8 @@ impl Kubernix {
         info!("Starting processes");
         scope(|s| {
             s.spawn(|_| crio = Crio::start(&config, &network));
+            s.spawn(|_| etcd = Etcd::start(&config, &network, &pki));
             s.spawn(|_| {
-                etcd = Etcd::start(&config, &network, &pki);
                 api_server =
                     ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubeconfig)
             });
@@ -227,10 +228,7 @@ impl Kubernix {
 
     /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
     fn apply_addons(&mut self) -> Fallible<()> {
-        if let Err(e) = CoreDNS::apply(&self.config, &self.network, &self.kubeconfig) {
-            bail!("Unable to apply CoreDNS: {}", e);
-        }
-        Ok(())
+        CoreDNS::apply(&self.config, &self.network, &self.kubeconfig)
     }
 
     /// Spawn a new interactive default system shell
