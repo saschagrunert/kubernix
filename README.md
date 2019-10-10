@@ -244,7 +244,7 @@ Client: &version.Version{SemVer:"v2.14.3", GitCommit:"", GitTreeState:"clean"}
 Server: &version.Version{SemVer:"v2.14.3", GitCommit:"0e7f3b6637f7af8fcfddb3d2941fcc7cbebb0085", GitTreeState:"clean"}
 ```
 
-All available packages are listed in the [official Nix website][21].
+All available packages are listed on the [official Nix index][21].
 
 [20]: https://helm.sh
 [21]: https://nixos.org/nixos/packages.html?channel=nixpkgs-unstable
