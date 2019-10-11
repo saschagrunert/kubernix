@@ -32,19 +32,17 @@ pub struct Config {
         default_value = "kubernix-run",
         env = "KUBERNIX_RUN",
         global = true,
-        help = "Path where all the runtime data is stored",
         long = "root",
         short = "r",
         value_name = "PATH"
     )]
-    /// The root path during runtime
+    /// Path where all the runtime data is stored
     root: PathBuf,
 
     #[get = "pub"]
     #[clap(
         default_value = "info",
         env = "KUBERNIX_LOG_LEVEL",
-        help = "Set the log level verbosity",
         long = "log-level",
         raw(possible_values = r#"&["trace", "debug", "info", "warn", "error", "off"]"#),
         short = "l",
@@ -57,7 +55,6 @@ pub struct Config {
     #[clap(
         default_value = "10.10.0.0/16",
         env = "KUBERNIX_CIDR",
-        help = "The CIDR used for the cluster",
         long = "cidr",
         short = "c",
         value_name = "CIDR"
@@ -68,7 +65,6 @@ pub struct Config {
     #[get = "pub"]
     #[clap(
         env = "KUBERNIX_OVERLAY",
-        help = "The Nix package overlay to be used",
         long = "overlay",
         short = "o",
         value_name = "PATH"
@@ -79,7 +75,6 @@ pub struct Config {
     #[get = "pub"]
     #[clap(
         env = "KUBERNIX_PACKAGES",
-        help = "Additional Nix dependencies to be added to the environment",
         long = "packages",
         multiple = true,
         short = "p",
@@ -91,20 +86,19 @@ pub struct Config {
     #[get = "pub"]
     #[clap(
         env = "KUBERNIX_SHELL",
-        help = "The shell executable to be used, defaults to $SHELL, fallback is 'sh'",
         long = "shell",
         short = "s",
         value_name = "SHELL"
     )]
-    /// Additional dependencies to be added to the environment
+    /// The shell executable to be used, defaults to $SHELL, fallback is 'sh'
     shell: Option<String>,
 }
 
 /// Possible subcommands
 #[derive(Clap, Deserialize, Serialize)]
 pub enum SubCommand {
-    /// `shell` subcommand specified
-    #[clap(name = "shell", about = "Spawn an additional shell session")]
+    /// Spawn an additional shell session
+    #[clap(name = "shell")]
     Shell,
 }
 
