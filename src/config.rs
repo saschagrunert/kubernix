@@ -2,7 +2,7 @@
 use crate::system::System;
 use clap::{crate_version, AppSettings, Clap};
 use failure::{format_err, Fallible};
-use getset::Getters;
+use getset::{CopyGetters, Getters};
 use ipnetwork::Ipv4Network;
 use log::LevelFilter;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ use std::{
 };
 use toml;
 
-#[derive(Clap, Deserialize, Getters, Serialize)]
+#[derive(Clap, Deserialize, Getters, CopyGetters, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[clap(
     after_help = "More info at: https://github.com/saschagrunert/kubernix",
@@ -39,7 +39,7 @@ pub struct Config {
     /// Path where all the runtime data is stored
     root: PathBuf,
 
-    #[get = "pub"]
+    #[get_copy = "pub"]
     #[clap(
         default_value = "info",
         env = "KUBERNIX_LOG_LEVEL",
@@ -51,7 +51,7 @@ pub struct Config {
     /// The logging level of the application
     log_level: LevelFilter,
 
-    #[get = "pub"]
+    #[get_copy = "pub"]
     #[clap(
         default_value = "10.10.0.0/16",
         env = "KUBERNIX_CIDR",
@@ -228,8 +228,8 @@ packages = []
         )?;
         c.update_from_file()?;
         assert_eq!(c.root(), Path::new("root"));
-        assert_eq!(c.log_level(), &LevelFilter::Debug);
-        assert_eq!(c.cidr().to_string(), "1.1.1.1/16");
+        assert_eq!(c.log_level(), LevelFilter::Debug);
+        assert_eq!(&c.cidr().to_string(), "1.1.1.1/16");
         Ok(())
     }
 

@@ -63,7 +63,7 @@ impl Network {
                 config.cidr()
             )
         }
-        Self::warn_overlapping_route(*config.cidr())?;
+        Self::warn_overlapping_route(config.cidr())?;
 
         // Calculate the CIDRs
         let crio_cidr = Ipv4Network::new(config.cidr().ip(), config.cidr().prefix() + 1)?;

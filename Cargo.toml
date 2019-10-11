@@ -21,7 +21,7 @@ base64 = "0.10.1"
 clap = { git = "https://github.com/clap-rs/clap", features = ["wrap_help"] }
 env_logger = "0.7.0"
 failure = "0.1.5"
-getset = "0.0.8"
+getset = { git = "https://github.com/Hoverbear/getset" }
 hostname = "0.1.5"
 ipnetwork = "0.15.0"
 log = { version = "0.4.8", features = ["serde"] }
