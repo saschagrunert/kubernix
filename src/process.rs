@@ -1,4 +1,4 @@
-use crate::Config;
+use crossbeam_channel::{bounded, Sender};
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
 use nix::{
@@ -6,12 +6,12 @@ use nix::{
     unistd::Pid,
 };
 use std::{
+    convert::From,
     fs::{self, create_dir_all, metadata, set_permissions, File},
     io::{BufRead, BufReader},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::mpsc::{channel, Sender},
     thread::{spawn, JoinHandle},
     time::Instant,
 };
@@ -32,27 +32,26 @@ pub trait Stoppable {
     fn stop(&mut self) -> Fallible<()>;
 }
 
-/// Startable process type
-pub type Startable = Box<dyn Stoppable + Send>;
+/// A started process
+type Started = Box<dyn Stoppable + Send + Sync>;
+
+/// A vector of processes which can be stopped
+pub type Stoppables = Vec<Started>;
+
+/// The process state as result
+pub type ProcessState = Fallible<Started>;
 
 impl Process {
     /// Creates a new `Process` instance by spawning the provided command `cmd`.
     /// If the process creation fails, an `Error` will be returned.
-    pub fn start(
-        config: &Config,
-        dir: &Path,
-        command: &'static str,
-        args: &[&str],
-    ) -> Fallible<Process> {
+    pub fn start(dir: &Path, command: &'static str, args: &[&str]) -> Fallible<Process> {
         // Prepare the commands
         if command.is_empty() {
             bail!("No valid command provided")
         }
 
         // Prepare the log dir and file
-        let log_dir = config.root().join("log");
-        create_dir_all(&log_dir)?;
-        let mut log_file = log_dir.join(command);
+        let mut log_file = dir.join(command);
         log_file.set_extension("log");
 
         let out_file = File::create(&log_file)?;
@@ -65,7 +64,7 @@ impl Process {
             .stdout(Stdio::from(out_file))
             .spawn()?;
 
-        let (kill_tx, kill_rx) = channel();
+        let (kill_tx, kill_rx) = bounded(1);
         let c = command.to_owned();
         let pid = child.id();
         let watch = spawn(move || {
@@ -136,8 +135,8 @@ impl Process {
     }
 
     /// Retrieve a pseudo state for stopped processes
-    pub fn stopped() -> Fallible<Startable> {
-        Err(format_err!("Found stopped process"))
+    pub fn stopped() -> ProcessState {
+        bail!("Process not started yet")
     }
 }
 
@@ -168,7 +167,6 @@ impl Stoppable for Process {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::tests::{test_config, test_config_wrong_root};
     use tempfile::tempdir;
 
     #[test]
@@ -178,50 +176,37 @@ mod tests {
 
     #[test]
     fn start_success() -> Fallible<()> {
-        let c = test_config()?;
         let d = tempdir()?;
-        Process::start(&c, d.path(), "echo", &[])?;
-        Ok(())
-    }
-
-    #[test]
-    fn start_failure_wrong_root() -> Fallible<()> {
-        let c = test_config_wrong_root()?;
-        let d = tempdir()?;
-        assert!(Process::start(&c, d.path(), "echo", &[]).is_err());
+        Process::start(d.path(), "echo", &[])?;
         Ok(())
     }
 
     #[test]
     fn start_failure_no_command() -> Fallible<()> {
-        let c = test_config()?;
         let d = tempdir()?;
-        assert!(Process::start(&c, d.path(), "", &[]).is_err());
+        assert!(Process::start(d.path(), "", &[]).is_err());
         Ok(())
     }
 
     #[test]
     fn start_failure_invalid_command() -> Fallible<()> {
-        let c = test_config()?;
         let d = tempdir()?;
-        assert!(Process::start(&c, d.path(), "invalid_command", &[]).is_err());
+        assert!(Process::start(d.path(), "invalid_command", &[]).is_err());
         Ok(())
     }
 
     #[test]
     fn wait_ready_success() -> Fallible<()> {
-        let c = test_config()?;
         let d = tempdir()?;
-        let mut p = Process::start(&c, d.path(), "echo", &["test"])?;
+        let mut p = Process::start(d.path(), "echo", &["test"])?;
         p.wait_ready("test")?;
         Ok(())
     }
 
     #[test]
     fn wait_ready_failure() -> Fallible<()> {
-        let c = test_config()?;
         let d = tempdir()?;
-        let mut p = Process::start(&c, d.path(), "echo", &["test"])?;
+        let mut p = Process::start(d.path(), "echo", &["test"])?;
         p.readyness_timeout = 1;
         assert!(p.wait_ready("invalid").is_err());
         Ok(())
@@ -229,9 +214,8 @@ mod tests {
 
     #[test]
     fn stop_success() -> Fallible<()> {
-        let c = test_config()?;
         let d = tempdir()?;
-        let mut p = Process::start(&c, d.path(), "sleep", &["500"])?;
+        let mut p = Process::start(d.path(), "sleep", &["500"])?;
         p.stop()?;
         Ok(())
     }

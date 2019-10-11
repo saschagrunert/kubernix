@@ -1,8 +1,8 @@
 use crate::{
     network::Network,
-    process::{Process, Startable, Stoppable},
+    process::{Process, ProcessState, Stoppable},
     system::System,
-    Config, CRIO_DIR, RUNTIME_ENV,
+    Config, RUNTIME_ENV,
 };
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
@@ -13,7 +13,9 @@ use nix::{
 use psutil::process;
 use serde_json::{json, to_string_pretty};
 use std::{
+    fmt::{Display, Formatter, Result},
     fs::{self, create_dir_all},
+    path::PathBuf,
     process::Command,
     thread::sleep,
     time::{Duration, Instant},
@@ -21,53 +23,74 @@ use std::{
 
 pub struct Crio {
     process: Process,
-    socket: String,
+    socket: CriSocket,
+}
+
+/// Simple CRI socket abstraction
+pub struct CriSocket(PathBuf);
+
+impl Display for CriSocket {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", self.0.display())
+    }
+}
+
+impl CriSocket {
+    pub fn to_socket_string(&self) -> String {
+        format!("unix://{}", self.0.display())
+    }
 }
 
 impl Crio {
-    pub fn start(config: &Config, network: &Network) -> Fallible<Startable> {
+    pub fn start(config: &Config, network: &Network) -> ProcessState {
         info!("Starting CRI-O");
+
         let conmon = System::find_executable("conmon")?;
         let loopback = System::find_executable("loopback")?;
         let cni_plugin = loopback
             .parent()
             .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
 
-        let dir = config.root().join(CRIO_DIR);
-        create_dir_all(&dir)?;
-
-        fs::write(
-            network.cni().join("10-bridge.json"),
-            to_string_pretty(&json!({
-                "cniVersion": "0.3.1",
-                "name": "crio-kubernix",
-                "type": "bridge",
-                "bridge": Network::INTERFACE,
-                "isGateway": true,
-                "ipMasq": true,
-                "hairpinMode": true,
-                "ipam": {
-                    "type": "host-local",
-                    "routes": [{ "dst": "0.0.0.0/0" }],
-                    "ranges": [[{ "subnet": network.crio_cidr() }]]
-                }
-            }))?,
-        )?;
-
-        let policy_json = dir.join("policy.json");
-        fs::write(
-            &policy_json,
-            to_string_pretty(&json!({
-              "default": [{ "type": "insecureAcceptAnything" }]
-            }))?,
-        )?;
-
-        // Pseudo config to not load local configuration values
+        let dir = Self::path(config);
         let crio_config = dir.join("crio.conf");
-        fs::write(&crio_config, "")?;
+        let policy_json = dir.join("policy.json");
+        let cni = dir.join("cni");
+
+        if !dir.exists() {
+            create_dir_all(&dir)?;
+            create_dir_all(&cni)?;
+
+            fs::write(
+                cni.join("10-bridge.json"),
+                to_string_pretty(&json!({
+                    "cniVersion": "0.3.1",
+                    "name": "crio-kubernix",
+                    "type": "bridge",
+                    "bridge":  Network::INTERFACE,
+                    "isGateway": true,
+                    "ipMasq": true,
+                    "hairpinMode": true,
+                    "ipam": {
+                        "type": "host-local",
+                        "routes": [{ "dst": "0.0.0.0/0" }],
+                        "ranges": [[{ "subnet": network.crio_cidr() }]]
+                    }
+                }))?,
+            )?;
+
+            fs::write(
+                &policy_json,
+                to_string_pretty(&json!({
+                    "default": [{ "type": "insecureAcceptAnything" }]
+                }))?,
+            )?;
+
+            // Pseudo config to not load local configuration values
+            fs::write(&crio_config, "")?;
+        }
+        let socket = Self::socket(config);
 
         let mut process = Process::start(
-            config,
             &dir,
             "crio",
             &[
@@ -75,10 +98,10 @@ impl Crio {
                 "--log-level=debug",
                 "--storage-driver=overlay",
                 &format!("--conmon={}", conmon.display()),
-                &format!("--listen={}", network.crio_socket()),
+                &format!("--listen={}", socket),
                 &format!("--root={}", dir.join("storage").display()),
                 &format!("--runroot={}", dir.join("run").display()),
-                &format!("--cni-config-dir={}", network.cni().display()),
+                &format!("--cni-config-dir={}", cni.display()),
                 &format!("--cni-plugin-dir={}", cni_plugin.display()),
                 "--registry=docker.io",
                 &format!("--signature-policy={}", policy_json.display()),
@@ -93,10 +116,17 @@ impl Crio {
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready");
-        Ok(Box::new(Crio {
-            process,
-            socket: network.crio_socket().to_socket_string(),
-        }))
+        Ok(Box::new(Crio { process, socket }))
+    }
+
+    /// Retrieve the CRI socket
+    pub fn socket(config: &Config) -> CriSocket {
+        CriSocket(Self::path(config).join("crio.sock"))
+    }
+
+    /// Retrieve the working path for the node
+    fn path(config: &Config) -> PathBuf {
+        config.root().join("crio")
     }
 
     /// Try to cleanup all related resources
@@ -134,28 +164,28 @@ impl Crio {
         debug!("Removing all CRI-O workloads");
 
         let output = Command::new("crictl")
-            .env(RUNTIME_ENV, &self.socket)
+            .env(RUNTIME_ENV, self.socket.to_socket_string())
             .arg("pods")
             .arg("-q")
             .output()?;
         let stdout = String::from_utf8(output.stdout)?;
         if !output.status.success() {
-            debug!("critcl stdout: {}", stdout);
-            debug!("critcl stderr: {}", String::from_utf8(output.stderr)?);
+            debug!("critcl pods stdout: {}", stdout);
+            debug!("critcl pods stderr: {}", String::from_utf8(output.stderr)?);
             bail!("crictl pods command failed");
         }
 
         for x in stdout.lines() {
             debug!("Removing pod {}", x);
             let output = Command::new("crictl")
-                .env(RUNTIME_ENV, &self.socket)
+                .env(RUNTIME_ENV, self.socket.to_socket_string())
                 .arg("rmp")
                 .arg("-f")
                 .arg(x)
                 .output()?;
             if !output.status.success() {
-                debug!("critcl stdout: {}", String::from_utf8(output.stdout)?);
-                debug!("critcl stderr: {}", String::from_utf8(output.stderr)?);
+                debug!("critcl rmp stdout: {}", String::from_utf8(output.stdout)?);
+                debug!("critcl rmp stderr: {}", String::from_utf8(output.stderr)?);
                 bail!("crictl rmp command failed");
             }
         }

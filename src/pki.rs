@@ -79,49 +79,77 @@ struct PkiConfig<'a> {
     hostnames: &'a str,
 }
 
+const ADMIN_NAME: &str = "admin";
+const APISERVER_NAME: &str = "kubernetes";
+const CA_NAME: &str = "ca";
+const CONTROLLER_MANAGER_NAME: &str = "kube-controller-manager";
+const CONTROLLER_MANAGER_USER: &str = "system:kube-controller-manager";
+const PROXY_NAME: &str = "kube-proxy";
+const PROXY_USER: &str = "system:kube-proxy";
+const SCHEDULER_NAME: &str = "kube-scheduler";
+const SCHEDULER_USER: &str = "system:kube-scheduler";
+const SERVICE_ACCOUNT_NAME: &str = "service-account";
+
 impl Pki {
     pub fn new(config: &Config, network: &Network) -> Fallible<Pki> {
-        info!("Generating certificates");
+        let host = &get_hostname().ok_or_else(|| format_err!("Unable to get hostname"))?;
+        let dir = &config.root().join("pki");
 
-        // Create the target dir
-        let pki_dir = &config.root().join("pki");
-        create_dir_all(pki_dir)?;
+        // Create the CA only if necessary
+        if dir.exists() {
+            info!("PKI directory already exists, skipping generation");
 
-        // Set the hostnames
-        let hostname = get_hostname().ok_or_else(|| format_err!("Unable to get hostname"))?;
-        let hostnames = &[
-            &network.api()?.to_string(),
-            &Ipv4Addr::LOCALHOST.to_string(),
-            &hostname,
-            "kubernetes",
-            "kubernetes.default",
-            "kubernetes.default.svc",
-            "kubernetes.default.svc.cluster",
-            "kubernetes.svc.cluster.local",
-        ];
+            Ok(Pki {
+                admin: Idendity::new(dir, ADMIN_NAME, ADMIN_NAME),
+                apiserver: Idendity::new(dir, APISERVER_NAME, APISERVER_NAME),
+                ca: Idendity::new(dir, CA_NAME, CA_NAME),
+                controller_manager: Idendity::new(
+                    dir,
+                    CONTROLLER_MANAGER_NAME,
+                    CONTROLLER_MANAGER_USER,
+                ),
+                kubelet: Idendity::new(dir, &host, &Self::node_user(&host)),
+                proxy: Idendity::new(dir, PROXY_NAME, PROXY_USER),
+                scheduler: Idendity::new(dir, SCHEDULER_NAME, SCHEDULER_USER),
+                service_account: Idendity::new(dir, SERVICE_ACCOUNT_NAME, SERVICE_ACCOUNT_NAME),
+            })
+        } else {
+            info!("Generating certificates");
+            create_dir_all(dir)?;
+            let ca_config = Self::write_ca_config(dir)?;
+            let ca = Self::setup_ca(dir)?;
 
-        let ca = Self::setup_ca(pki_dir)?;
-        let pki_config = PkiConfig {
-            dir: pki_dir,
-            ca: &ca,
-            ca_config: Self::write_ca_config(pki_dir)?,
-            hostnames: &hostnames.join(","),
-        };
+            let hostnames = &[
+                network.api()?.to_string(),
+                Ipv4Addr::LOCALHOST.to_string(),
+                host.to_owned(),
+                "kubernetes".to_owned(),
+                "kubernetes.default".to_owned(),
+                "kubernetes.default.svc".to_owned(),
+                "kubernetes.default.svc.cluster".to_owned(),
+                "kubernetes.svc.cluster.local".to_owned(),
+            ];
+            let pki_config = &PkiConfig {
+                dir,
+                ca: &ca,
+                ca_config,
+                hostnames: &hostnames.join(","),
+            };
 
-        Ok(Pki {
-            admin: Self::setup_admin(&pki_config)?,
-            apiserver: Self::setup_apiserver(&pki_config)?,
-            controller_manager: Self::setup_controller_manager(&pki_config)?,
-            kubelet: Self::setup_kubelet(&pki_config, &hostname)?,
-            proxy: Self::setup_proxy(&pki_config)?,
-            scheduler: Self::setup_scheduler(&pki_config)?,
-            service_account: Self::setup_service_account(&pki_config)?,
-            ca,
-        })
+            Ok(Pki {
+                admin: Self::setup_admin(pki_config)?,
+                apiserver: Self::setup_apiserver(pki_config)?,
+                controller_manager: Self::setup_controller_manager(pki_config)?,
+                kubelet: Self::setup_kubelet(pki_config, &host)?,
+                proxy: Self::setup_proxy(pki_config)?,
+                scheduler: Self::setup_scheduler(pki_config)?,
+                service_account: Self::setup_service_account(pki_config)?,
+                ca,
+            })
+        }
     }
 
     fn setup_ca(dir: &Path) -> Fallible<Idendity> {
-        const NAME: &str = "ca";
         debug!("Creating CA certificates");
         const CN: &str = "kubernetes";
         let csr = dir.join("ca-csr.json");
@@ -141,7 +169,7 @@ impl Pki {
             .ok_or_else(|| format_err!("unable to get stdout"))?;
         let output = Command::new("cfssljson")
             .arg("-bare")
-            .arg(dir.join(NAME))
+            .arg(dir.join(CA_NAME))
             .stdin(pipe)
             .output()?;
         if !output.status.success() {
@@ -150,59 +178,74 @@ impl Pki {
             bail!("CA certificate generation failed");
         }
         debug!("CA certificates created");
-        Ok(Idendity::new(dir, NAME, NAME))
+        Ok(Idendity::new(dir, CA_NAME, CA_NAME))
     }
 
     fn setup_kubelet(pki_config: &PkiConfig, node: &str) -> Fallible<Idendity> {
-        let name = format!("system:node:{}", node);
-        let csr_file = pki_config.dir().join("node-csr.json");
-        Self::write_csr(&name, "system:nodes", &csr_file)?;
-        Ok(Self::generate(pki_config, node, &csr_file, &name)?)
+        let user = Self::node_user(node);
+        let csr_file = pki_config.dir().join(format!("{}-csr.json", node));
+        Self::write_csr(&user, "system:nodes", &csr_file)?;
+        Ok(Self::generate(pki_config, node, &csr_file, &user)?)
     }
 
     fn setup_admin(pki_config: &PkiConfig) -> Fallible<Idendity> {
-        const NAME: &str = "admin";
         let csr_file = pki_config.dir().join("admin-csr.json");
-        Self::write_csr(NAME, "system:masters", &csr_file)?;
-        Ok(Self::generate(pki_config, NAME, &csr_file, NAME)?)
+        Self::write_csr(ADMIN_NAME, "system:masters", &csr_file)?;
+        Ok(Self::generate(
+            pki_config, ADMIN_NAME, &csr_file, ADMIN_NAME,
+        )?)
     }
 
     fn setup_controller_manager(pki_config: &PkiConfig) -> Fallible<Idendity> {
-        const NAME: &str = "kube-controller-manager";
-        const CN: &str = "system:kube-controller-manager";
         let csr_file = pki_config.dir().join("kube-controller-manager-csr.json");
-        Self::write_csr(CN, CN, &csr_file)?;
-        Ok(Self::generate(pki_config, NAME, &csr_file, CN)?)
+        Self::write_csr(CONTROLLER_MANAGER_USER, CONTROLLER_MANAGER_USER, &csr_file)?;
+        Ok(Self::generate(
+            pki_config,
+            CONTROLLER_MANAGER_NAME,
+            &csr_file,
+            CONTROLLER_MANAGER_USER,
+        )?)
     }
 
     fn setup_proxy(pki_config: &PkiConfig) -> Fallible<Idendity> {
-        const NAME: &str = "kube-proxy";
-        const CN: &str = "system:kube-proxy";
-        let csr_file = pki_config.dir().join("admin-csr.json");
+        let csr_file = pki_config.dir().join("kube-proxy-csr.json");
         Self::write_csr("system:kube-proxy", "system:node-proxier", &csr_file)?;
-        Ok(Self::generate(pki_config, NAME, &csr_file, CN)?)
+        Ok(Self::generate(
+            pki_config, PROXY_NAME, &csr_file, PROXY_USER,
+        )?)
     }
 
     fn setup_scheduler(pki_config: &PkiConfig) -> Fallible<Idendity> {
-        const NAME: &str = "kube-scheduler";
-        const CN: &str = "system:kube-scheduler";
         let csr_file = pki_config.dir().join("kube-scheduler-csr.json");
-        Self::write_csr(CN, CN, &csr_file)?;
-        Ok(Self::generate(pki_config, NAME, &csr_file, CN)?)
+        Self::write_csr(SCHEDULER_USER, SCHEDULER_USER, &csr_file)?;
+        Ok(Self::generate(
+            pki_config,
+            SCHEDULER_NAME,
+            &csr_file,
+            SCHEDULER_USER,
+        )?)
     }
 
     fn setup_apiserver(pki_config: &PkiConfig) -> Fallible<Idendity> {
-        const NAME: &str = "kubernetes";
         let csr_file = pki_config.dir().join("kubernetes-csr.json");
-        Self::write_csr(NAME, NAME, &csr_file)?;
-        Ok(Self::generate(pki_config, NAME, &csr_file, NAME)?)
+        Self::write_csr(APISERVER_NAME, APISERVER_NAME, &csr_file)?;
+        Ok(Self::generate(
+            pki_config,
+            APISERVER_NAME,
+            &csr_file,
+            APISERVER_NAME,
+        )?)
     }
 
     fn setup_service_account(pki_config: &PkiConfig) -> Fallible<Idendity> {
-        const NAME: &str = "service-account";
         let csr_file = pki_config.dir().join("service-account-csr.json");
         Self::write_csr("service-accounts", "kubernetes", &csr_file)?;
-        Ok(Self::generate(pki_config, NAME, &csr_file, NAME)?)
+        Ok(Self::generate(
+            pki_config,
+            SERVICE_ACCOUNT_NAME,
+            &csr_file,
+            SERVICE_ACCOUNT_NAME,
+        )?)
     }
 
     fn generate(pki_config: &PkiConfig, name: &str, csr: &Path, user: &str) -> Fallible<Idendity> {
@@ -241,17 +284,17 @@ impl Pki {
 
     fn write_csr(cn: &str, o: &str, dest: &Path) -> Fallible<()> {
         let csr = json!({
-          "CN": cn,
-          "key": {
-            "algo": "rsa",
-            "size": 2048
-          },
-          "names": [
+            "CN": cn,
+            "key": {
+                "algo": "rsa",
+                "size": 2048
+            },
+            "names": [
             {
-              "O": o,
-              "OU": "kubernetes",
+                "O": o,
+                "OU": "kubernetes",
             }
-          ]
+            ]
         });
         fs::write(dest, to_string_pretty(&csr)?)?;
         Ok(())
@@ -259,26 +302,31 @@ impl Pki {
 
     fn write_ca_config(dir: &Path) -> Fallible<PathBuf> {
         let cfg = json!({
-          "signing": {
-            "default": {
-              "expiry": "8760h"
-            },
-            "profiles": {
-              "kubernetes": {
-              "usages": [
-                "signing",
-                "key encipherment",
-                "server auth",
-                "client auth"
-              ],
-              "expiry": "8760h"
-              }
+            "signing": {
+                "default": {
+                    "expiry": "8760h"
+                },
+                "profiles": {
+                    "kubernetes": {
+                        "usages": [
+                            "signing",
+                            "key encipherment",
+                            "server auth",
+                            "client auth"
+                        ],
+                        "expiry": "8760h"
+                    }
+                }
             }
-          }
         });
         let dest = dir.join("ca-config.json");
         fs::write(&dest, to_string_pretty(&cfg)?)?;
         Ok(dest)
+    }
+
+    /// Retrieve the node user
+    fn node_user(node: &str) -> String {
+        format!("system:node:{}", node)
     }
 }
 

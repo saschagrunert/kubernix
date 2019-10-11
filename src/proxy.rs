@@ -2,7 +2,7 @@ use crate::{
     config::Config,
     kubeconfig::KubeConfig,
     network::Network,
-    process::{Process, Startable, Stoppable},
+    process::{Process, ProcessState, Stoppable},
 };
 use failure::Fallible;
 use log::info;
@@ -13,11 +13,7 @@ pub struct Proxy {
 }
 
 impl Proxy {
-    pub fn start(
-        config: &Config,
-        network: &Network,
-        kubeconfig: &KubeConfig,
-    ) -> Fallible<Startable> {
+    pub fn start(config: &Config, network: &Network, kubeconfig: &KubeConfig) -> ProcessState {
         info!("Starting Proxy");
 
         let dir = config.root().join("proxy");
@@ -28,14 +24,16 @@ impl Proxy {
             kubeconfig.proxy().display(),
             network.cluster_cidr(),
         );
-        let yml_file = dir.join("config.yml");
-        fs::write(&yml_file, yml)?;
+        let cfg = dir.join("config.yml");
+
+        if !cfg.exists() {
+            fs::write(&cfg, yml)?;
+        }
 
         let mut process = Process::start(
-            config,
             &dir,
             "kube-proxy",
-            &[&format!("--config={}", yml_file.display())],
+            &[&format!("--config={}", cfg.display())],
         )?;
 
         process.wait_ready("Caches are synced")?;

@@ -32,28 +32,40 @@ pub struct KubeConfig {
 
 impl KubeConfig {
     pub fn new(config: &Config, pki: &Pki) -> Fallible<KubeConfig> {
-        info!("Creating kubeconfigs");
-
         // Create the target dir
         let dir = config.root().join("kubeconfig");
-        create_dir_all(&dir)?;
 
-        Ok(KubeConfig {
-            kubelet: Self::setup_kubeconfig(&dir, pki.kubelet(), pki.ca().cert())?,
-            proxy: Self::setup_kubeconfig(&dir, pki.proxy(), pki.ca().cert())?,
-            controller_manager: Self::setup_kubeconfig(
-                &dir,
-                pki.controller_manager(),
-                pki.ca().cert(),
-            )?,
-            scheduler: Self::setup_kubeconfig(&dir, pki.scheduler(), pki.ca().cert())?,
-            admin: Self::setup_kubeconfig(&dir, pki.admin(), pki.ca().cert())?,
-        })
+        if dir.exists() {
+            info!("Kubeconfig directory already exists, skipping generation");
+
+            Ok(KubeConfig {
+                kubelet: Self::target_config(&dir, pki.kubelet()),
+                proxy: Self::target_config(&dir, pki.proxy()),
+                controller_manager: Self::target_config(&dir, pki.controller_manager()),
+                scheduler: Self::target_config(&dir, pki.scheduler()),
+                admin: Self::target_config(&dir, pki.admin()),
+            })
+        } else {
+            info!("Creating kubeconfigs");
+            create_dir_all(&dir)?;
+
+            Ok(KubeConfig {
+                kubelet: Self::setup_kubeconfig(&dir, pki.kubelet(), pki.ca().cert())?,
+                proxy: Self::setup_kubeconfig(&dir, pki.proxy(), pki.ca().cert())?,
+                controller_manager: Self::setup_kubeconfig(
+                    &dir,
+                    pki.controller_manager(),
+                    pki.ca().cert(),
+                )?,
+                scheduler: Self::setup_kubeconfig(&dir, pki.scheduler(), pki.ca().cert())?,
+                admin: Self::setup_kubeconfig(&dir, pki.admin(), pki.ca().cert())?,
+            })
+        }
     }
 
     fn setup_kubeconfig(dir: &Path, idendity: &Idendity, ca: &Path) -> Fallible<PathBuf> {
         debug!("Creating kubeconfig for {}", idendity.name());
-        let target = dir.join(format!("{}.kubeconfig", idendity.name()));
+        let target = Self::target_config(dir, idendity);
         let kubeconfig_arg = format!("--kubeconfig={}", target.display());
 
         let output = Command::new("kubectl")
@@ -141,6 +153,10 @@ impl KubeConfig {
 
         debug!("Kubeconfig created for {}", idendity.name());
         Ok(target)
+    }
+
+    fn target_config(dir: &Path, idendity: &Idendity) -> PathBuf {
+        dir.join(format!("{}.kubeconfig", idendity.name()))
     }
 }
 

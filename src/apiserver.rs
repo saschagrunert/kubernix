@@ -5,7 +5,7 @@ use crate::{
     kubectl::Kubectl,
     network::Network,
     pki::Pki,
-    process::{Process, Startable, Stoppable},
+    process::{Process, ProcessState, Stoppable},
 };
 use failure::Fallible;
 use log::{debug, info};
@@ -25,14 +25,13 @@ impl ApiServer {
         pki: &Pki,
         encryptionconfig: &EncryptionConfig,
         kubeconfig: &KubeConfig,
-    ) -> Fallible<Startable> {
+    ) -> ProcessState {
         info!("Starting API Server");
 
         let dir = config.root().join("apiserver");
         create_dir_all(&dir)?;
 
         let mut process = Process::start(
-            config,
             &dir,
             "kube-apiserver",
             &[
@@ -84,7 +83,10 @@ impl ApiServer {
     fn setup_rbac(dir: &Path, kubeconfig: &KubeConfig) -> Fallible<()> {
         debug!("Creating API Server RBAC rule for kubelet");
         let file = dir.join("rbac.yml");
-        fs::write(&file, include_str!("assets/apiserver.yml"))?;
+
+        if !file.exists() {
+            fs::write(&file, include_str!("assets/apiserver.yml"))?;
+        }
 
         Kubectl::apply(kubeconfig, &file)?;
 

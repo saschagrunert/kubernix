@@ -7,16 +7,16 @@ authentication:
   webhook:
     enabled: true
   x509:
-    clientCAFile: "{}"
+    clientCAFile: "{ca}"
 authorization:
   mode: Webhook
 clusterDomain: "cluster.local"
 clusterDNS:
-  - "{}"
-podCIDR: "{}"
+  - "{dns}"
+podCIDR: "{cidr}"
 runtimeRequestTimeout: "15m"
-tlsCertFile: "{}"
-tlsPrivateKeyFile: "{}"
+tlsCertFile: "{cert}"
+tlsPrivateKeyFile: "{key}"
 failSwapOn: false
 featureGates:
   DevicePlugins: false

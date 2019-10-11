@@ -1,13 +1,10 @@
-use crate::{Config, CRIO_DIR};
+use crate::Config;
 use failure::{bail, format_err, Fallible};
 use getset::Getters;
 use ipnetwork::Ipv4Network;
 use log::{debug, warn};
 use std::{
-    fmt::{Display, Formatter, Result},
-    fs::create_dir_all,
     net::{Ipv4Addr, SocketAddr},
-    path::PathBuf,
     process::Command,
 };
 
@@ -27,32 +24,11 @@ pub struct Network {
 
     #[get = "pub"]
     etcd_peer: SocketAddr,
-
-    #[get = "pub"]
-    crio_socket: CriSocket,
-
-    #[get = "pub"]
-    cni: PathBuf,
-}
-
-/// Simple CRI socket abstraction
-pub struct CriSocket(PathBuf);
-
-impl Display for CriSocket {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}", self.0.display())
-    }
-}
-
-impl CriSocket {
-    pub fn to_socket_string(&self) -> String {
-        format!("unix://{}", self.0.display())
-    }
 }
 
 impl Network {
     /// The global name for the interface
-    pub const INTERFACE: &'static str = "kubernix1";
+    pub const INTERFACE: &'static str = "kubernix.1";
 
     /// Create a new network from the provided config
     pub fn new(config: &Config) -> Fallible<Self> {
@@ -88,22 +64,15 @@ impl Network {
         debug!("Using service CIDR {}", service_cidr);
 
         // Set the rest of the networking related adresses and paths
-        let crio_socket = CriSocket(config.root().join(CRIO_DIR).join("crio.sock"));
         let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2379);
         let etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2380);
-
-        // Setup the CNI config dir
-        let cni = config.root().join("cni");
-        create_dir_all(&cni)?;
 
         Ok(Self {
             cluster_cidr,
             crio_cidr,
             service_cidr,
-            crio_socket,
             etcd_client,
             etcd_peer,
-            cni,
         })
     }
 

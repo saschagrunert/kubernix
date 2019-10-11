@@ -32,7 +32,7 @@ use kubeconfig::KubeConfig;
 use kubelet::Kubelet;
 use network::Network;
 use pki::Pki;
-use process::{Process, Startable};
+use process::{Process, Stoppables};
 use proxy::Proxy;
 use scheduler::Scheduler;
 use system::System;
@@ -53,11 +53,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-const CRIO_DIR: &str = "crio";
 const KUBERNIX_ENV: &str = "kubernix.env";
 const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
-
-type Stoppables = Vec<Startable>;
 
 /// The main entry point for the application
 pub struct Kubernix {
@@ -158,18 +155,18 @@ impl Kubernix {
         let encryptionconfig = EncryptionConfig::new(&config)?;
 
         // All processes
-        let mut crio = Process::stopped();
-        let mut etcd = Process::stopped();
         let mut api_server = Process::stopped();
         let mut controller_manager = Process::stopped();
-        let mut scheduler = Process::stopped();
+        let mut crio = Process::stopped();
+        let mut etcd = Process::stopped();
         let mut kubelet = Process::stopped();
         let mut proxy = Process::stopped();
+        let mut scheduler = Process::stopped();
 
         // Spawn the processes
         info!("Starting processes");
         scope(|s| {
-            s.spawn(|_| crio = Crio::start(&config, &network));
+            // Control plane
             s.spawn(|_| etcd = Etcd::start(&config, &network, &pki));
             s.spawn(|_| {
                 api_server =
@@ -179,6 +176,9 @@ impl Kubernix {
                 controller_manager = ControllerManager::start(&config, &network, &pki, &kubeconfig)
             });
             s.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
+
+            // Node processes
+            s.spawn(|_| crio = Crio::start(&config, &network));
             s.spawn(|_| kubelet = Kubelet::start(&config, &network, &pki, &kubeconfig));
             s.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
         });
@@ -188,12 +188,12 @@ impl Kubernix {
         // This order is important since we will shut down the processes in order
         let results = vec![
             kubelet,
+            crio,
             scheduler,
             proxy,
             controller_manager,
             api_server,
             etcd,
-            crio,
         ];
         let all_ok = results.iter().all(|x| x.is_ok());
 
@@ -228,6 +228,7 @@ impl Kubernix {
 
     /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
     fn apply_addons(&mut self) -> Fallible<()> {
+        info!("Applying cluster addons");
         CoreDNS::apply(&self.config, &self.network, &self.kubeconfig)
     }
 
@@ -241,7 +242,7 @@ impl Kubernix {
             format!(
                 "export {}={}\nexport {}={}",
                 RUNTIME_ENV,
-                self.network.crio_socket().to_socket_string(),
+                Crio::socket(&self.config).to_socket_string(),
                 "KUBECONFIG",
                 self.kubeconfig.admin().display(),
             ),

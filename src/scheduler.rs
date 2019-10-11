@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     kubeconfig::KubeConfig,
-    process::{Process, Startable, Stoppable},
+    process::{Process, ProcessState, Stoppable},
 };
 use failure::Fallible;
 use log::info;
@@ -12,7 +12,7 @@ pub struct Scheduler {
 }
 
 impl Scheduler {
-    pub fn start(config: &Config, kubeconfig: &KubeConfig) -> Fallible<Startable> {
+    pub fn start(config: &Config, kubeconfig: &KubeConfig) -> ProcessState {
         info!("Starting Scheduler");
 
         let dir = config.root().join("scheduler");
@@ -23,10 +23,12 @@ impl Scheduler {
             kubeconfig.scheduler().display()
         );
         let cfg = &dir.join("config.yml");
-        fs::write(cfg, yml)?;
+
+        if !cfg.exists() {
+            fs::write(cfg, yml)?;
+        }
 
         let mut process = Process::start(
-            config,
             &dir,
             "kube-scheduler",
             &[&format!("--config={}", cfg.display()), "--v=2"],

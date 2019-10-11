@@ -17,17 +17,19 @@ pub struct EncryptionConfig {
 
 impl EncryptionConfig {
     pub fn new(config: &Config) -> Fallible<EncryptionConfig> {
-        info!("Creating encryption config");
-
-        let rnd = thread_rng().gen::<[u8; 32]>();
-        let b64 = encode(&rnd);
-        let yml = format!(include_str!("assets/encryptionconfig.yml"), b64);
-
         let dir = &config.root().join("encryptionconfig");
         create_dir_all(dir)?;
-
         let path = dir.join("config.yml");
-        fs::write(&path, yml)?;
+
+        // Create only if not already existing to make cluster reuse work
+        if !path.exists() {
+            info!("Creating encryption config");
+            let rnd = thread_rng().gen::<[u8; 32]>();
+            let b64 = encode(&rnd);
+            let yml = format!(include_str!("assets/encryptionconfig.yml"), b64);
+            fs::write(&path, yml)?;
+        }
+
         Ok(EncryptionConfig { path })
     }
 }

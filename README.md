@@ -123,6 +123,7 @@ the current one:
 ```
 > ls -1
 apiserver/
+cni/
 controllermanager/
 coredns/
 crio/
@@ -132,7 +133,6 @@ kubeconfig/
 kubelet/
 kubernix.env
 kubernix.toml
-log/
 nix/
 pki/
 proxy/
@@ -140,21 +140,21 @@ scheduler/
 ```
 
 For example, the log files for the different running components are now
-available within the `log` directory:
+available within their corresponding directory:
 
 ```
-> ls -1 log
-crio.log
-etcd.log
-kube-apiserver.log
-kube-controller-manager.log
-kubelet.log
-kube-proxy.log
-kube-scheduler.log
+> ls -1 **.log
+apiserver/kube-apiserver.log
+controllermanager/kube-controller-manager.log
+crio/crio.log
+etcd/etcd.log
+kubelet/kubelet.log
+proxy/kube-proxy.log
+scheduler/kube-scheduler.log
 ```
 
 If you want to spawn an additional shell session, simply run `kubernix shell` in
-the same directory as the initial bootstrap.
+the same directory as where the initial bootstrap happened.
 
 ```
 $ sudo kubernix shell
@@ -186,12 +186,12 @@ KuberNix has some configuration possibilities, which are currently:
 
 | CLI argument      | Description                                                | Default        | Environment Variable |
 | ----------------- | ---------------------------------------------------------- | -------------- | -------------------- |
-| `-r, --root`      | Path where all the runtime data is stored                  | `kubernix-run` | `KUBERNIX_ROOT`      |
-| `-l, --log-level` | Logging verbosity                                          | `info`         | `KUBERNIX_LOG_LEVEL` |
 | `-c, --cidr`      | CIDR used for the cluster network                          | `10.10.0.0/16` | `KUBERNIX_CIDR`      |
-| `-s, --shell`     | The shell executable to be used                            | `$SHELL`/`sh`  | `KUBERNIX_SHELL`     |
+| `-l, --log-level` | Logging verbosity                                          | `info`         | `KUBERNIX_LOG_LEVEL` |
 | `-o, --overlay`   | Nix package overlay to be used                             |                | `KUBERNIX_OVERLAY`   |
 | `-p, --packages`  | Additional Nix dependencies to be added to the environment |                | `KUBERNIX_PACKAGES`  |
+| `-r, --root`      | Path where all the runtime data is stored                  | `kubernix-run` | `KUBERNIX_ROOT`      |
+| `-s, --shell`     | The shell executable to be used                            | `$SHELL`/`sh`  | `KUBERNIX_SHELL`     |
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
