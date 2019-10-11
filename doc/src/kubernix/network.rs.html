@@ -247,7 +247,7 @@
                 <span class="ident">config</span>.<span class="ident">cidr</span>()
             )
         }
-        <span class="self">Self</span>::<span class="ident">warn_overlapping_route</span>(<span class="kw-2">*</span><span class="ident">config</span>.<span class="ident">cidr</span>())<span class="question-mark">?</span>;
+        <span class="self">Self</span>::<span class="ident">warn_overlapping_route</span>(<span class="ident">config</span>.<span class="ident">cidr</span>())<span class="question-mark">?</span>;
 
         <span class="comment">// Calculate the CIDRs</span>
         <span class="kw">let</span> <span class="ident">crio_cidr</span> <span class="op">=</span> <span class="ident">Ipv4Network</span>::<span class="ident">new</span>(<span class="ident">config</span>.<span class="ident">cidr</span>().<span class="ident">ip</span>(), <span class="ident">config</span>.<span class="ident">cidr</span>().<span class="ident">prefix</span>() <span class="op">+</span> <span class="number">1</span>)<span class="question-mark">?</span>;
