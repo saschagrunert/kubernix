@@ -19,6 +19,7 @@ path = "src/main.rs"
 [dependencies]
 base64 = "0.10.1"
 clap = { git = "https://github.com/clap-rs/clap", features = ["wrap_help"] }
+crossbeam-channel = "0.3.9"
 env_logger = "0.7.0"
 failure = "0.1.6"
 getset = { git = "https://github.com/Hoverbear/getset" }

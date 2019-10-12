@@ -16,39 +16,39 @@ impl Nix {
     /// Bootstrap the nix environment
     pub fn bootstrap(config: Config) -> Fallible<()> {
         // Prepare the nix dir
-        let nix_dir = config.root().join(Self::NIX_DIR);
-        create_dir_all(&nix_dir)?;
+        let dir = config.root().join(Self::NIX_DIR);
 
-        // Write the configuration
-        fs::write(
-            nix_dir.join("nixpkgs.json"),
-            include_str!("../nix/nixpkgs.json"),
-        )?;
-        fs::write(
-            nix_dir.join("nixpkgs.nix"),
-            include_str!("../nix/nixpkgs.nix"),
-        )?;
+        // Write the configuration if not existing
+        if !dir.exists() {
+            create_dir_all(&dir)?;
 
-        let packages = &config.packages().join(" ");
-        debug!("Adding additional packages: {}", packages);
-        fs::write(
-            nix_dir.join("default.nix"),
-            include_str!("../nix/default.nix").replace("/* PACKAGES */", packages),
-        )?;
+            fs::write(
+                dir.join("nixpkgs.json"),
+                include_str!("../nix/nixpkgs.json"),
+            )?;
+            fs::write(dir.join("nixpkgs.nix"), include_str!("../nix/nixpkgs.nix"))?;
 
-        // Apply the overlay if existing
-        let target_overlay = nix_dir.join("overlay.nix");
-        match config.overlay() {
-            // User defined overlay
-            Some(overlay) => {
-                info!("Using custom overlay '{}'", overlay.display());
-                fs::copy(overlay, target_overlay)?;
-            }
+            let packages = &config.packages().join(" ");
+            debug!("Adding additional packages: {}", packages);
+            fs::write(
+                dir.join("default.nix"),
+                include_str!("../nix/default.nix").replace("/* PACKAGES */", packages),
+            )?;
 
-            // The default overlay
-            None => {
-                debug!("Using default overlay");
-                fs::write(target_overlay, include_str!("../nix/overlay.nix"))?;
+            // Apply the overlay if existing
+            let target_overlay = dir.join("overlay.nix");
+            match config.overlay() {
+                // User defined overlay
+                Some(overlay) => {
+                    info!("Using custom overlay '{}'", overlay.display());
+                    fs::copy(overlay, target_overlay)?;
+                }
+
+                // The default overlay
+                None => {
+                    debug!("Using default overlay");
+                    fs::write(target_overlay, include_str!("../nix/overlay.nix"))?;
+                }
             }
         }
 

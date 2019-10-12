@@ -1,9 +1,10 @@
 use crate::{
     config::Config,
+    crio::Crio,
     kubeconfig::KubeConfig,
     network::Network,
     pki::Pki,
-    process::{Process, Startable, Stoppable},
+    process::{Process, ProcessState, Stoppable},
 };
 use failure::Fallible;
 use log::info;
@@ -19,7 +20,7 @@ impl Kubelet {
         network: &Network,
         pki: &Pki,
         kubeconfig: &KubeConfig,
-    ) -> Fallible<Startable> {
+    ) -> ProcessState {
         info!("Starting Kubelet");
 
         let dir = config.root().join("kubelet");
@@ -27,26 +28,28 @@ impl Kubelet {
 
         let yml = format!(
             include_str!("assets/kubelet.yml"),
-            pki.ca().cert().display(),
-            network.dns()?,
-            network.crio_cidr(),
-            pki.kubelet().cert().display(),
-            pki.kubelet().key().display(),
+            ca = pki.ca().cert().display(),
+            dns = network.dns()?,
+            cidr = network.crio_cidr(),
+            cert = pki.kubelet().cert().display(),
+            key = pki.kubelet().key().display(),
         );
-        let yml_file = dir.join("config.yml");
-        fs::write(&yml_file, yml)?;
+        let cfg = dir.join("config.yml");
+
+        if !cfg.exists() {
+            fs::write(&cfg, yml)?;
+        }
 
         let mut process = Process::start(
-            config,
             &dir,
             "kubelet",
             &[
-                &format!("--config={}", yml_file.display()),
+                &format!("--config={}", cfg.display()),
                 &format!("--root-dir={}", dir.join("run").display()),
                 "--container-runtime=remote",
                 &format!(
                     "--container-runtime-endpoint={}",
-                    network.crio_socket().to_socket_string()
+                    Crio::socket(config).to_socket_string(),
                 ),
                 &format!("--kubeconfig={}", kubeconfig.kubelet().display()),
                 "--v=2",

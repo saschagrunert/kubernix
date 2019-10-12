@@ -1,5 +1,5 @@
 use crate::{config::Config, kubeconfig::KubeConfig, kubectl::Kubectl, network::Network};
-use failure::Fallible;
+use failure::{format_err, Fallible};
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -14,9 +14,13 @@ impl CoreDNS {
 
         let yml = format!(include_str!("assets/coredns.yml"), network.dns()?);
         let file = dir.join("coredns.yml");
-        fs::write(&file, yml)?;
 
-        Kubectl::apply(kubeconfig, &file)?;
+        if !file.exists() {
+            fs::write(&file, yml)?;
+        }
+
+        Kubectl::apply(kubeconfig, &file)
+            .map_err(|e| format_err!("Unable to deploy CoreDNS: {}", e))?;
 
         info!("CoreDNS deployed");
         Ok(())

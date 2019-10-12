@@ -2,37 +2,31 @@ use crate::{
     config::Config,
     network::Network,
     pki::Pki,
-    process::{Process, Startable, Stoppable},
+    process::{Process, ProcessState, Stoppable},
 };
 use failure::Fallible;
 use log::info;
-use std::fs::{create_dir_all, remove_dir_all};
+use std::fs::create_dir_all;
 
 pub struct Etcd {
     process: Process,
 }
 
 impl Etcd {
-    pub fn start(config: &Config, network: &Network, pki: &Pki) -> Fallible<Startable> {
+    pub fn start(config: &Config, network: &Network, pki: &Pki) -> ProcessState {
         info!("Starting etcd");
 
         // Remove the etcd data dir if already exists (configuration re-use)
         let dir = config.root().join("etcd");
         create_dir_all(&dir)?;
 
-        let data_dir = dir.join("run");
-        if data_dir.exists() {
-            remove_dir_all(&data_dir)?;
-        }
-
         let mut process = Process::start(
-            config,
             &dir,
             "etcd",
             &[
                 &format!("--advertise-client-urls=https://{}", network.etcd_client()),
                 "--client-cert-auth",
-                &format!("--data-dir={}", data_dir.display()),
+                &format!("--data-dir={}", dir.join("run").display()),
                 &format!(
                     "--initial-advertise-peer-urls=https://{}",
                     network.etcd_peer()

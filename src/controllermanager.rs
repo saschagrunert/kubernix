@@ -3,7 +3,7 @@ use crate::{
     kubeconfig::KubeConfig,
     network::Network,
     pki::Pki,
-    process::{Process, Startable, Stoppable},
+    process::{Process, ProcessState, Stoppable},
 };
 use failure::Fallible;
 use log::info;
@@ -19,14 +19,13 @@ impl ControllerManager {
         network: &Network,
         pki: &Pki,
         kubeconfig: &KubeConfig,
-    ) -> Fallible<Startable> {
+    ) -> ProcessState {
         info!("Starting Controller Manager");
 
         let dir = config.root().join("controllermanager");
         create_dir_all(&dir)?;
 
         let mut process = Process::start(
-            config,
             &dir,
             "kube-controller-manager",
             &[
