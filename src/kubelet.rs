@@ -38,7 +38,10 @@ impl Kubelet {
             include_str!("assets/kubelet.yml"),
             ca = pki.ca().cert().display(),
             dns = network.dns()?,
-            cidr = network.crio_cidr(),
+            cidr = network
+                .crio_cidrs()
+                .get(node as usize)
+                .ok_or_else(|| format_err!("Unable to retrieve kubelet CIDR"))?,
             cert = idendity.cert().display(),
             key = idendity.key().display(),
             port = 11250 + node as u16,

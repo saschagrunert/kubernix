@@ -14,7 +14,7 @@ pub struct Network {
     cluster_cidr: Ipv4Network,
 
     #[get = "pub"]
-    crio_cidr: Ipv4Network,
+    crio_cidrs: Vec<Ipv4Network>,
 
     #[get = "pub"]
     service_cidr: Ipv4Network,
@@ -28,7 +28,7 @@ pub struct Network {
 
 impl Network {
     /// The global name for the interface
-    pub const INTERFACE: &'static str = "kubernix.1";
+    pub const INTERFACE_PREFIX: &'static str = "kubernix";
 
     /// Create a new network from the provided config
     pub fn new(config: &Config) -> Fallible<Self> {
@@ -42,26 +42,32 @@ impl Network {
         Self::warn_overlapping_route(config.cidr())?;
 
         // Calculate the CIDRs
-        let crio_cidr = Ipv4Network::new(config.cidr().ip(), config.cidr().prefix() + 1)?;
-        debug!("Using crio CIDR {}", crio_cidr);
-
-        let cluster_cidr = Ipv4Network::new(
-            config
-                .cidr()
-                .nth(config.cidr().size() / 2)
-                .ok_or_else(|| format_err!("Unable to retrieve cluster CIDR start IP"))?,
-            config.cidr().prefix() + 2,
-        )?;
+        let cluster_cidr = Ipv4Network::new(config.cidr().ip(), 24)?;
         debug!("Using cluster CIDR {}", cluster_cidr);
 
         let service_cidr = Ipv4Network::new(
             config
                 .cidr()
-                .nth(config.cidr().size() / 2 + cluster_cidr.size())
+                .nth(cluster_cidr.size())
                 .ok_or_else(|| format_err!("Unable to retrieve service CIDR start IP"))?,
-            config.cidr().prefix() + 3,
+            24,
         )?;
         debug!("Using service CIDR {}", service_cidr);
+
+        let mut crio_cidrs = vec![];
+        let mut offset = cluster_cidr.size() + service_cidr.size();
+        for node in 0..config.nodes() {
+            let cidr = Ipv4Network::new(
+                config
+                    .cidr()
+                    .nth(offset)
+                    .ok_or_else(|| format_err!("Unable to retrieve CRI-O CIDR start IP"))?,
+                24,
+            )?;
+            offset += cidr.size();
+            debug!("Using CRI-O ({}) CIDR {}", node, cidr);
+            crio_cidrs.push(cidr);
+        }
 
         // Set the rest of the networking related adresses and paths
         let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2379);
@@ -69,7 +75,7 @@ impl Network {
 
         Ok(Self {
             cluster_cidr,
-            crio_cidr,
+            crio_cidrs,
             service_cidr,
             etcd_client,
             etcd_peer,
@@ -84,7 +90,7 @@ impl Network {
         }
         String::from_utf8(cmd.stdout)?
             .lines()
-            .filter(|x| !x.contains(Self::INTERFACE))
+            .filter(|x| !x.contains(Self::INTERFACE_PREFIX))
             .filter_map(|x| x.split_whitespace().nth(0))
             .filter_map(|x| x.parse::<Ipv4Network>().ok())
             .filter(|x| x.is_supernet_of(cidr))

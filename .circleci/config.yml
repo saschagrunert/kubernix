@@ -23,6 +23,10 @@ workflows:
           filters:
             branches:
               only: master
+      - deploy-image-base
+          #filters:
+            #branches:
+              #only: master
       - deploy:
           requires:
             - build-static
@@ -141,6 +145,20 @@ jobs:
       - run:
           name: Push the image
           command: docker push saschagrunert/kubernix:latest
+
+  deploy-image-base:
+    executor: machine
+    steps:
+      - checkout
+      - run:
+          name: Login to registry
+          command: docker login -u $DOCKER_USER -p $DOCKER_PASS
+      - run:
+          name: Build the image
+          command: make build-image-base CONTAINER_RUNTIME=docker
+      - run:
+          name: Push the image
+          command: docker push saschagrunert/kubernix:base
 
   docs:
     executor: container

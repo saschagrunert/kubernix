@@ -2,7 +2,7 @@ ARGS ?=
 SUDO := sudo -E
 KUBERNIX := $(SUDO) target/release/kubernix $(ARGS)
 CONTAINER_RUNTIME := sudo podman
-IMAGE := saschagrunert/kubernix:latest
+IMAGE := saschagrunert/kubernix
 RUN_DIR := $(shell pwd)/kubernix-run
 
 define nix-run
@@ -18,6 +18,10 @@ build:
 .PHONY: build-image
 build-image:
 	$(CONTAINER_RUNTIME) build -t $(IMAGE) .
+
+.PHONY: build-image-base
+build-image-base:
+	$(CONTAINER_RUNTIME) build -f Dockerfile-base -t $(IMAGE):base .
 
 .PHONY: build-release
 build-release:

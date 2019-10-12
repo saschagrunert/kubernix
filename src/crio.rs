@@ -63,20 +63,24 @@ impl Crio {
             create_dir_all(&dir)?;
             create_dir_all(&cni)?;
 
+            let cidr = network
+                .crio_cidrs()
+                .get(node as usize)
+                .ok_or_else(|| format_err!("Unable to find CIDR for {}", node_name))?;
             fs::write(
                 cni.join("10-bridge.json"),
                 to_string_pretty(&json!({
                     "cniVersion": "0.3.1",
-                    "name": "crio-kubernix",
+                    "name": format!("kubernix-{}", node_name),
                     "type": "bridge",
-                    "bridge":  Network::INTERFACE,
+                    "bridge": format!("{}.{}", Network::INTERFACE_PREFIX, node),
                     "isGateway": true,
                     "ipMasq": true,
                     "hairpinMode": true,
                     "ipam": {
                         "type": "host-local",
                         "routes": [{ "dst": "0.0.0.0/0" }],
-                        "ranges": [[{ "subnet": network.crio_cidr() }]]
+                        "ranges": [[{ "subnet": cidr }]]
                     }
                 }))?,
             )?;

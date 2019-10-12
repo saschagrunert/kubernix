@@ -1,0 +1,12 @@
+# vim: set syntax=dockerfile:
+# nix dependency collection
+FROM nixos/nix:latest as bootstrapper
+COPY nix /bootstrap
+RUN nix run -f /bootstrap -c echo done
+
+# target image
+FROM nixos/nix:latest
+RUN apk add bash
+ENV SHELL /bin/bash
+COPY --from=bootstrapper /nix /nix
+CMD [ "/bin/bash" ]
