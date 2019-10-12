@@ -20,9 +20,9 @@ workflows:
       - build-release
       - build-static
       - deploy-image
-        # filters:
-        # branches:
-        # only: master
+          filters:
+            branches:
+              only: master
       - deploy:
           requires:
             - build-static
