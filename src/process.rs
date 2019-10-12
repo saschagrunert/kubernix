@@ -1,3 +1,4 @@
+use crate::system::System;
 use crossbeam_channel::{bounded, Sender};
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
@@ -58,14 +59,15 @@ impl Process {
         let err_file = out_file.try_clone()?;
 
         // Spawn the process child
-        let mut child = Command::new(command)
+        let command_path = System::find_executable(command)?;
+        let mut child = Command::new(&command_path)
             .args(args)
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file))
             .spawn()
             .map_err(|e| format_err!("Unable to start process '{}': {}", command, e))?;
 
-        let (kill_tx, kill_rx) = bounded(1);
+        let (kill, killed) = bounded(1);
         let c = command.to_owned();
         let pid = child.id();
         let watch = spawn(move || {
@@ -73,7 +75,7 @@ impl Process {
             let status = child.wait()?;
 
             // No kill send, we assume that the process died
-            if kill_rx.try_recv().is_err() {
+            if killed.try_recv().is_err() {
                 error!("Process '{}' died unexpectedly", c);
             } else {
                 info!("Process '{}' stopped", c);
@@ -86,7 +88,7 @@ impl Process {
         create_dir_all(dir)?;
         let run_file = dir.join("run.sh");
         let sep = format!(" \\\n{}", " ".repeat(4));
-        let full_command = format!(r#"{}{}{}"#, command, sep, args.join(&sep));
+        let full_command = format!(r#"{}{}{}"#, command_path.display(), sep, args.join(&sep));
         fs::write(
             &run_file,
             format!(include_str!("assets/run.sh"), full_command),
@@ -98,7 +100,7 @@ impl Process {
 
         Ok(Process {
             command: command.to_owned(),
-            kill: kill_tx,
+            kill,
             log_file,
             pid,
             watch: Some(watch),
