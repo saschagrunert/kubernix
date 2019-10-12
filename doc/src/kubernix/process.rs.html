@@ -220,6 +220,11 @@
 <span id="220">220</span>
 <span id="221">221</span>
 <span id="222">222</span>
+<span id="223">223</span>
+<span id="224">224</span>
+<span id="225">225</span>
+<span id="226">226</span>
+<span id="227">227</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="ident">crossbeam_channel</span>::{<span class="ident">bounded</span>, <span class="ident">Sender</span>};
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
@@ -285,7 +290,8 @@
             .<span class="ident">args</span>(<span class="ident">args</span>)
             .<span class="ident">stderr</span>(<span class="ident">Stdio</span>::<span class="ident">from</span>(<span class="ident">err_file</span>))
             .<span class="ident">stdout</span>(<span class="ident">Stdio</span>::<span class="ident">from</span>(<span class="ident">out_file</span>))
-            .<span class="ident">spawn</span>()<span class="question-mark">?</span>;
+            .<span class="ident">spawn</span>()
+            .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to start process &#39;{}&#39;: {}&quot;</span>, <span class="ident">command</span>, <span class="ident">e</span>))<span class="question-mark">?</span>;
 
         <span class="kw">let</span> (<span class="ident">kill_tx</span>, <span class="ident">kill_rx</span>) <span class="op">=</span> <span class="ident">bounded</span>(<span class="number">1</span>);
         <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">command</span>.<span class="ident">to_owned</span>();
@@ -369,9 +375,13 @@
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Stopping process &#39;{}&#39;&quot;</span>, <span class="self">self</span>.<span class="ident">command</span>);
 
         <span class="comment">// Indicate that this shutdown is intended</span>
-        <span class="self">self</span>.<span class="ident">kill</span>
-            .<span class="ident">send</span>(())
-            .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to send kill signal to process: {}&quot;</span>, <span class="ident">e</span>))<span class="question-mark">?</span>;
+        <span class="self">self</span>.<span class="ident">kill</span>.<span class="ident">send</span>(()).<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> {
+            <span class="macro">format_err</span><span class="macro">!</span>(
+                <span class="string">&quot;Unable to send kill signal to process &#39;{}&#39;: {}&quot;</span>,
+                <span class="self">self</span>.<span class="ident">command</span>,
+                <span class="ident">e</span>
+            )
+        })<span class="question-mark">?</span>;
 
         <span class="comment">// Send SIGTERM to the process</span>
         <span class="ident">kill</span>(<span class="ident">Pid</span>::<span class="ident">from_raw</span>(<span class="self">self</span>.<span class="ident">pid</span> <span class="kw">as</span> <span class="ident">i32</span>), <span class="ident">Signal</span>::<span class="ident">SIGTERM</span>)<span class="question-mark">?</span>;
