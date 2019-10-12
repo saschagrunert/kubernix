@@ -100,39 +100,39 @@
     <span class="doccomment">/// Bootstrap the nix environment</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bootstrap</span>(<span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">// Prepare the nix dir</span>
-        <span class="kw">let</span> <span class="ident">nix_dir</span> <span class="op">=</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">NIX_DIR</span>);
-        <span class="ident">create_dir_all</span>(<span class="kw-2">&amp;</span><span class="ident">nix_dir</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">NIX_DIR</span>);
 
-        <span class="comment">// Write the configuration</span>
-        <span class="ident">fs</span>::<span class="ident">write</span>(
-            <span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;nixpkgs.json&quot;</span>),
-            <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/nixpkgs.json&quot;</span>),
-        )<span class="question-mark">?</span>;
-        <span class="ident">fs</span>::<span class="ident">write</span>(
-            <span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;nixpkgs.nix&quot;</span>),
-            <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/nixpkgs.nix&quot;</span>),
-        )<span class="question-mark">?</span>;
+        <span class="comment">// Write the configuration if not existing</span>
+        <span class="kw">if</span> <span class="op">!</span><span class="ident">dir</span>.<span class="ident">exists</span>() {
+            <span class="ident">create_dir_all</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>)<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">packages</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">packages</span>().<span class="ident">join</span>(<span class="string">&quot; &quot;</span>);
-        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Adding additional packages: {}&quot;</span>, <span class="ident">packages</span>);
-        <span class="ident">fs</span>::<span class="ident">write</span>(
-            <span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;default.nix&quot;</span>),
-            <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/default.nix&quot;</span>).<span class="ident">replace</span>(<span class="string">&quot;/* PACKAGES */&quot;</span>, <span class="ident">packages</span>),
-        )<span class="question-mark">?</span>;
+            <span class="ident">fs</span>::<span class="ident">write</span>(
+                <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;nixpkgs.json&quot;</span>),
+                <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/nixpkgs.json&quot;</span>),
+            )<span class="question-mark">?</span>;
+            <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;nixpkgs.nix&quot;</span>), <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/nixpkgs.nix&quot;</span>))<span class="question-mark">?</span>;
 
-        <span class="comment">// Apply the overlay if existing</span>
-        <span class="kw">let</span> <span class="ident">target_overlay</span> <span class="op">=</span> <span class="ident">nix_dir</span>.<span class="ident">join</span>(<span class="string">&quot;overlay.nix&quot;</span>);
-        <span class="kw">match</span> <span class="ident">config</span>.<span class="ident">overlay</span>() {
-            <span class="comment">// User defined overlay</span>
-            <span class="prelude-val">Some</span>(<span class="ident">overlay</span>) <span class="op">=&gt;</span> {
-                <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Using custom overlay &#39;{}&#39;&quot;</span>, <span class="ident">overlay</span>.<span class="ident">display</span>());
-                <span class="ident">fs</span>::<span class="ident">copy</span>(<span class="ident">overlay</span>, <span class="ident">target_overlay</span>)<span class="question-mark">?</span>;
-            }
+            <span class="kw">let</span> <span class="ident">packages</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">packages</span>().<span class="ident">join</span>(<span class="string">&quot; &quot;</span>);
+            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Adding additional packages: {}&quot;</span>, <span class="ident">packages</span>);
+            <span class="ident">fs</span>::<span class="ident">write</span>(
+                <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;default.nix&quot;</span>),
+                <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/default.nix&quot;</span>).<span class="ident">replace</span>(<span class="string">&quot;/* PACKAGES */&quot;</span>, <span class="ident">packages</span>),
+            )<span class="question-mark">?</span>;
 
-            <span class="comment">// The default overlay</span>
-            <span class="prelude-val">None</span> <span class="op">=&gt;</span> {
-                <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Using default overlay&quot;</span>);
-                <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">target_overlay</span>, <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/overlay.nix&quot;</span>))<span class="question-mark">?</span>;
+            <span class="comment">// Apply the overlay if existing</span>
+            <span class="kw">let</span> <span class="ident">target_overlay</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;overlay.nix&quot;</span>);
+            <span class="kw">match</span> <span class="ident">config</span>.<span class="ident">overlay</span>() {
+                <span class="comment">// User defined overlay</span>
+                <span class="prelude-val">Some</span>(<span class="ident">overlay</span>) <span class="op">=&gt;</span> {
+                    <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Using custom overlay &#39;{}&#39;&quot;</span>, <span class="ident">overlay</span>.<span class="ident">display</span>());
+                    <span class="ident">fs</span>::<span class="ident">copy</span>(<span class="ident">overlay</span>, <span class="ident">target_overlay</span>)<span class="question-mark">?</span>;
+                }
+
+                <span class="comment">// The default overlay</span>
+                <span class="prelude-val">None</span> <span class="op">=&gt;</span> {
+                    <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Using default overlay&quot;</span>);
+                    <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">target_overlay</span>, <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;../nix/overlay.nix&quot;</span>))<span class="question-mark">?</span>;
+                }
             }
         }
 
