@@ -41,6 +41,16 @@ pub struct Config {
 
     #[get_copy = "pub"]
     #[clap(
+        env = "KUBERNIX_CONTAINER",
+        long = "container",
+        short = "a",
+        takes_value = false
+    )]
+    /// Indicator that we're running inside a container
+    container: bool,
+
+    #[get_copy = "pub"]
+    #[clap(
         default_value = "info",
         env = "KUBERNIX_LOG_LEVEL",
         long = "log-level",
@@ -224,6 +234,7 @@ root = "root"
 log-level = "DEBUG"
 cidr = "1.1.1.1/16"
 packages = []
+container = false
             "#,
         )?;
         c.update_from_file()?;

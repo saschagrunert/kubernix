@@ -1,5 +1,6 @@
+use crate::Config;
 use failure::{bail, format_err, Fallible};
-use log::debug;
+use log::{debug, info};
 use std::{
     env::{split_paths, var, var_os},
     fmt::Display,
@@ -11,17 +12,21 @@ pub struct System;
 
 impl System {
     /// Create a new system
-    pub fn setup() -> Fallible<()> {
-        for module in &["overlay", "br_netfilter", "ip_conntrack"] {
-            Self::modprobe(module)?;
-        }
-        for sysctl in &[
-            "net.bridge.bridge-nf-call-ip6tables",
-            "net.bridge.bridge-nf-call-iptables",
-            "net.ipv4.conf.all.route_localnet",
-            "net.ipv4.ip_forward",
-        ] {
-            Self::sysctl_enable(sysctl)?;
+    pub fn setup(config: &Config) -> Fallible<()> {
+        if config.container() {
+            info!("Skipping modprobe and sysctl for sake of containerization")
+        } else {
+            for module in &["overlay", "br_netfilter", "ip_conntrack"] {
+                Self::modprobe(module)?;
+            }
+            for sysctl in &[
+                "net.bridge.bridge-nf-call-ip6tables",
+                "net.bridge.bridge-nf-call-iptables",
+                "net.ipv4.conf.all.route_localnet",
+                "net.ipv4.ip_forward",
+            ] {
+                Self::sysctl_enable(sysctl)?;
+            }
         }
         Ok(())
     }

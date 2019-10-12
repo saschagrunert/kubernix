@@ -96,7 +96,10 @@ impl Crio {
             &[
                 &format!("--config={}", crio_config.display()),
                 "--log-level=debug",
-                "--storage-driver=overlay",
+                &format!(
+                    "--storage-driver={}",
+                    if config.container() { "vfs" } else { "overlay" }
+                ),
                 &format!("--conmon={}", conmon.display()),
                 &format!("--listen={}", socket),
                 &format!("--root={}", dir.join("storage").display()),

@@ -61,6 +61,8 @@ certificate generation.
 
 ### Single Dependency
 
+#### With Nix
+
 As already mentioned, there is only one single dependency needed to run this
 project: **Nix**. To setup Nix, simply run:
 
@@ -69,6 +71,23 @@ $ curl https://nixos.org/nix/install | sh
 ```
 
 Please make sure to follow the instructions output by the script.
+
+#### With the Container Runtime of your Choice
+
+It is also possible to run KuberNix in the container runtime of your choice. To
+do this, simply grab the latest image from `docker.io/saschagrunert/kubernix`.
+Please note that running KuberNix inside a container image requires to run
+`privileged` mode and host networking. For example, we can run KuberNix with
+[podman][40] like this:
+
+[40]: https://github.com/containers/libpod
+
+```
+$ sudo podman run \
+    --net=host \
+    --privileged \
+    -it docker.io/saschagrunert/kubernix:latest
+```
 
 ### Getting Started
 
@@ -188,12 +207,13 @@ KuberNix has some configuration possibilities, which are currently:
 
 | CLI argument      | Description                                                | Default        | Environment Variable |
 | ----------------- | ---------------------------------------------------------- | -------------- | -------------------- |
-| `-c, --cidr`      | CIDR used for the cluster network                          | `10.10.0.0/16` | `KUBERNIX_CIDR`      |
+| `-r, --root`      | Path where all the runtime data is stored                  | `kubernix-run` | `KUBERNIX_ROOT`      |
+| `-a, --container` | Indicator that we're running inside a container            | `false`        | `KUBERNIX_CONTAINER` |
 | `-l, --log-level` | Logging verbosity                                          | `info`         | `KUBERNIX_LOG_LEVEL` |
+| `-c, --cidr`      | CIDR used for the cluster network                          | `10.10.0.0/16` | `KUBERNIX_CIDR`      |
+| `-s, --shell`     | The shell executable to be used                            | `$SHELL`/`sh`  | `KUBERNIX_SHELL`     |
 | `-o, --overlay`   | Nix package overlay to be used                             |                | `KUBERNIX_OVERLAY`   |
 | `-p, --packages`  | Additional Nix dependencies to be added to the environment |                | `KUBERNIX_PACKAGES`  |
-| `-r, --root`      | Path where all the runtime data is stored                  | `kubernix-run` | `KUBERNIX_ROOT`      |
-| `-s, --shell`     | The shell executable to be used                            | `$SHELL`/`sh`  | `KUBERNIX_SHELL`     |
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split

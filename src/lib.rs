@@ -142,7 +142,7 @@ impl Kubernix {
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config) -> Fallible<()> {
         // Ensure that the system is prepared
-        System::setup()?;
+        System::setup(&config)?;
 
         // Setup the network
         let network = Network::new(&config)?;
