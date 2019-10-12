@@ -62,7 +62,8 @@ impl Process {
             .args(args)
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file))
-            .spawn()?;
+            .spawn()
+            .map_err(|e| format_err!("Unable to start process '{}': {}", command, e))?;
 
         let (kill_tx, kill_rx) = bounded(1);
         let c = command.to_owned();
@@ -146,9 +147,13 @@ impl Stoppable for Process {
         debug!("Stopping process '{}'", self.command);
 
         // Indicate that this shutdown is intended
-        self.kill
-            .send(())
-            .map_err(|e| format_err!("Unable to send kill signal to process: {}", e))?;
+        self.kill.send(()).map_err(|e| {
+            format_err!(
+                "Unable to send kill signal to process '{}': {}",
+                self.command,
+                e
+            )
+        })?;
 
         // Send SIGTERM to the process
         kill(Pid::from_raw(self.pid as i32), Signal::SIGTERM)?;
