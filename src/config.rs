@@ -102,6 +102,17 @@ pub struct Config {
     )]
     /// The shell executable to be used, defaults to $SHELL, fallback is 'sh'
     shell: Option<String>,
+
+    #[get_copy = "pub"]
+    #[clap(
+        default_value = "1",
+        env = "KUBERNIX_NODES",
+        long = "nodes",
+        short = "n",
+        value_name = "NODES"
+    )]
+    /// The number of nodes to be registered
+    nodes: u8,
 }
 
 /// Possible subcommands

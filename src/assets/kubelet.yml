@@ -20,3 +20,5 @@ tlsPrivateKeyFile: "{key}"
 failSwapOn: false
 featureGates:
   DevicePlugins: false
+port: {port}
+healthzPort: {healthzPort}

@@ -1,5 +1,6 @@
 use crate::{
     network::Network,
+    node::Node,
     process::{Process, ProcessState, Stoppable},
     system::System,
     Config, RUNTIME_ENV,
@@ -24,6 +25,7 @@ use std::{
 pub struct Crio {
     process: Process,
     socket: CriSocket,
+    node_name: String,
 }
 
 /// Simple CRI socket abstraction
@@ -42,8 +44,9 @@ impl CriSocket {
 }
 
 impl Crio {
-    pub fn start(config: &Config, network: &Network) -> ProcessState {
-        info!("Starting CRI-O");
+    pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
+        let node_name = Node::name(node);
+        info!("Starting CRI-O ({})", node_name);
 
         let conmon = System::find_executable("conmon")?;
         let loopback = System::find_executable("loopback")?;
@@ -51,7 +54,7 @@ impl Crio {
             .parent()
             .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
 
-        let dir = Self::path(config);
+        let dir = Self::path(config, node);
         let crio_config = dir.join("crio.conf");
         let policy_json = dir.join("policy.json");
         let cni = dir.join("cni");
@@ -88,7 +91,7 @@ impl Crio {
             // Pseudo config to not load local configuration values
             fs::write(&crio_config, "")?;
         }
-        let socket = Self::socket(config);
+        let socket = Self::socket(config, node);
 
         let mut process = Process::start(
             &dir,
@@ -118,18 +121,22 @@ impl Crio {
         )?;
 
         process.wait_ready("sandboxes:")?;
-        info!("CRI-O is ready");
-        Ok(Box::new(Crio { process, socket }))
+        info!("CRI-O is ready ({})", node_name);
+        Ok(Box::new(Crio {
+            process,
+            socket,
+            node_name,
+        }))
     }
 
     /// Retrieve the CRI socket
-    pub fn socket(config: &Config) -> CriSocket {
-        CriSocket(Self::path(config).join("crio.sock"))
+    pub fn socket(config: &Config, node: u8) -> CriSocket {
+        CriSocket(Self::path(config, node).join("crio.sock"))
     }
 
     /// Retrieve the working path for the node
-    fn path(config: &Config) -> PathBuf {
-        config.root().join("crio")
+    fn path(config: &Config, node: u8) -> PathBuf {
+        config.root().join("crio").join(Node::name(node))
     }
 
     /// Try to cleanup all related resources
@@ -145,14 +152,14 @@ impl Crio {
                 Ok(procs) => {
                     let mut found = false;
                     for p in procs.iter().filter(|p| &p.comm == "conmon") {
-                        debug!("Killing conmon process {}", p.pid);
+                        debug!("Killing conmon process {} ({})", p.pid, self.node_name);
                         if let Err(e) = kill(Pid::from_raw(p.pid), Signal::SIGTERM) {
                             debug!("Unable to kill PID {}: {}", p.pid, e);
                         }
                         found = true;
                     }
                     if !found {
-                        debug!("All conmon processes exited");
+                        debug!("All conmon processes exited ({})", self.node_name);
                         break;
                     }
                     // Give the signal time to arrive
@@ -164,7 +171,7 @@ impl Crio {
 
     /// Remove all containers via crictl invocations
     fn remove_all_containers(&self) -> Fallible<()> {
-        debug!("Removing all CRI-O workloads");
+        debug!("Removing all CRI-O workloads on {}", self.node_name);
 
         let output = Command::new("crictl")
             .env(RUNTIME_ENV, self.socket.to_socket_string())
@@ -173,13 +180,17 @@ impl Crio {
             .output()?;
         let stdout = String::from_utf8(output.stdout)?;
         if !output.status.success() {
-            debug!("critcl pods stdout: {}", stdout);
-            debug!("critcl pods stderr: {}", String::from_utf8(output.stderr)?);
-            bail!("crictl pods command failed");
+            debug!("critcl pods stdout ({}): {}", self.node_name, stdout);
+            debug!(
+                "critcl pods stderr ({}): {}",
+                self.node_name,
+                String::from_utf8(output.stderr)?
+            );
+            bail!("crictl pods command failed ({})", self.node_name);
         }
 
         for x in stdout.lines() {
-            debug!("Removing pod {}", x);
+            debug!("Removing pod {} on {}", x, self.node_name);
             let output = Command::new("crictl")
                 .env(RUNTIME_ENV, self.socket.to_socket_string())
                 .arg("rmp")
@@ -187,13 +198,21 @@ impl Crio {
                 .arg(x)
                 .output()?;
             if !output.status.success() {
-                debug!("critcl rmp stdout: {}", String::from_utf8(output.stdout)?);
-                debug!("critcl rmp stderr: {}", String::from_utf8(output.stderr)?);
-                bail!("crictl rmp command failed");
+                debug!(
+                    "critcl rmp stdout ({}): {}",
+                    self.node_name,
+                    String::from_utf8(output.stdout)?
+                );
+                debug!(
+                    "critcl rmp stderr ({}): {}",
+                    self.node_name,
+                    String::from_utf8(output.stderr)?
+                );
+                bail!("crictl rmp command failed ({})", self.node_name);
             }
         }
 
-        debug!("All workloads removed");
+        debug!("All workloads removed on {}", self.node_name);
         Ok(())
     }
 }
@@ -201,8 +220,13 @@ impl Crio {
 impl Stoppable for Crio {
     fn stop(&mut self) -> Fallible<()> {
         // Remove all running containers
-        self.remove_all_containers()
-            .map_err(|e| format_err!("Unable to remove CRI-O containers: {}", e))?;
+        self.remove_all_containers().map_err(|e| {
+            format_err!(
+                "Unable to remove CRI-O containers on {}: {}",
+                self.node_name,
+                e
+            )
+        })?;
 
         // Stop the process, should never really fail
         self.process.stop()

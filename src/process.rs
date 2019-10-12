@@ -7,7 +7,6 @@ use nix::{
     unistd::Pid,
 };
 use std::{
-    convert::From,
     fs::{self, create_dir_all, metadata, set_permissions, File},
     io::{BufRead, BufReader},
     os::unix::fs::PermissionsExt,

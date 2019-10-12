@@ -15,7 +15,7 @@ use std::{
 #[derive(Getters)]
 pub struct KubeConfig {
     #[get = "pub"]
-    kubelet: PathBuf,
+    kubelets: Vec<PathBuf>,
 
     #[get = "pub"]
     proxy: PathBuf,
@@ -38,8 +38,14 @@ impl KubeConfig {
         if dir.exists() {
             info!("Kubeconfig directory already exists, skipping generation");
 
+            let kubelets = pki
+                .kubelets()
+                .iter()
+                .map(|i| Self::target_config(&dir, i))
+                .collect();
+
             Ok(KubeConfig {
-                kubelet: Self::target_config(&dir, pki.kubelet()),
+                kubelets,
                 proxy: Self::target_config(&dir, pki.proxy()),
                 controller_manager: Self::target_config(&dir, pki.controller_manager()),
                 scheduler: Self::target_config(&dir, pki.scheduler()),
@@ -49,8 +55,13 @@ impl KubeConfig {
             info!("Creating kubeconfigs");
             create_dir_all(&dir)?;
 
+            let mut kubelets = vec![];
+            for i in pki.kubelets() {
+                kubelets.push(Self::setup_kubeconfig(&dir, i, pki.ca().cert())?);
+            }
+
             Ok(KubeConfig {
-                kubelet: Self::setup_kubeconfig(&dir, pki.kubelet(), pki.ca().cert())?,
+                kubelets,
                 proxy: Self::setup_kubeconfig(&dir, pki.proxy(), pki.ca().cert())?,
                 controller_manager: Self::setup_kubeconfig(
                     &dir,

@@ -1,4 +1,4 @@
-use crate::{network::Network, Config};
+use crate::{network::Network, node::Node, Config};
 use failure::{bail, format_err, Fallible};
 use getset::Getters;
 use hostname::get_hostname;
@@ -26,7 +26,7 @@ pub struct Pki {
     controller_manager: Idendity,
 
     #[get = "pub"]
-    kubelet: Idendity,
+    kubelets: Vec<Idendity>,
 
     #[get = "pub"]
     proxy: Idendity,
@@ -94,10 +94,19 @@ impl Pki {
     pub fn new(config: &Config, network: &Network) -> Fallible<Pki> {
         let host = &get_hostname().ok_or_else(|| format_err!("Unable to get hostname"))?;
         let dir = &config.root().join("pki");
+        let nodes = (0..config.nodes())
+            .into_iter()
+            .map(|i| Node::name(i))
+            .collect::<Vec<String>>();
 
         // Create the CA only if necessary
         if dir.exists() {
             info!("PKI directory already exists, skipping generation");
+
+            let kubelets = nodes
+                .iter()
+                .map(|n| Idendity::new(dir, n, &Self::node_user(n)))
+                .collect();
 
             Ok(Pki {
                 admin: Idendity::new(dir, ADMIN_NAME, ADMIN_NAME),
@@ -108,7 +117,7 @@ impl Pki {
                     CONTROLLER_MANAGER_NAME,
                     CONTROLLER_MANAGER_USER,
                 ),
-                kubelet: Idendity::new(dir, &host, &Self::node_user(&host)),
+                kubelets,
                 proxy: Idendity::new(dir, PROXY_NAME, PROXY_USER),
                 scheduler: Idendity::new(dir, SCHEDULER_NAME, SCHEDULER_USER),
                 service_account: Idendity::new(dir, SERVICE_ACCOUNT_NAME, SERVICE_ACCOUNT_NAME),
@@ -119,7 +128,7 @@ impl Pki {
             let ca_config = Self::write_ca_config(dir)?;
             let ca = Self::setup_ca(dir)?;
 
-            let hostnames = &[
+            let mut hostnames = vec![
                 network.api()?.to_string(),
                 Ipv4Addr::LOCALHOST.to_string(),
                 host.to_owned(),
@@ -129,6 +138,8 @@ impl Pki {
                 "kubernetes.default.svc.cluster".to_owned(),
                 "kubernetes.svc.cluster.local".to_owned(),
             ];
+            hostnames.extend(nodes.clone());
+
             let pki_config = &PkiConfig {
                 dir,
                 ca: &ca,
@@ -136,11 +147,16 @@ impl Pki {
                 hostnames: &hostnames.join(","),
             };
 
+            let mut kubelets = vec![];
+            for n in &nodes {
+                kubelets.push(Self::setup_kubelet(pki_config, n)?);
+            }
+
             Ok(Pki {
                 admin: Self::setup_admin(pki_config)?,
                 apiserver: Self::setup_apiserver(pki_config)?,
                 controller_manager: Self::setup_controller_manager(pki_config)?,
-                kubelet: Self::setup_kubelet(pki_config, &host)?,
+                kubelets,
                 proxy: Self::setup_proxy(pki_config)?,
                 scheduler: Self::setup_scheduler(pki_config)?,
                 service_account: Self::setup_service_account(pki_config)?,

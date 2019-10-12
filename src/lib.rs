@@ -13,6 +13,7 @@ mod kubectl;
 mod kubelet;
 mod network;
 mod nix;
+mod node;
 mod pki;
 mod process;
 mod proxy;
@@ -45,7 +46,7 @@ use env_logger::Builder;
 use failure::{bail, Fallible};
 use log::{debug, error, info};
 use proc_mounts::MountIter;
-use rayon::scope;
+use rayon::{prelude::*, scope};
 use std::{
     fs,
     process::Command,
@@ -157,11 +158,15 @@ impl Kubernix {
         // All processes
         let mut api_server = Process::stopped();
         let mut controller_manager = Process::stopped();
-        let mut crio = Process::stopped();
         let mut etcd = Process::stopped();
-        let mut kubelet = Process::stopped();
-        let mut proxy = Process::stopped();
         let mut scheduler = Process::stopped();
+        let mut proxy = Process::stopped();
+        let mut crios = (0..config.nodes())
+            .map(|_| Process::stopped())
+            .collect::<Vec<_>>();
+        let mut kubelets = (0..config.nodes())
+            .map(|_| Process::stopped())
+            .collect::<Vec<_>>();
 
         // Spawn the processes
         info!("Starting processes");
@@ -178,23 +183,23 @@ impl Kubernix {
             s.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
 
             // Node processes
-            s.spawn(|_| crio = Crio::start(&config, &network));
-            s.spawn(|_| kubelet = Kubelet::start(&config, &network, &pki, &kubeconfig));
+            s.spawn(|_| {
+                crios.par_iter_mut().enumerate().for_each(|(i, c)| {
+                    *c = Crio::start(&config, i as u8, &network);
+                });
+                kubelets.par_iter_mut().enumerate().for_each(|(i, k)| {
+                    *k = Kubelet::start(&config, i as u8, &network, &pki, &kubeconfig);
+                });
+            });
             s.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
         });
 
         let mut processes = vec![];
 
         // This order is important since we will shut down the processes in order
-        let results = vec![
-            kubelet,
-            crio,
-            scheduler,
-            proxy,
-            controller_manager,
-            api_server,
-            etcd,
-        ];
+        let mut results = vec![scheduler, proxy, controller_manager, api_server, etcd];
+        results.extend(crios);
+        results.extend(kubelets);
         let all_ok = results.iter().all(|x| x.is_ok());
 
         // Note: wait for `drain_filter()` to be stable and make it more straightforward
@@ -242,7 +247,7 @@ impl Kubernix {
             format!(
                 "export {}={}\nexport {}={}",
                 RUNTIME_ENV,
-                Crio::socket(&self.config).to_socket_string(),
+                Crio::socket(&self.config, 0).to_socket_string(),
                 "KUBECONFIG",
                 self.kubeconfig.admin().display(),
             ),
