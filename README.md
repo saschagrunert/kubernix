@@ -178,7 +178,9 @@ from the initial process:
 
 Please note that the directory where all the data is stored is not being
 removed after the exit of KuberNix. This means that you’re still able to
-access the log and configuration files for further processing.
+access the log and configuration files for further processing. If you start
+the cluster again, then the cluster files will be reused. This is especially
+handy if you want to test configuration changes.
 
 ### Configuration
 
