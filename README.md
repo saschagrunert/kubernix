@@ -40,7 +40,7 @@ The following technology stack is currently being used:
 | ----------------- | ---------------------- | ---------- |
 | [Kubernetes][10]  | Cluster Orchestration  | v1.15.4    |
 | [CRI-O][11]       | Container Runtime      | v1.15.2    |
-| [runc][12]        | Container Runtime      | v1.0.0-rc8 |
+| [runc][12]        | Container Runtime      | v1.0.0-rc9 |
 | [cri-tools][13]   | CRI Manipulation Tool  | v1.15.0    |
 | [CNI Plugins][14] | Container Networking   | v0.8.2     |
 | [etcd][15]        | Database Backend       | v3.3.13    |
