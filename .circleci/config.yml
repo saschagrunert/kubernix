@@ -19,7 +19,7 @@ workflows:
       - build
       - build-release
       - build-static
-      - deploy-image
+      - deploy-image:
           filters:
             branches:
               only: master
