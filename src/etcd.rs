@@ -23,6 +23,7 @@ impl Etcd {
         let mut process = Process::start(
             &dir,
             "etcd",
+            "etcd",
             &[
                 &format!("--advertise-client-urls=https://{}", network.etcd_client()),
                 "--client-cert-auth",
@@ -49,7 +50,7 @@ impl Etcd {
 
         process.wait_ready("ready to serve client requests")?;
         info!("etcd is ready");
-        Ok(Box::new(Etcd { process }))
+        Ok(Box::new(Self { process }))
     }
 }
 

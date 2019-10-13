@@ -7,19 +7,12 @@ use crate::{
 };
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
-use nix::{
-    sys::signal::{kill, Signal},
-    unistd::Pid,
-};
-use psutil::process;
 use serde_json::{json, to_string_pretty};
 use std::{
     fmt::{Display, Formatter, Result},
     fs::{self, create_dir_all},
     path::PathBuf,
     process::Command,
-    thread::sleep,
-    time::{Duration, Instant},
 };
 
 pub struct Crio {
@@ -100,13 +93,20 @@ impl Crio {
         let mut process = Process::start(
             &dir,
             "crio",
+            config.container_runtime(),
             &[
+                "run",
+                "--rm",
+                "--net=host",
+                "--privileged",
+                &format!("--hostname={}", node_name),
+                &format!("--name={}", node_name),
+                &format!("-v={v}:{v}", v = config.root().display()),
+                "saschagrunert/kubernix:base",
+                "crio",
                 &format!("--config={}", crio_config.display()),
                 "--log-level=debug",
-                &format!(
-                    "--storage-driver={}",
-                    if config.container() { "vfs" } else { "overlay" }
-                ),
+                "--storage-driver=vfs",
                 &format!("--conmon={}", conmon.display()),
                 &format!("--listen={}", socket),
                 &format!("--root={}", dir.join("storage").display()),
@@ -126,7 +126,7 @@ impl Crio {
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready ({})", node_name);
-        Ok(Box::new(Crio {
+        Ok(Box::new(Self {
             process,
             socket,
             node_name,
@@ -141,36 +141,6 @@ impl Crio {
     /// Retrieve the working path for the node
     fn path(config: &Config, node: u8) -> PathBuf {
         config.root().join("crio").join(Node::name(node))
-    }
-
-    /// Try to cleanup all related resources
-    fn stop_conmons(&self) {
-        // Remove all conmon processes
-        let now = Instant::now();
-        while now.elapsed().as_secs() < 5 {
-            match process::all() {
-                Err(e) => {
-                    debug!("Unable to retrieve processes: {}", e);
-                    sleep(Duration::from_secs(1));
-                }
-                Ok(procs) => {
-                    let mut found = false;
-                    for p in procs.iter().filter(|p| &p.comm == "conmon") {
-                        debug!("Killing conmon process {} ({})", p.pid, self.node_name);
-                        if let Err(e) = kill(Pid::from_raw(p.pid), Signal::SIGTERM) {
-                            debug!("Unable to kill PID {}: {}", p.pid, e);
-                        }
-                        found = true;
-                    }
-                    if !found {
-                        debug!("All conmon processes exited ({})", self.node_name);
-                        break;
-                    }
-                    // Give the signal time to arrive
-                    sleep(Duration::from_millis(100));
-                }
-            }
-        }
     }
 
     /// Remove all containers via crictl invocations
@@ -234,12 +204,5 @@ impl Stoppable for Crio {
 
         // Stop the process, should never really fail
         self.process.stop()
-    }
-}
-
-impl Drop for Crio {
-    fn drop(&mut self) {
-        // Remove conmon processes
-        self.stop_conmons();
     }
 }

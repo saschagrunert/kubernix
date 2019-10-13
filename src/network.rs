@@ -152,7 +152,7 @@ pub mod tests {
     fn dns_success() -> Fallible<()> {
         let c = test_config()?;
         let n = Network::new(&c)?;
-        assert_eq!(n.dns()?, Ipv4Addr::new(10, 10, 192, 2));
+        assert_eq!(n.dns()?, Ipv4Addr::new(10, 10, 1, 2));
         Ok(())
     }
 }

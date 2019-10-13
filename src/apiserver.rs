@@ -33,6 +33,7 @@ impl ApiServer {
 
         let mut process = Process::start(
             &dir,
+            "apiserver",
             "kube-apiserver",
             &[
                 "--allow-privileged=true",
@@ -77,7 +78,7 @@ impl ApiServer {
         process.wait_ready("etcd ok")?;
         Self::setup_rbac(&dir, kubeconfig)?;
         info!("API Server is ready");
-        Ok(Box::new(ApiServer { process }))
+        Ok(Box::new(Self { process }))
     }
 
     fn setup_rbac(dir: &Path, kubeconfig: &KubeConfig) -> Fallible<()> {

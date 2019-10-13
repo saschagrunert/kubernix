@@ -44,8 +44,8 @@ impl Kubelet {
                 .ok_or_else(|| format_err!("Unable to retrieve kubelet CIDR"))?,
             cert = idendity.cert().display(),
             key = idendity.key().display(),
-            port = 11250 + node as u16,
-            healthzPort = 12250 + node as u16,
+            port = 11250 + u16::from(node),
+            healthzPort = 12250 + u16::from(node),
         );
         let cfg = dir.join("config.yml");
 
@@ -56,7 +56,16 @@ impl Kubelet {
         let mut process = Process::start(
             &dir,
             "kubelet",
+            config.container_runtime(),
             &[
+                "exec",
+                &node_name,
+                "nix",
+                "run",
+                "-f",
+                "/kubernix",
+                "-c",
+                "kubelet",
                 &format!("--config={}", cfg.display()),
                 &format!("--root-dir={}", dir.join("run").display()),
                 &format!("--hostname-override=node-{}", node),
@@ -82,7 +91,7 @@ impl Kubelet {
 
         process.wait_ready("Successfully registered node")?;
         info!("Kubelet is ready ({})", node_name);
-        Ok(Box::new(Kubelet { process }))
+        Ok(Box::new(Self { process }))
     }
 }
 

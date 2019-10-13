@@ -28,6 +28,7 @@ impl System {
                 Self::sysctl_enable(sysctl)?;
             }
         }
+
         Ok(())
     }
 

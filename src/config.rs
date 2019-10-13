@@ -113,6 +113,17 @@ pub struct Config {
     )]
     /// The number of nodes to be registered
     nodes: u8,
+
+    #[get = "pub"]
+    #[clap(
+        default_value = "podman",
+        env = "KUBERNIX_CONTAINER_RUNTIME",
+        long = "container-runtime",
+        short = "u",
+        value_name = "RUNTIME"
+    )]
+    /// The container runtime to be used for the nodes
+    container_runtime: String,
 }
 
 /// Possible subcommands
@@ -246,11 +257,13 @@ pub mod tests {
         fs::write(
             c.root.join(Config::FILENAME),
             r#"
-root = "root"
-log-level = "DEBUG"
 cidr = "1.1.1.1/16"
-packages = []
+container-runtime = "podman"
 container = false
+log-level = "DEBUG"
+nodes = 1
+packages = []
+root = "root"
             "#,
         )?;
         c.try_load_file()?;

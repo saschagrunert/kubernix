@@ -28,7 +28,6 @@ ipnetwork = "0.15.0"
 log = { version = "0.4.8", features = ["serde"] }
 nix = "0.15.0"
 proc-mounts = "0.2.2"
-psutil = "1.7.0"
 rand = "0.7.2"
 rayon = "1.2.0"
 serde = { version = "1.0.101", features = ["derive"] }

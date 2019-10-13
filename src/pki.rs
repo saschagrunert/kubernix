@@ -94,10 +94,7 @@ impl Pki {
     pub fn new(config: &Config, network: &Network) -> Fallible<Pki> {
         let host = &get_hostname().ok_or_else(|| format_err!("Unable to get hostname"))?;
         let dir = &config.root().join("pki");
-        let nodes = (0..config.nodes())
-            .into_iter()
-            .map(|i| Node::name(i))
-            .collect::<Vec<String>>();
+        let nodes = (0..config.nodes()).map(Node::name).collect::<Vec<String>>();
 
         // Create the CA only if necessary
         if dir.exists() {

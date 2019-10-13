@@ -30,8 +30,8 @@ use crio::Crio;
 use encryptionconfig::EncryptionConfig;
 use etcd::Etcd;
 use kubeconfig::KubeConfig;
-use kubelet::Kubelet;
 use network::Network;
+use node::Node;
 use pki::Pki;
 use process::{Process, Stoppables};
 use proxy::Proxy;
@@ -161,10 +161,7 @@ impl Kubernix {
         let mut etcd = Process::stopped();
         let mut scheduler = Process::stopped();
         let mut proxy = Process::stopped();
-        let mut crios = (0..config.nodes())
-            .map(|_| Process::stopped())
-            .collect::<Vec<_>>();
-        let mut kubelets = (0..config.nodes())
+        let mut nodes = (0..config.nodes())
             .map(|_| Process::stopped())
             .collect::<Vec<_>>();
 
@@ -184,11 +181,8 @@ impl Kubernix {
 
             // Node processes
             s.spawn(|_| {
-                crios.par_iter_mut().enumerate().for_each(|(i, c)| {
-                    *c = Crio::start(&config, i as u8, &network);
-                });
-                kubelets.par_iter_mut().enumerate().for_each(|(i, k)| {
-                    *k = Kubelet::start(&config, i as u8, &network, &pki, &kubeconfig);
+                nodes.par_iter_mut().enumerate().for_each(|(i, n)| {
+                    *n = Node::start(&config, i as u8, &network, &pki, &kubeconfig);
                 });
             });
             s.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
@@ -198,8 +192,7 @@ impl Kubernix {
 
         // This order is important since we will shut down the processes in order
         let mut results = vec![scheduler, proxy, controller_manager, api_server, etcd];
-        results.extend(crios);
-        results.extend(kubelets);
+        results.extend(nodes);
         let all_ok = results.iter().all(|x| x.is_ok());
 
         // Note: wait for `drain_filter()` to be stable and make it more straightforward
