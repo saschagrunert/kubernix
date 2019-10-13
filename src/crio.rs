@@ -92,7 +92,7 @@ impl Crio {
 
         let mut process = Process::start(
             &dir,
-            &format!("crio-{}", node_name),
+            "crio",
             config.container_runtime(),
             &[
                 "run",

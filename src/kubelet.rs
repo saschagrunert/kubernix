@@ -55,7 +55,7 @@ impl Kubelet {
 
         let mut process = Process::start(
             &dir,
-            &format!("kubelet-{}", node_name),
+            "kubelet",
             config.container_runtime(),
             &[
                 "exec",
