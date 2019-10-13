@@ -65,6 +65,7 @@ impl Kubelet {
                     "/kubernix",
                     "-c",
                     KUBELET,
+                    &format!("--hostname-override=node-{}", node),
                 ]
                 .into_iter()
                 .map(|x| x.to_owned())
@@ -80,7 +81,6 @@ impl Kubelet {
                 "--container-runtime=remote",
                 &format!("--config={}", cfg.display()),
                 &format!("--root-dir={}", dir.join("run").display()),
-                &format!("--hostname-override=node-{}", node),
                 &format!(
                     "--container-runtime-endpoint={}",
                     Crio::socket(config, node).to_socket_string(),
