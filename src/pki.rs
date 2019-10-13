@@ -100,10 +100,16 @@ impl Pki {
         if dir.exists() {
             info!("PKI directory already exists, skipping generation");
 
-            let kubelets = nodes
-                .iter()
-                .map(|n| Idendity::new(dir, n, &Self::node_user(n)))
-                .collect();
+            let kubelets = if config.nodes() > 1 {
+                // Multiple nodes get identified via their node name
+                nodes
+                    .iter()
+                    .map(|n| Idendity::new(dir, n, &Self::node_user(n)))
+                    .collect()
+            } else {
+                // Single node gets identified via its hostname
+                vec![Idendity::new(dir, host, &Self::node_user(host))]
+            };
 
             Ok(Pki {
                 admin: Idendity::new(dir, ADMIN_NAME, ADMIN_NAME),
@@ -144,10 +150,17 @@ impl Pki {
                 hostnames: &hostnames.join(","),
             };
 
-            let mut kubelets = vec![];
-            for n in &nodes {
-                kubelets.push(Self::setup_kubelet(pki_config, n)?);
-            }
+            let kubelets = if config.nodes() > 1 {
+                // Multiple nodes get identified via their node name
+                let mut kubelets = vec![];
+                for n in &nodes {
+                    kubelets.push(Self::setup_kubelet(pki_config, n)?);
+                }
+                kubelets
+            } else {
+                // Single node gets identified via its hostname
+                vec![Self::setup_kubelet(pki_config, host)?]
+            };
 
             Ok(Pki {
                 admin: Self::setup_admin(pki_config)?,
