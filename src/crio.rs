@@ -99,6 +99,10 @@ impl Crio {
                 "--rm",
                 "--net=host",
                 "--privileged",
+                &format!(
+                    "--storage-driver={}",
+                    if config.container() { "vfs" } else { "" }
+                ),
                 &format!("--hostname={}", node_name),
                 &format!("--name={}", node_name),
                 &format!("-v={v}:{v}", v = config.root().display()),
