@@ -23,10 +23,10 @@ workflows:
           filters:
             branches:
               only: master
-      - deploy-image-base
-          #filters:
-            #branches:
-              #only: master
+      - deploy-image-base:
+          filters:
+            branches:
+              only: master
       - deploy:
           requires:
             - build-static
