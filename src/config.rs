@@ -143,7 +143,7 @@ impl Config {
 
     /// Read the configuration from the internal set root path
     /// If not existing, write the current configuration to the path.
-    pub fn from_or_to_file(&mut self) -> Fallible<()> {
+    pub fn try_load_file(&mut self) -> Fallible<()> {
         let file = self.root().join(Self::FILENAME);
         if file.exists() {
             *self = toml::from_str(&read_to_string(&file).map_err(|e| {
@@ -229,7 +229,7 @@ pub mod tests {
     }
 
     #[test]
-    fn from_or_to_file_success() -> Fallible<()> {
+    fn try_load_file_success() -> Fallible<()> {
         let mut c = Config::default();
         c.root = tempdir()?.into_path();
         fs::write(
@@ -242,7 +242,7 @@ packages = []
 container = false
             "#,
         )?;
-        c.from_or_to_file()?;
+        c.try_load_file()?;
         assert_eq!(c.root(), Path::new("root"));
         assert_eq!(c.log_level(), LevelFilter::Debug);
         assert_eq!(&c.cidr().to_string(), "1.1.1.1/16");
@@ -250,11 +250,11 @@ container = false
     }
 
     #[test]
-    fn from_or_to_file_failure() -> Fallible<()> {
+    fn try_load_file_failure() -> Fallible<()> {
         let mut c = Config::default();
         c.root = tempdir()?.into_path();
         fs::write(c.root.join(Config::FILENAME), "invalid")?;
-        assert!(c.from_or_to_file().is_err());
+        assert!(c.try_load_file().is_err());
         Ok(())
     }
 }
