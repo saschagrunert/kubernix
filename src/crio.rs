@@ -84,34 +84,44 @@ impl Crio {
         }
         let socket = Self::socket(config, node);
 
-        let mut process = Process::start(
-            &dir,
-            "crio",
-            config.container_runtime(),
-            &[
-                "run",
-                "--rm",
-                "--net=host",
-                "--privileged",
-                &format!(
-                    "--storage-driver={}",
-                    if config.container() { "vfs" } else { "" }
-                ),
-                &format!("--hostname={}", node_name),
-                &format!("--name={}", node_name),
-                &format!("-v={v}:{v}", v = config.root().display()),
-                "docker.io/saschagrunert/kubernix:base",
-                "crio",
-                &format!("--config={}", crio_config.display()),
+        let (mut args_vec, cmd) = if config.nodes() > 1 {
+            (
+                vec![
+                    "run",
+                    "--rm",
+                    "--net=host",
+                    "--privileged",
+                    &format!(
+                        "--storage-driver={}",
+                        if config.container() { "vfs" } else { "" }
+                    ),
+                    &format!("--hostname={}", node_name),
+                    &format!("--name={}", node_name),
+                    &format!("-v={v}:{v}", v = config.root().display()),
+                    "docker.io/saschagrunert/kubernix:base",
+                    "crio",
+                    "--storage-driver=vfs",
+                ]
+                .into_iter()
+                .map(|x| x.to_owned())
+                .collect(),
+                config.container_runtime().to_owned(),
+            )
+        } else {
+            (vec![], "crio".to_owned())
+        };
+
+        args_vec.extend(
+            vec![
                 "--log-level=debug",
-                "--storage-driver=vfs",
+                "--registry=docker.io",
+                &format!("--config={}", crio_config.display()),
                 &format!("--conmon={}", conmon.display()),
                 &format!("--listen={}", socket),
                 &format!("--root={}", dir.join("storage").display()),
                 &format!("--runroot={}", dir.join("run").display()),
                 &format!("--cni-config-dir={}", cni.display()),
                 &format!("--cni-plugin-dir={}", cni_plugin.display()),
-                "--registry=docker.io",
                 &format!("--signature-policy={}", policy_json.display()),
                 &format!(
                     "--runtimes=local-runc:{}:{}",
@@ -119,8 +129,14 @@ impl Crio {
                     dir.join("runc").display()
                 ),
                 "--default-runtime=local-runc",
-            ],
-        )?;
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect::<Vec<String>>(),
+        );
+        let args = args_vec.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
+
+        let mut process = Process::start(&dir, "crio", &cmd, &args)?;
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready ({})", node_name);

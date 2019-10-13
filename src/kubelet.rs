@@ -53,23 +53,33 @@ impl Kubelet {
             fs::write(&cfg, yml)?;
         }
 
-        let mut process = Process::start(
-            &dir,
-            "kubelet",
-            config.container_runtime(),
-            &[
-                "exec",
-                &node_name,
-                "nix",
-                "run",
-                "-f",
-                "/kubernix",
-                "-c",
-                "kubelet",
+        let (mut args_vec, cmd) = if config.nodes() > 1 {
+            (
+                vec![
+                    "exec",
+                    &node_name,
+                    "nix",
+                    "run",
+                    "-f",
+                    "/kubernix",
+                    "-c",
+                    "kubelet",
+                ]
+                .into_iter()
+                .map(|x| x.to_owned())
+                .collect(),
+                config.container_runtime().to_owned(),
+            )
+        } else {
+            (vec![], "kubelet".to_owned())
+        };
+
+        args_vec.extend(
+            vec![
+                "--container-runtime=remote",
                 &format!("--config={}", cfg.display()),
                 &format!("--root-dir={}", dir.join("run").display()),
                 &format!("--hostname-override=node-{}", node),
-                "--container-runtime=remote",
                 &format!(
                     "--container-runtime-endpoint={}",
                     Crio::socket(config, node).to_socket_string(),
@@ -86,8 +96,14 @@ impl Kubelet {
                         .display()
                 ),
                 "--v=2",
-            ],
-        )?;
+            ]
+            .into_iter()
+            .map(|x| x.to_owned())
+            .collect::<Vec<String>>(),
+        );
+        let args = args_vec.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
+
+        let mut process = Process::start(&dir, "kubelet", &cmd, &args)?;
 
         process.wait_ready("Successfully registered node")?;
         info!("Kubelet is ready ({})", node_name);

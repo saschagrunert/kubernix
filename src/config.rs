@@ -100,7 +100,7 @@ pub struct Config {
         short = "s",
         value_name = "SHELL"
     )]
-    /// The shell executable to be used, defaults to $SHELL, fallback is 'sh'
+    /// The shell executable to be used, defaults to $SHELL, fallback is `sh`
     shell: Option<String>,
 
     #[get_copy = "pub"]
@@ -122,7 +122,7 @@ pub struct Config {
         short = "u",
         value_name = "RUNTIME"
     )]
-    /// The container runtime to be used for the nodes
+    /// The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1`
     container_runtime: String,
 }
 
