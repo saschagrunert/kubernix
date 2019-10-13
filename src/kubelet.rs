@@ -54,8 +54,9 @@ impl Kubelet {
             fs::write(&cfg, yml)?;
         }
 
-        let (mut args_vec, cmd) = if config.nodes() > 1 {
+        let (cmd, mut args_vec) = if config.nodes() > 1 {
             (
+                config.container_runtime().to_owned(),
                 vec![
                     "exec",
                     &node_name,
@@ -65,15 +66,14 @@ impl Kubelet {
                     "/kubernix",
                     "-c",
                     KUBELET,
-                    &format!("--hostname-override=node-{}", node),
+                    &format!("--hostname-override={}", node_name),
                 ]
                 .into_iter()
                 .map(|x| x.to_owned())
-                .collect(),
-                config.container_runtime().to_owned(),
+                .collect()
             )
         } else {
-            (vec![], KUBELET.to_owned())
+            (KUBELET.to_owned(), vec![])
         };
 
         args_vec.extend(
