@@ -3,6 +3,7 @@ SUDO := sudo -E
 KUBERNIX := $(SUDO) target/release/kubernix $(ARGS)
 CONTAINER_RUNTIME := sudo podman
 IMAGE := saschagrunert/kubernix:latest
+RUN_DIR := $(shell pwd)/kubernix-run
 
 define nix-run
 	nix run -if nix/build.nix -k SSH_AUTH_SOCK -c $(1)
@@ -53,7 +54,13 @@ run: build-release
 
 .PHONY: run-image
 run-image:
-	$(CONTAINER_RUNTIME) run --rm --privileged --net=host -it $(IMAGE)
+	mkdir -p $(RUN_DIR)
+	$(CONTAINER_RUNTIME) run \
+		-v $(RUN_DIR):/kubernix-run \
+		--rm \
+		--privileged \
+		--net=host \
+		-it $(IMAGE)
 
 .PHONY: shell
 shell: build-release

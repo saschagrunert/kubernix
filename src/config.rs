@@ -144,14 +144,16 @@ impl Config {
     /// Read the configuration from the internal set root path
     pub fn update_from_file(&mut self) -> Fallible<()> {
         let file = self.root().join(Self::FILENAME);
-        *self = toml::from_str(&read_to_string(&file).map_err(|e| {
-            format_err!(
-                "Unable to read expected configuration file '{}': {}",
-                file.display(),
-                e
-            )
-        })?)
-        .map_err(|e| format_err!("Unable to load config file '{}': {}", file.display(), e))?;
+        if file.exists() {
+            *self = toml::from_str(&read_to_string(&file).map_err(|e| {
+                format_err!(
+                    "Unable to read expected configuration file '{}': {}",
+                    file.display(),
+                    e
+                )
+            })?)
+            .map_err(|e| format_err!("Unable to load config file '{}': {}", file.display(), e))?;
+        }
         Ok(())
     }
 
