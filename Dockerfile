@@ -16,4 +16,5 @@ ENV KUBERNIX_CONTAINER 1
 COPY --from=builder \
      /home/rust/src/target/x86_64-unknown-linux-musl/release/kubernix .
 COPY --from=bootstrapper /nix /nix
+COPY src/assets/policy.json /etc/containers/policy.json
 ENTRYPOINT [ "/kubernix" ]

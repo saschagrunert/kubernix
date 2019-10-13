@@ -78,15 +78,9 @@ impl Crio {
                 }))?,
             )?;
 
-            fs::write(
-                &policy_json,
-                to_string_pretty(&json!({
-                    "default": [{ "type": "insecureAcceptAnything" }]
-                }))?,
-            )?;
-
             // Pseudo config to not load local configuration values
             fs::write(&crio_config, "")?;
+            fs::write(&policy_json, include_str!("assets/policy.json"))?;
         }
         let socket = Self::socket(config, node);
 
