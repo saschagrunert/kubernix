@@ -26,7 +26,8 @@ impl Kubelet {
         let node_name = Node::name(node);
         info!("Starting Kubelet ({})", node_name);
 
-        let dir = config.root().join("kubelet").join(&node_name);
+        const KUBELET: &str = "kubelet";
+        let dir = config.root().join(KUBELET).join(&node_name);
         create_dir_all(&dir)?;
 
         let idendity = pki
@@ -63,7 +64,7 @@ impl Kubelet {
                     "-f",
                     "/kubernix",
                     "-c",
-                    "kubelet",
+                    KUBELET,
                 ]
                 .into_iter()
                 .map(|x| x.to_owned())
@@ -71,7 +72,7 @@ impl Kubelet {
                 config.container_runtime().to_owned(),
             )
         } else {
-            (vec![], "kubelet".to_owned())
+            (vec![], KUBELET.to_owned())
         };
 
         args_vec.extend(
@@ -103,7 +104,7 @@ impl Kubelet {
         );
         let args = args_vec.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
 
-        let mut process = Process::start(&dir, "kubelet", &cmd, &args)?;
+        let mut process = Process::start(&dir, KUBELET, &cmd, &args)?;
 
         process.wait_ready("Successfully registered node")?;
         info!("Kubelet is ready ({})", node_name);

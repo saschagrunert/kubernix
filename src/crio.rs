@@ -36,6 +36,8 @@ impl CriSocket {
     }
 }
 
+const CRIO: &str = "crio";
+
 impl Crio {
     pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
         let node_name = Node::name(node);
@@ -99,7 +101,7 @@ impl Crio {
                     &format!("--name={}", node_name),
                     &format!("-v={v}:{v}", v = config.root().display()),
                     "docker.io/saschagrunert/kubernix:base",
-                    "crio",
+                    CRIO,
                     "--storage-driver=vfs",
                 ]
                 .into_iter()
@@ -108,7 +110,7 @@ impl Crio {
                 config.container_runtime().to_owned(),
             )
         } else {
-            (vec![], "crio".to_owned())
+            (vec![], CRIO.to_owned())
         };
 
         args_vec.extend(
@@ -136,7 +138,7 @@ impl Crio {
         );
         let args = args_vec.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
 
-        let mut process = Process::start(&dir, "crio", &cmd, &args)?;
+        let mut process = Process::start(&dir, CRIO, &cmd, &args)?;
 
         process.wait_ready("sandboxes:")?;
         info!("CRI-O is ready ({})", node_name);
@@ -154,7 +156,7 @@ impl Crio {
 
     /// Retrieve the working path for the node
     fn path(config: &Config, node: u8) -> PathBuf {
-        config.root().join("crio").join(Node::name(node))
+        config.root().join(CRIO).join(Node::name(node))
     }
 
     /// Remove all containers via crictl invocations
