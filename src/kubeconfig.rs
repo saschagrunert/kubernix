@@ -55,10 +55,11 @@ impl KubeConfig {
             info!("Creating kubeconfigs");
             create_dir_all(&dir)?;
 
-            let mut kubelets = vec![];
-            for i in pki.kubelets() {
-                kubelets.push(Self::setup_kubeconfig(&dir, i, pki.ca().cert())?);
-            }
+            let kubelets = pki
+                .kubelets()
+                .iter()
+                .map(|x| Self::setup_kubeconfig(&dir, x, pki.ca().cert()))
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(KubeConfig {
                 kubelets,
