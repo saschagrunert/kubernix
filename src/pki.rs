@@ -156,7 +156,6 @@ impl Pki {
                     .iter()
                     .map(|n| Self::setup_kubelet(pki_config, n))
                     .collect::<Result<Vec<_>, _>>()?
-
             } else {
                 // Single node gets identified via its hostname
                 vec![Self::setup_kubelet(pki_config, host)?]
