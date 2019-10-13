@@ -105,7 +105,7 @@ impl Process {
             log_file,
             name: name.to_owned(),
             pid,
-            readyness_timeout: 30,
+            readyness_timeout: 120,
             watch: Some(watch),
         })
     }
