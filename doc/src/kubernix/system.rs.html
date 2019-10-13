@@ -119,9 +119,15 @@
 <span id="119">119</span>
 <span id="120">120</span>
 <span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
 </pre><div class="example-wrap"><pre class="rust ">
+<span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">Config</span>;
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
-<span class="kw">use</span> <span class="ident">log</span>::<span class="ident">debug</span>;
+<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">info</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">env</span>::{<span class="ident">split_paths</span>, <span class="ident">var</span>, <span class="ident">var_os</span>},
     <span class="ident">fmt</span>::<span class="ident">Display</span>,
@@ -133,17 +139,21 @@
 
 <span class="kw">impl</span> <span class="ident">System</span> {
     <span class="doccomment">/// Create a new system</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">setup</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">for</span> <span class="ident">module</span> <span class="kw">in</span> <span class="kw-2">&amp;</span>[<span class="string">&quot;overlay&quot;</span>, <span class="string">&quot;br_netfilter&quot;</span>, <span class="string">&quot;ip_conntrack&quot;</span>] {
-            <span class="self">Self</span>::<span class="ident">modprobe</span>(<span class="ident">module</span>)<span class="question-mark">?</span>;
-        }
-        <span class="kw">for</span> <span class="ident">sysctl</span> <span class="kw">in</span> <span class="kw-2">&amp;</span>[
-            <span class="string">&quot;net.bridge.bridge-nf-call-ip6tables&quot;</span>,
-            <span class="string">&quot;net.bridge.bridge-nf-call-iptables&quot;</span>,
-            <span class="string">&quot;net.ipv4.conf.all.route_localnet&quot;</span>,
-            <span class="string">&quot;net.ipv4.ip_forward&quot;</span>,
-        ] {
-            <span class="self">Self</span>::<span class="ident">sysctl_enable</span>(<span class="ident">sysctl</span>)<span class="question-mark">?</span>;
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">setup</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">container</span>() {
+            <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Skipping modprobe and sysctl for sake of containerization&quot;</span>)
+        } <span class="kw">else</span> {
+            <span class="kw">for</span> <span class="ident">module</span> <span class="kw">in</span> <span class="kw-2">&amp;</span>[<span class="string">&quot;overlay&quot;</span>, <span class="string">&quot;br_netfilter&quot;</span>, <span class="string">&quot;ip_conntrack&quot;</span>] {
+                <span class="self">Self</span>::<span class="ident">modprobe</span>(<span class="ident">module</span>)<span class="question-mark">?</span>;
+            }
+            <span class="kw">for</span> <span class="ident">sysctl</span> <span class="kw">in</span> <span class="kw-2">&amp;</span>[
+                <span class="string">&quot;net.bridge.bridge-nf-call-ip6tables&quot;</span>,
+                <span class="string">&quot;net.bridge.bridge-nf-call-iptables&quot;</span>,
+                <span class="string">&quot;net.ipv4.conf.all.route_localnet&quot;</span>,
+                <span class="string">&quot;net.ipv4.ip_forward&quot;</span>,
+            ] {
+                <span class="self">Self</span>::<span class="ident">sysctl_enable</span>(<span class="ident">sysctl</span>)<span class="question-mark">?</span>;
+            }
         }
         <span class="prelude-val">Ok</span>(())
     }
