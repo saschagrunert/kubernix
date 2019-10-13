@@ -415,7 +415,7 @@
 
         <span class="comment">// Prepare the configuration</span>
         <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">exists</span>() {
-            <span class="ident">config</span>.<span class="ident">from_or_to_file</span>()<span class="question-mark">?</span>;
+            <span class="ident">config</span>.<span class="ident">try_load_file</span>()<span class="question-mark">?</span>;
         } <span class="kw">else</span> {
             <span class="ident">config</span>.<span class="ident">to_file</span>()<span class="question-mark">?</span>;
         }
