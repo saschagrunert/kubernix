@@ -152,11 +152,11 @@ impl Pki {
 
             let kubelets = if config.nodes() > 1 {
                 // Multiple nodes get identified via their node name
-                let mut kubelets = vec![];
-                for n in &nodes {
-                    kubelets.push(Self::setup_kubelet(pki_config, n)?);
-                }
-                kubelets
+                nodes
+                    .iter()
+                    .map(|n| Self::setup_kubelet(pki_config, n))
+                    .collect::<Result<Vec<_>, _>>()?
+
             } else {
                 // Single node gets identified via its hostname
                 vec![Self::setup_kubelet(pki_config, host)?]
