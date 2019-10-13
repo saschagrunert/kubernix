@@ -1,6 +1,9 @@
 ARGS ?=
 SUDO := sudo -E
 KUBERNIX := $(SUDO) target/release/kubernix $(ARGS)
+CONTAINER_RUNTIME := sudo podman
+IMAGE := saschagrunert/kubernix:latest
+RUN_DIR := $(shell pwd)/kubernix-run
 
 define nix-run
 	nix run -if nix/build.nix -k SSH_AUTH_SOCK -c $(1)
@@ -11,6 +14,10 @@ all: build
 .PHONY: build
 build:
 	$(call nix-run,cargo build)
+
+.PHONY: build-image
+build-image:
+	$(CONTAINER_RUNTIME) build -t $(IMAGE) .
 
 .PHONY: build-release
 build-release:
@@ -44,6 +51,16 @@ nixpkgs:
 .PHONY: run
 run: build-release
 	$(KUBERNIX)
+
+.PHONY: run-image
+run-image:
+	mkdir -p $(RUN_DIR)
+	$(CONTAINER_RUNTIME) run \
+		-v $(RUN_DIR):/kubernix-run \
+		--rm \
+		--privileged \
+		--net=host \
+		-it $(IMAGE)
 
 .PHONY: shell
 shell: build-release

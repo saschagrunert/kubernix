@@ -8,6 +8,9 @@ executors:
   container-musl:
     docker:
       - image: ekidd/rust-musl-builder:stable
+  machine:
+    machine:
+      image: ubuntu-1604:201903-01
 
 workflows:
   version: 2
@@ -16,6 +19,10 @@ workflows:
       - build
       - build-release
       - build-static
+      - deploy-image:
+          filters:
+            branches:
+              only: master
       - deploy:
           requires:
             - build-static
@@ -120,6 +127,20 @@ jobs:
           environment:
             FILE: *static-binary
             SLUG: github.com/repos/saschagrunert/kubernix/releases
+
+  deploy-image:
+    executor: machine
+    steps:
+      - checkout
+      - run:
+          name: Login to registry
+          command: docker login -u $DOCKER_USER -p $DOCKER_PASS
+      - run:
+          name: Build the image
+          command: make build-image CONTAINER_RUNTIME=docker
+      - run:
+          name: Push the image
+          command: docker push saschagrunert/kubernix:latest
 
   docs:
     executor: container
