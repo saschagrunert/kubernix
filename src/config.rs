@@ -46,7 +46,7 @@ pub struct Config {
         short = "a",
         takes_value = false
     )]
-    /// Indicator that we're running inside a container
+    /// Indicator that KuberNix is running inside a container
     container: bool,
 
     #[get_copy = "pub"]
