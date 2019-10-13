@@ -86,8 +86,9 @@ impl Crio {
         }
         let socket = Self::socket(config, node);
 
-        let (mut args_vec, cmd) = if config.nodes() > 1 {
+        let (cmd, mut args_vec) = if config.nodes() > 1 {
             (
+                config.container_runtime().to_owned(),
                 vec![
                     "run",
                     "--rm",
@@ -107,10 +108,9 @@ impl Crio {
                 .into_iter()
                 .map(|x| x.to_owned())
                 .collect(),
-                config.container_runtime().to_owned(),
             )
         } else {
-            (vec![], CRIO.to_owned())
+            (CRIO.to_owned(), vec![])
         };
 
         args_vec.extend(
