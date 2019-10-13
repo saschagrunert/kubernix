@@ -70,7 +70,7 @@ impl Kubelet {
                 ]
                 .into_iter()
                 .map(|x| x.to_owned())
-                .collect()
+                .collect(),
             )
         } else {
             (KUBELET.to_owned(), vec![])
