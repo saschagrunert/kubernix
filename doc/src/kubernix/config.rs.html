@@ -255,6 +255,9 @@
 <span id="255">255</span>
 <span id="256">256</span>
 <span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">system</span>::<span class="ident">System</span>;
@@ -400,7 +403,8 @@
     }
 
     <span class="doccomment">/// Read the configuration from the internal set root path</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">update_from_file</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="doccomment">/// If not existing, write the current configuration to the path.</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">from_or_to_file</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">file</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">FILENAME</span>);
         <span class="kw">if</span> <span class="ident">file</span>.<span class="ident">exists</span>() {
             <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="ident">toml</span>::<span class="ident">from_str</span>(<span class="kw-2">&amp;</span><span class="ident">read_to_string</span>(<span class="kw-2">&amp;</span><span class="ident">file</span>).<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> {
@@ -411,6 +415,8 @@
                 )
             })<span class="question-mark">?</span>)
             .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to load config file &#39;{}&#39;: {}&quot;</span>, <span class="ident">file</span>.<span class="ident">display</span>(), <span class="ident">e</span>))<span class="question-mark">?</span>;
+        } <span class="kw">else</span> {
+            <span class="self">self</span>.<span class="ident">to_file</span>()<span class="question-mark">?</span>;
         }
         <span class="prelude-val">Ok</span>(())
     }
@@ -484,7 +490,7 @@
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
-    <span class="kw">fn</span> <span class="ident">update_from_file_success</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">from_or_to_file_success</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">fs</span>::<span class="ident">write</span>(
@@ -497,7 +503,7 @@ packages = []
 container = false
             &quot;#</span>,
         )<span class="question-mark">?</span>;
-        <span class="ident">c</span>.<span class="ident">update_from_file</span>()<span class="question-mark">?</span>;
+        <span class="ident">c</span>.<span class="ident">from_or_to_file</span>()<span class="question-mark">?</span>;
         <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">root</span>(), <span class="ident">Path</span>::<span class="ident">new</span>(<span class="string">&quot;root&quot;</span>));
         <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">log_level</span>(), <span class="ident">LevelFilter</span>::<span class="ident">Debug</span>);
         <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>.<span class="ident">cidr</span>().<span class="ident">to_string</span>(), <span class="string">&quot;1.1.1.1/16&quot;</span>);
@@ -505,11 +511,11 @@ container = false
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
-    <span class="kw">fn</span> <span class="ident">update_from_file_failure</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">from_or_to_file_failure</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">c</span>.<span class="ident">root</span>.<span class="ident">join</span>(<span class="ident">Config</span>::<span class="ident">FILENAME</span>), <span class="string">&quot;invalid&quot;</span>)<span class="question-mark">?</span>;
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">update_from_file</span>().<span class="ident">is_err</span>());
+        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">from_or_to_file</span>().<span class="ident">is_err</span>());
         <span class="prelude-val">Ok</span>(())
     }
 }
