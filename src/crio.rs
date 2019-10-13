@@ -100,7 +100,7 @@ impl Crio {
                 &format!("--hostname={}", node_name),
                 &format!("--name={}", node_name),
                 &format!("-v={v}:{v}", v = config.root().display()),
-                "saschagrunert/kubernix:base",
+                "docker.io/saschagrunert/kubernix:base",
                 "crio",
                 &format!("--config={}", crio_config.display()),
                 "--log-level=debug",

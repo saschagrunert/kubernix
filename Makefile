@@ -2,7 +2,7 @@ ARGS ?=
 SUDO := sudo -E
 KUBERNIX := $(SUDO) target/release/kubernix $(ARGS)
 CONTAINER_RUNTIME := sudo podman
-IMAGE := saschagrunert/kubernix
+IMAGE := docker.io/saschagrunert/kubernix
 RUN_DIR := $(shell pwd)/kubernix-run
 
 define nix-run
