@@ -75,12 +75,13 @@ Please make sure to follow the instructions output by the script.
 #### With the Container Runtime of your Choice
 
 It is also possible to run KuberNix in the container runtime of your choice. To
-do this, simply grab the latest image from `docker.io/saschagrunert/kubernix`.
+do this, simply grab the latest image from [`saschagrunert/kubernix`][40].
 Please note that running KuberNix inside a container image requires to run
-`privileged` mode and host networking. For example, we can run KuberNix with
-[podman][40] like this:
+`privileged` mode and `host` networking. For example, we can run KuberNix with
+[podman][41] like this:
 
-[40]: https://github.com/containers/libpod
+[40]: https://cloud.docker.com/u/saschagrunert/repository/docker/saschagrunert/kubernix
+[41]: https://github.com/containers/libpod
 
 ```
 $ sudo podman run \
@@ -142,7 +143,6 @@ the current one:
 ```
 > ls -1
 apiserver/
-cni/
 controllermanager/
 coredns/
 crio/
@@ -208,7 +208,7 @@ KuberNix has some configuration possibilities, which are currently:
 | CLI argument      | Description                                                | Default        | Environment Variable |
 | ----------------- | ---------------------------------------------------------- | -------------- | -------------------- |
 | `-r, --root`      | Path where all the runtime data is stored                  | `kubernix-run` | `KUBERNIX_ROOT`      |
-| `-a, --container` | Indicator that we're running inside a container            | `false`        | `KUBERNIX_CONTAINER` |
+| `-a, --container` | Indicator that KuberNix is running inside a container      | `false`        | `KUBERNIX_CONTAINER` |
 | `-l, --log-level` | Logging verbosity                                          | `info`         | `KUBERNIX_LOG_LEVEL` |
 | `-c, --cidr`      | CIDR used for the cluster network                          | `10.10.0.0/16` | `KUBERNIX_CIDR`      |
 | `-s, --shell`     | The shell executable to be used                            | `$SHELL`/`sh`  | `KUBERNIX_SHELL`     |

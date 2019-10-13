@@ -52,8 +52,8 @@ run: build-release
 	$(KUBERNIX)
 
 .PHONY: run-image
-run-image: build-image
-	$(CONTAINER_RUNTIME) run --privileged --net=host -it $(IMAGE)
+run-image:
+	$(CONTAINER_RUNTIME) run --rm --privileged --net=host -it $(IMAGE)
 
 .PHONY: shell
 shell: build-release
