@@ -10,7 +10,7 @@
 
 ## Kubernetes development cluster bootstrapping with Nix packages
 
-This project aims to provide you **single dependency**, [Kubernetes][1] clusters
+This project aims to provide you **single dependency** [Kubernetes][1] clusters
 for local testing, experimenting and development purposes.
 
 [1]: https://kubernetes.io
