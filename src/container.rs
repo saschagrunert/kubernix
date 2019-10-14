@@ -190,7 +190,7 @@ impl Container {
         ]
     }
 
-    /// Retrieve a prefix container name
+    /// Retrieve a prefixed container name
     fn prefixed_container_name(name: &str) -> String {
         format!("{}-{}", DEFAULT_ROOT, name)
     }
