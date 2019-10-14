@@ -27,7 +27,7 @@ impl ControllerManager {
 
         let mut process = Process::start(
             &dir,
-            "controller-manager",
+            "Controller Manager",
             "kube-controller-manager",
             &[
                 "--bind-address=0.0.0.0",

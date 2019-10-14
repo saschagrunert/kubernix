@@ -45,14 +45,14 @@ pub type ProcessState = Fallible<Started>;
 impl Process {
     /// Creates a new `Process` instance by spawning the provided command `cmd`.
     /// If the process creation fails, an `Error` will be returned.
-    pub fn start(dir: &Path, name: &str, command: &str, args: &[&str]) -> Fallible<Process> {
+    pub fn start(dir: &Path, identifier: &str, command: &str, args: &[&str]) -> Fallible<Process> {
         // Prepare the commands
         if command.is_empty() {
             bail!("No valid command provided")
         }
 
         // Prepare the log dir and file
-        let mut log_file = dir.join(name);
+        let mut log_file = dir.join(command);
         log_file.set_extension("log");
 
         let out_file = File::create(&log_file)?;
@@ -65,11 +65,18 @@ impl Process {
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file))
             .spawn()
-            .map_err(|e| format_err!("Unable to start process '{}' ({}): {}", name, command, e))?;
+            .map_err(|e| {
+                format_err!(
+                    "Unable to start process '{}' ({}): {}",
+                    identifier,
+                    command,
+                    e
+                )
+            })?;
 
         let (kill, killed) = bounded(1);
         let c = command.to_owned();
-        let n = name.to_owned();
+        let n = identifier.to_owned();
         let pid = child.id();
         let watch = spawn(move || {
             // Wait for the process to exit
@@ -103,9 +110,9 @@ impl Process {
             command: command.to_owned(),
             kill,
             log_file,
-            name: name.to_owned(),
+            name: identifier.to_owned(),
             pid,
-            readyness_timeout: 120,
+            readyness_timeout: 10,
             watch: Some(watch),
         })
     }
@@ -149,12 +156,12 @@ impl Process {
 impl Stoppable for Process {
     /// Stopping the process by killing it
     fn stop(&mut self) -> Fallible<()> {
-        debug!("Stopping process '{}' ({})", self.name, self.command);
+        debug!("Stopping process {} (via {})", self.name, self.command);
 
         // Indicate that this shutdown is intended
         self.kill.send(()).map_err(|e| {
             format_err!(
-                "Unable to send kill signal to process '{}' ({}): {}",
+                "Unable to send kill signal to process {} (via {}): {}",
                 self.name,
                 self.command,
                 e
@@ -167,10 +174,14 @@ impl Stoppable for Process {
         // Join the waiting thread
         if let Some(handle) = self.watch.take() {
             if handle.join().is_err() {
-                bail!("Unable to stop process '{}' ({})", self.name, self.command);
+                bail!(
+                    "Unable to stop process {} (via {})",
+                    self.name,
+                    self.command
+                );
             }
         }
-        debug!("Process '{}' ({}) stopped", self.name, self.command);
+        debug!("Process {} (via {}) stopped", self.name, self.command);
         Ok(())
     }
 }

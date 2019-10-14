@@ -1,5 +1,6 @@
 use crate::{
     config::Config,
+    container::Container,
     crio::Crio,
     kubeconfig::KubeConfig,
     network::Network,
@@ -23,10 +24,10 @@ impl Kubelet {
         pki: &Pki,
         kubeconfig: &KubeConfig,
     ) -> ProcessState {
-        let node_name = Node::name(node);
+        let node_name = Node::name(config, network, node);
         info!("Starting Kubelet ({})", node_name);
-
         const KUBELET: &str = "kubelet";
+
         let dir = config.root().join(KUBELET).join(&node_name);
         create_dir_all(&dir)?;
 
@@ -54,59 +55,40 @@ impl Kubelet {
             fs::write(&cfg, yml)?;
         }
 
-        let (cmd, mut args_vec) = if config.nodes() > 1 {
-            (
-                config.container_runtime().to_owned(),
-                vec![
-                    "exec",
-                    &node_name,
-                    "nix",
-                    "run",
-                    "-f",
-                    "/kubernix",
-                    "-c",
-                    KUBELET,
-                    &format!("--hostname-override={}", node_name),
-                ]
-                .into_iter()
-                .map(|x| x.to_owned())
-                .collect(),
-            )
+        let args = &[
+            "--container-runtime=remote",
+            &format!("--config={}", cfg.display()),
+            &format!("--root-dir={}", dir.join("run").display()),
+            &format!(
+                "--container-runtime-endpoint={}",
+                Crio::socket(config, network, node).to_socket_string(),
+            ),
+            &format!(
+                "--kubeconfig={}",
+                kubeconfig
+                    .kubelets()
+                    .get(node as usize)
+                    .ok_or_else(|| format_err!(
+                        "Unable to retrieve kubelet config for {}",
+                        node_name
+                    ))?
+                    .display()
+            ),
+            "--v=2",
+        ];
+
+        let mut process = if config.nodes() > 1 {
+            // Run inside a container
+            let arg_hostname = &format!("--hostname-override={}", node_name);
+            let mut modargs: Vec<&str> = vec![arg_hostname];
+            modargs.extend(args);
+            Container::exec(config, &dir, "Kubelet", KUBELET, &node_name, &modargs)?
         } else {
-            (KUBELET.to_owned(), vec![])
+            // Run as usual process
+            Process::start(&dir, "Kubelet", KUBELET, args)?
         };
-
-        args_vec.extend(
-            vec![
-                "--container-runtime=remote",
-                &format!("--config={}", cfg.display()),
-                &format!("--root-dir={}", dir.join("run").display()),
-                &format!(
-                    "--container-runtime-endpoint={}",
-                    Crio::socket(config, node).to_socket_string(),
-                ),
-                &format!(
-                    "--kubeconfig={}",
-                    kubeconfig
-                        .kubelets()
-                        .get(node as usize)
-                        .ok_or_else(|| format_err!(
-                            "Unable to retrieve kubelet config for {}",
-                            node_name
-                        ))?
-                        .display()
-                ),
-                "--v=2",
-            ]
-            .into_iter()
-            .map(|x| x.to_owned())
-            .collect::<Vec<String>>(),
-        );
-        let args = args_vec.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
-
-        let mut process = Process::start(&dir, KUBELET, &cmd, &args)?;
-
         process.wait_ready("Successfully registered node")?;
+
         info!("Kubelet is ready ({})", node_name);
         Ok(Box::new(Self { process }))
     }

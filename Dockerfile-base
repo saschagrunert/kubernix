@@ -1,5 +1,0 @@
-# vim: set syntax=dockerfile:
-FROM nixos/nix:latest
-COPY nix /kubernix
-RUN nix run -f /kubernix -c echo done
-ENTRYPOINT [ "nix", "run", "-f", "/kubernix", "-c" ]

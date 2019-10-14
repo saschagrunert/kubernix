@@ -19,10 +19,6 @@ build:
 build-image:
 	$(CONTAINER_RUNTIME) build -t $(IMAGE) .
 
-.PHONY: build-image-base
-build-image-base:
-	$(CONTAINER_RUNTIME) build -f Dockerfile-base -t $(IMAGE):base .
-
 .PHONY: build-release
 build-release:
 	$(call nix-run,cargo build --release)
@@ -59,12 +55,16 @@ run: build-release
 .PHONY: run-image
 run-image:
 	mkdir -p $(RUN_DIR)
+	if [ -d /dev/mapper ]; then \
+		DEV_MAPPER=-v/dev/mapper:/dev/mapper ;\
+	fi ;\
 	$(CONTAINER_RUNTIME) run \
 		-v $(RUN_DIR):/kubernix-run \
 		--rm \
 		--privileged \
 		--net=host \
-		-it $(IMAGE)
+		$$DEV_MAPPER \
+		-it $(IMAGE) $(ARGS)
 
 .PHONY: shell
 shell: build-release

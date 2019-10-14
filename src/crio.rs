@@ -1,4 +1,5 @@
 use crate::{
+    container::Container,
     network::Network,
     node::Node,
     process::{Process, ProcessState, Stoppable},
@@ -40,7 +41,7 @@ const CRIO: &str = "crio";
 
 impl Crio {
     pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
-        let node_name = Node::name(node);
+        let node_name = Node::name(config, network, node);
         info!("Starting CRI-O ({})", node_name);
 
         let conmon = System::find_executable("conmon")?;
@@ -49,9 +50,8 @@ impl Crio {
             .parent()
             .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
 
-        let dir = Self::path(config, node);
+        let dir = Self::path(config, network, node);
         let crio_config = dir.join("crio.conf");
-        let policy_json = dir.join("policy.json");
         let cni = dir.join("cni");
 
         if !dir.exists() {
@@ -82,65 +82,42 @@ impl Crio {
 
             // Pseudo config to not load local configuration values
             fs::write(&crio_config, "")?;
-            fs::write(&policy_json, include_str!("assets/policy.json"))?;
         }
-        let socket = Self::socket(config, node);
+        let socket = Self::socket(config, network, node);
 
-        let (cmd, mut args_vec) = if config.nodes() > 1 {
-            (
-                config.container_runtime().to_owned(),
-                vec![
-                    "run",
-                    "--rm",
-                    "--net=host",
-                    "--privileged",
-                    &format!(
-                        "--storage-driver={}",
-                        if config.container() { "vfs" } else { "" }
-                    ),
-                    &format!("--hostname={}", node_name),
-                    &format!("--name={}", node_name),
-                    &format!("-v={v}:{v}", v = config.root().display()),
-                    "docker.io/saschagrunert/kubernix:base",
-                    CRIO,
-                    "--storage-driver=vfs",
-                ]
-                .into_iter()
-                .map(|x| x.to_owned())
-                .collect(),
-            )
+        let args = &[
+            "--log-level=debug",
+            "--registry=docker.io",
+            &format!("--config={}", crio_config.display()),
+            &format!("--conmon={}", conmon.display()),
+            &format!("--listen={}", socket),
+            &format!("--root={}", dir.join("storage").display()),
+            &format!("--runroot={}", dir.join("run").display()),
+            &format!("--cni-config-dir={}", cni.display()),
+            &format!("--cni-plugin-dir={}", cni_plugin.display()),
+            &format!(
+                "--signature-policy={}",
+                Container::policy_json(config).display()
+            ),
+            &format!(
+                "--runtimes=local-runc:{}:{}",
+                System::find_executable("runc")?.display(),
+                dir.join("runc").display()
+            ),
+            "--default-runtime=local-runc",
+        ];
+
+        let mut process = if config.nodes() > 1 {
+            // Run inside a container
+            let mut modargs = vec!["--storage-driver=vfs"];
+            modargs.extend(args);
+            Container::start(config, &dir, "CRI-O", CRIO, &node_name, &modargs)?
         } else {
-            (CRIO.to_owned(), vec![])
+            // Run as usual process
+            Process::start(&dir, "CRI-O", CRIO, args)?
         };
-
-        args_vec.extend(
-            vec![
-                "--log-level=debug",
-                "--registry=docker.io",
-                &format!("--config={}", crio_config.display()),
-                &format!("--conmon={}", conmon.display()),
-                &format!("--listen={}", socket),
-                &format!("--root={}", dir.join("storage").display()),
-                &format!("--runroot={}", dir.join("run").display()),
-                &format!("--cni-config-dir={}", cni.display()),
-                &format!("--cni-plugin-dir={}", cni_plugin.display()),
-                &format!("--signature-policy={}", policy_json.display()),
-                &format!(
-                    "--runtimes=local-runc:{}:{}",
-                    System::find_executable("runc")?.display(),
-                    dir.join("runc").display()
-                ),
-                "--default-runtime=local-runc",
-            ]
-            .into_iter()
-            .map(|x| x.to_owned())
-            .collect::<Vec<String>>(),
-        );
-        let args = args_vec.iter().map(|x| x.as_str()).collect::<Vec<&str>>();
-
-        let mut process = Process::start(&dir, CRIO, &cmd, &args)?;
-
         process.wait_ready("sandboxes:")?;
+
         info!("CRI-O is ready ({})", node_name);
         Ok(Box::new(Self {
             process,
@@ -150,13 +127,16 @@ impl Crio {
     }
 
     /// Retrieve the CRI socket
-    pub fn socket(config: &Config, node: u8) -> CriSocket {
-        CriSocket(Self::path(config, node).join("crio.sock"))
+    pub fn socket(config: &Config, network: &Network, node: u8) -> CriSocket {
+        CriSocket(Self::path(config, network, node).join("crio.sock"))
     }
 
     /// Retrieve the working path for the node
-    fn path(config: &Config, node: u8) -> PathBuf {
-        config.root().join(CRIO).join(Node::name(node))
+    fn path(config: &Config, network: &Network, node: u8) -> PathBuf {
+        config
+            .root()
+            .join(CRIO)
+            .join(Node::name(config, network, node))
     }
 
     /// Remove all containers via crictl invocations

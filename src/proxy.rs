@@ -32,7 +32,7 @@ impl Proxy {
 
         let mut process = Process::start(
             &dir,
-            "proxy",
+            "Proxy",
             "kube-proxy",
             &[&format!("--config={}", cfg.display())],
         )?;

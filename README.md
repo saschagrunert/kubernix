@@ -10,9 +10,8 @@
 
 ## Kubernetes development cluster bootstrapping with Nix packages
 
-This project aims to provide you **single dependency**, single node
-[Kubernetes][1] clusters for local testing, experimenting and development
-purposes.
+This project aims to provide you **single dependency**, [Kubernetes][1] clusters
+for local testing, experimenting and development purposes.
 
 [1]: https://kubernetes.io
 
@@ -220,6 +219,10 @@ KuberNix has some configuration possibilities, which are currently:
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
 up over the necessary cluster components.
+
+#### Multinode Support
+
+TBD
 
 #### Overlays
 

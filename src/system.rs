@@ -50,7 +50,7 @@ impl System {
                     })
                     .next()
             })
-            .ok_or_else(|| format_err!("Unable to find {} in $PATH", name))
+            .ok_or_else(|| format_err!("Unable to find executable '{}' in $PATH", name))
     }
 
     /// Return the full path to the default system shell

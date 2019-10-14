@@ -33,7 +33,7 @@ impl ApiServer {
 
         let mut process = Process::start(
             &dir,
-            "apiserver",
+            "API Server",
             "kube-apiserver",
             &[
                 "--allow-privileged=true",

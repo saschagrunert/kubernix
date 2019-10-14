@@ -1,7 +1,6 @@
 use crate::{network::Network, node::Node, Config};
 use failure::{bail, format_err, Fallible};
 use getset::Getters;
-use hostname::get_hostname;
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
 use std::{
@@ -92,9 +91,10 @@ const SERVICE_ACCOUNT_NAME: &str = "service-account";
 
 impl Pki {
     pub fn new(config: &Config, network: &Network) -> Fallible<Pki> {
-        let host = &get_hostname().ok_or_else(|| format_err!("Unable to get hostname"))?;
         let dir = &config.root().join("pki");
-        let nodes = (0..config.nodes()).map(Node::name).collect::<Vec<String>>();
+        let nodes = (0..config.nodes())
+            .map(|n| Node::name(config, network, n))
+            .collect::<Vec<String>>();
 
         // Create the CA only if necessary
         if dir.exists() {
@@ -108,7 +108,11 @@ impl Pki {
                     .collect()
             } else {
                 // Single node gets identified via its hostname
-                vec![Idendity::new(dir, host, &Self::node_user(host))]
+                vec![Idendity::new(
+                    dir,
+                    network.hostname(),
+                    &Self::node_user(network.hostname()),
+                )]
             };
 
             Ok(Pki {
@@ -134,7 +138,7 @@ impl Pki {
             let mut hostnames = vec![
                 network.api()?.to_string(),
                 Ipv4Addr::LOCALHOST.to_string(),
-                host.to_owned(),
+                network.hostname().to_owned(),
                 "kubernetes".to_owned(),
                 "kubernetes.default".to_owned(),
                 "kubernetes.default.svc".to_owned(),
@@ -158,7 +162,7 @@ impl Pki {
                     .collect::<Result<Vec<_>, _>>()?
             } else {
                 // Single node gets identified via its hostname
-                vec![Self::setup_kubelet(pki_config, host)?]
+                vec![Self::setup_kubelet(pki_config, network.hostname())?]
             };
 
             Ok(Pki {
