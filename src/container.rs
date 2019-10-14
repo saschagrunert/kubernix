@@ -37,15 +37,15 @@ impl Container {
         }
 
         // Add podman specific arguments
-        let mut podman_args = vec![];
+        let mut args = vec![];
         if config.container_runtime() == PODMAN {
-            podman_args.extend(Self::default_podman_args(config));
-            podman_args.push(format!("--signature-policy={}", policy_json.display()));
+            args.extend(Self::default_podman_args(config));
+            args.push(format!("--signature-policy={}", policy_json.display()));
         }
 
         // Run the build
         System::find_executable(config.container_runtime())?;
-        let mut args = vec!["build".to_owned()];
+        args.push("build".to_owned());
         args.extend(podman_args);
         args.extend(vec![
             "-t".to_owned(),
@@ -190,7 +190,7 @@ impl Container {
         ]
     }
 
-    /// Retriea a prefix container name
+    /// Retrieve a prefix container name
     fn prefixed_container_name(name: &str) -> String {
         format!("{}-{}", DEFAULT_ROOT, name)
     }
