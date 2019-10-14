@@ -128,11 +128,7 @@ impl Kubernix {
         let mut builder = Builder::new();
         builder
             .format_timestamp(None)
-            .format_module_path(if config.log_level() > LevelFilter::Info {
-                true
-            } else {
-                false
-            })
+            .format_module_path(config.log_level() > LevelFilter::Info)
             .filter(None, config.log_level())
             .try_init()?;
 
