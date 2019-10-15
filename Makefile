@@ -51,9 +51,15 @@ lint-rustfmt:
 nix:
 	$(call nix-run-pure,$(shell which bash))
 
+.PHONY: nixdeps
+nixdeps:
+	@nix-instantiate nix 2> /dev/null \
+		| sed -n 's;/nix/store/[[:alnum:]]\{32\}-\(.*\)-\(.*\).drv\(!bin\)\{0,1\};\1 (\2);p' \
+		| sort
+
 .PHONY: nixpkgs
 nixpkgs:
-	nix run -f channel:nixpkgs-unstable nix-prefetch-git -c nix-prefetch-git \
+	@nix run -f channel:nixpkgs-unstable nix-prefetch-git -c nix-prefetch-git \
 		--no-deepClone https://github.com/nixos/nixpkgs > nix/nixpkgs.json
 
 .PHONY: run
