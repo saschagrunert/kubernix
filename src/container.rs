@@ -46,7 +46,6 @@ impl Container {
         // Run the build
         System::find_executable(config.container_runtime())?;
         args.push("build".to_owned());
-        args.extend(podman_args);
         args.extend(vec![
             "-t".to_owned(),
             DEFAULT_IMAGE.to_owned(),
