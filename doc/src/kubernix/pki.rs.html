@@ -354,11 +354,39 @@
 <span id="354">354</span>
 <span id="355">355</span>
 <span id="356">356</span>
+<span id="357">357</span>
+<span id="358">358</span>
+<span id="359">359</span>
+<span id="360">360</span>
+<span id="361">361</span>
+<span id="362">362</span>
+<span id="363">363</span>
+<span id="364">364</span>
+<span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+<span id="375">375</span>
+<span id="376">376</span>
+<span id="377">377</span>
+<span id="378">378</span>
+<span id="379">379</span>
+<span id="380">380</span>
+<span id="381">381</span>
+<span id="382">382</span>
+<span id="383">383</span>
+<span id="384">384</span>
+<span id="385">385</span>
 </pre><div class="example-wrap"><pre class="rust ">
-<span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">network</span>::<span class="ident">Network</span>, <span class="ident">Config</span>};
+<span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">network</span>::<span class="ident">Network</span>, <span class="ident">node</span>::<span class="ident">Node</span>, <span class="ident">Config</span>};
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
 <span class="kw">use</span> <span class="ident">getset</span>::<span class="ident">Getters</span>;
-<span class="kw">use</span> <span class="ident">hostname</span>::<span class="ident">get_hostname</span>;
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">info</span>};
 <span class="kw">use</span> <span class="ident">serde_json</span>::{<span class="ident">json</span>, <span class="ident">to_string_pretty</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
@@ -383,7 +411,7 @@
     <span class="ident">controller_manager</span>: <span class="ident">Idendity</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">kubelet</span>: <span class="ident">Idendity</span>,
+    <span class="ident">kubelets</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">Idendity</span><span class="op">&gt;</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">proxy</span>: <span class="ident">Idendity</span>,
@@ -415,8 +443,8 @@
         <span class="ident">Idendity</span> {
             <span class="ident">cert</span>: <span class="ident">dir</span>.<span class="ident">join</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;{}.pem&quot;</span>, <span class="ident">name</span>)),
             <span class="ident">key</span>: <span class="ident">dir</span>.<span class="ident">join</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;{}-key.pem&quot;</span>, <span class="ident">name</span>)),
-            <span class="ident">name</span>: <span class="ident">name</span>.<span class="ident">to_owned</span>(),
-            <span class="ident">user</span>: <span class="ident">user</span>.<span class="ident">to_owned</span>(),
+            <span class="ident">name</span>: <span class="ident">name</span>.<span class="ident">into</span>(),
+            <span class="ident">user</span>: <span class="ident">user</span>.<span class="ident">into</span>(),
         }
     }
 }
@@ -449,12 +477,29 @@
 
 <span class="kw">impl</span> <span class="ident">Pki</span> {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="ident">Pki</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">host</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">get_hostname</span>().<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to get hostname&quot;</span>))<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="string">&quot;pki&quot;</span>);
+        <span class="kw">let</span> <span class="ident">nodes</span> <span class="op">=</span> (<span class="number">0</span>..<span class="ident">config</span>.<span class="ident">nodes</span>())
+            .<span class="ident">map</span>(<span class="op">|</span><span class="ident">n</span><span class="op">|</span> <span class="ident">Node</span>::<span class="ident">name</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">n</span>))
+            .<span class="ident">collect</span>::<span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;&gt;</span>();
 
         <span class="comment">// Create the CA only if necessary</span>
         <span class="kw">if</span> <span class="ident">dir</span>.<span class="ident">exists</span>() {
             <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;PKI directory already exists, skipping generation&quot;</span>);
+
+            <span class="kw">let</span> <span class="ident">kubelets</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> {
+                <span class="comment">// Multiple nodes get identified via their node name</span>
+                <span class="ident">nodes</span>
+                    .<span class="ident">iter</span>()
+                    .<span class="ident">map</span>(<span class="op">|</span><span class="ident">n</span><span class="op">|</span> <span class="ident">Idendity</span>::<span class="ident">new</span>(<span class="ident">dir</span>, <span class="ident">n</span>, <span class="kw-2">&amp;</span><span class="self">Self</span>::<span class="ident">node_user</span>(<span class="ident">n</span>)))
+                    .<span class="ident">collect</span>()
+            } <span class="kw">else</span> {
+                <span class="comment">// Single node gets identified via its hostname</span>
+                <span class="macro">vec</span><span class="macro">!</span>[<span class="ident">Idendity</span>::<span class="ident">new</span>(
+                    <span class="ident">dir</span>,
+                    <span class="ident">network</span>.<span class="ident">hostname</span>(),
+                    <span class="kw-2">&amp;</span><span class="self">Self</span>::<span class="ident">node_user</span>(<span class="ident">network</span>.<span class="ident">hostname</span>()),
+                )]
+            };
 
             <span class="prelude-val">Ok</span>(<span class="ident">Pki</span> {
                 <span class="ident">admin</span>: <span class="ident">Idendity</span>::<span class="ident">new</span>(<span class="ident">dir</span>, <span class="ident">ADMIN_NAME</span>, <span class="ident">ADMIN_NAME</span>),
@@ -465,7 +510,7 @@
                     <span class="ident">CONTROLLER_MANAGER_NAME</span>,
                     <span class="ident">CONTROLLER_MANAGER_USER</span>,
                 ),
-                <span class="ident">kubelet</span>: <span class="ident">Idendity</span>::<span class="ident">new</span>(<span class="ident">dir</span>, <span class="kw-2">&amp;</span><span class="ident">host</span>, <span class="kw-2">&amp;</span><span class="self">Self</span>::<span class="ident">node_user</span>(<span class="kw-2">&amp;</span><span class="ident">host</span>)),
+                <span class="ident">kubelets</span>,
                 <span class="ident">proxy</span>: <span class="ident">Idendity</span>::<span class="ident">new</span>(<span class="ident">dir</span>, <span class="ident">PROXY_NAME</span>, <span class="ident">PROXY_USER</span>),
                 <span class="ident">scheduler</span>: <span class="ident">Idendity</span>::<span class="ident">new</span>(<span class="ident">dir</span>, <span class="ident">SCHEDULER_NAME</span>, <span class="ident">SCHEDULER_USER</span>),
                 <span class="ident">service_account</span>: <span class="ident">Idendity</span>::<span class="ident">new</span>(<span class="ident">dir</span>, <span class="ident">SERVICE_ACCOUNT_NAME</span>, <span class="ident">SERVICE_ACCOUNT_NAME</span>),
@@ -476,16 +521,18 @@
             <span class="kw">let</span> <span class="ident">ca_config</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">write_ca_config</span>(<span class="ident">dir</span>)<span class="question-mark">?</span>;
             <span class="kw">let</span> <span class="ident">ca</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">setup_ca</span>(<span class="ident">dir</span>)<span class="question-mark">?</span>;
 
-            <span class="kw">let</span> <span class="ident">hostnames</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">hostnames</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[
                 <span class="ident">network</span>.<span class="ident">api</span>()<span class="question-mark">?</span>.<span class="ident">to_string</span>(),
                 <span class="ident">Ipv4Addr</span>::<span class="ident">LOCALHOST</span>.<span class="ident">to_string</span>(),
-                <span class="ident">host</span>.<span class="ident">to_owned</span>(),
-                <span class="string">&quot;kubernetes&quot;</span>.<span class="ident">to_owned</span>(),
-                <span class="string">&quot;kubernetes.default&quot;</span>.<span class="ident">to_owned</span>(),
-                <span class="string">&quot;kubernetes.default.svc&quot;</span>.<span class="ident">to_owned</span>(),
-                <span class="string">&quot;kubernetes.default.svc.cluster&quot;</span>.<span class="ident">to_owned</span>(),
-                <span class="string">&quot;kubernetes.svc.cluster.local&quot;</span>.<span class="ident">to_owned</span>(),
+                <span class="ident">network</span>.<span class="ident">hostname</span>().<span class="ident">into</span>(),
+                <span class="string">&quot;kubernetes&quot;</span>.<span class="ident">into</span>(),
+                <span class="string">&quot;kubernetes.default&quot;</span>.<span class="ident">into</span>(),
+                <span class="string">&quot;kubernetes.default.svc&quot;</span>.<span class="ident">into</span>(),
+                <span class="string">&quot;kubernetes.default.svc.cluster&quot;</span>.<span class="ident">into</span>(),
+                <span class="string">&quot;kubernetes.svc.cluster.local&quot;</span>.<span class="ident">into</span>(),
             ];
+            <span class="ident">hostnames</span>.<span class="ident">extend</span>(<span class="ident">nodes</span>.<span class="ident">clone</span>());
+
             <span class="kw">let</span> <span class="ident">pki_config</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="ident">PkiConfig</span> {
                 <span class="ident">dir</span>,
                 <span class="ident">ca</span>: <span class="kw-2">&amp;</span><span class="ident">ca</span>,
@@ -493,11 +540,22 @@
                 <span class="ident">hostnames</span>: <span class="kw-2">&amp;</span><span class="ident">hostnames</span>.<span class="ident">join</span>(<span class="string">&quot;,&quot;</span>),
             };
 
+            <span class="kw">let</span> <span class="ident">kubelets</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> {
+                <span class="comment">// Multiple nodes get identified via their node name</span>
+                <span class="ident">nodes</span>
+                    .<span class="ident">iter</span>()
+                    .<span class="ident">map</span>(<span class="op">|</span><span class="ident">n</span><span class="op">|</span> <span class="self">Self</span>::<span class="ident">setup_kubelet</span>(<span class="ident">pki_config</span>, <span class="ident">n</span>))
+                    .<span class="ident">collect</span>::<span class="op">&lt;</span><span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;</span>, <span class="kw">_</span><span class="op">&gt;&gt;</span>()<span class="question-mark">?</span>
+            } <span class="kw">else</span> {
+                <span class="comment">// Single node gets identified via its hostname</span>
+                <span class="macro">vec</span><span class="macro">!</span>[<span class="self">Self</span>::<span class="ident">setup_kubelet</span>(<span class="ident">pki_config</span>, <span class="ident">network</span>.<span class="ident">hostname</span>())<span class="question-mark">?</span>]
+            };
+
             <span class="prelude-val">Ok</span>(<span class="ident">Pki</span> {
                 <span class="ident">admin</span>: <span class="self">Self</span>::<span class="ident">setup_admin</span>(<span class="ident">pki_config</span>)<span class="question-mark">?</span>,
                 <span class="ident">apiserver</span>: <span class="self">Self</span>::<span class="ident">setup_apiserver</span>(<span class="ident">pki_config</span>)<span class="question-mark">?</span>,
                 <span class="ident">controller_manager</span>: <span class="self">Self</span>::<span class="ident">setup_controller_manager</span>(<span class="ident">pki_config</span>)<span class="question-mark">?</span>,
-                <span class="ident">kubelet</span>: <span class="self">Self</span>::<span class="ident">setup_kubelet</span>(<span class="ident">pki_config</span>, <span class="kw-2">&amp;</span><span class="ident">host</span>)<span class="question-mark">?</span>,
+                <span class="ident">kubelets</span>,
                 <span class="ident">proxy</span>: <span class="self">Self</span>::<span class="ident">setup_proxy</span>(<span class="ident">pki_config</span>)<span class="question-mark">?</span>,
                 <span class="ident">scheduler</span>: <span class="self">Self</span>::<span class="ident">setup_scheduler</span>(<span class="ident">pki_config</span>)<span class="question-mark">?</span>,
                 <span class="ident">service_account</span>: <span class="self">Self</span>::<span class="ident">setup_service_account</span>(<span class="ident">pki_config</span>)<span class="question-mark">?</span>,

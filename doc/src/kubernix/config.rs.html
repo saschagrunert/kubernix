@@ -258,9 +258,33 @@
 <span id="258">258</span>
 <span id="259">259</span>
 <span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
+<span id="273">273</span>
+<span id="274">274</span>
+<span id="275">275</span>
+<span id="276">276</span>
+<span id="277">277</span>
+<span id="278">278</span>
+<span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
-<span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">system</span>::<span class="ident">System</span>;
+<span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">system</span>::<span class="ident">System</span>, <span class="ident">PODMAN</span>};
 <span class="kw">use</span> <span class="ident">clap</span>::{<span class="ident">crate_version</span>, <span class="ident">AppSettings</span>, <span class="ident">Clap</span>};
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">format_err</span>, <span class="ident">Fallible</span>};
 <span class="kw">use</span> <span class="ident">getset</span>::{<span class="ident">CopyGetters</span>, <span class="ident">Getters</span>};
@@ -361,8 +385,30 @@
         <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;s&quot;</span>,
         <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;SHELL&quot;</span>
     )]</span>
-    <span class="doccomment">/// The shell executable to be used, defaults to $SHELL, fallback is &#39;sh&#39;</span>
+    <span class="doccomment">/// The shell executable to be used, defaults to $SHELL, fallback is `sh`</span>
     <span class="ident">shell</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>,
+
+    <span class="attribute">#[<span class="ident">get_copy</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
+    <span class="attribute">#[<span class="ident">clap</span>(
+        <span class="ident">default_value</span> <span class="op">=</span> <span class="string">&quot;1&quot;</span>,
+        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_NODES&quot;</span>,
+        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;nodes&quot;</span>,
+        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;n&quot;</span>,
+        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;NODES&quot;</span>
+    )]</span>
+    <span class="doccomment">/// The number of nodes to be registered</span>
+    <span class="ident">nodes</span>: <span class="ident">u8</span>,
+
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
+    <span class="attribute">#[<span class="ident">clap</span>(
+        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_CONTAINER_RUNTIME&quot;</span>,
+        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;container-runtime&quot;</span>,
+        <span class="ident">raw</span>(<span class="ident">default_value</span> <span class="op">=</span> <span class="string">&quot;PODMAN&quot;</span>),
+        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;u&quot;</span>,
+        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;RUNTIME&quot;</span>
+    )]</span>
+    <span class="doccomment">/// The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1`</span>
+    <span class="ident">container_runtime</span>: <span class="ident">String</span>,
 }
 
 <span class="doccomment">/// Possible subcommands</span>
@@ -427,7 +473,7 @@
             .<span class="ident">shell</span>()
             .<span class="ident">as_ref</span>()
             .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;No shell set&quot;</span>))<span class="question-mark">?</span>;
-        <span class="prelude-val">Ok</span>(<span class="ident">shell</span>.<span class="ident">to_owned</span>())
+        <span class="prelude-val">Ok</span>(<span class="ident">shell</span>.<span class="ident">into</span>())
     }
 
     <span class="kw">fn</span> <span class="ident">create_root_dir</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
@@ -496,11 +542,13 @@
         <span class="ident">fs</span>::<span class="ident">write</span>(
             <span class="ident">c</span>.<span class="ident">root</span>.<span class="ident">join</span>(<span class="ident">Config</span>::<span class="ident">FILENAME</span>),
             <span class="string">r#&quot;
-root = &quot;root&quot;
-log-level = &quot;DEBUG&quot;
 cidr = &quot;1.1.1.1/16&quot;
-packages = []
+container-runtime = &quot;podman&quot;
 container = false
+log-level = &quot;DEBUG&quot;
+nodes = 1
+packages = []
+root = &quot;root&quot;
             &quot;#</span>,
         )<span class="question-mark">?</span>;
         <span class="ident">c</span>.<span class="ident">try_load_file</span>()<span class="question-mark">?</span>;

@@ -204,44 +204,29 @@
 <span id="204">204</span>
 <span id="205">205</span>
 <span id="206">206</span>
-<span id="207">207</span>
-<span id="208">208</span>
-<span id="209">209</span>
-<span id="210">210</span>
-<span id="211">211</span>
-<span id="212">212</span>
-<span id="213">213</span>
-<span id="214">214</span>
-<span id="215">215</span>
-<span id="216">216</span>
-<span id="217">217</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{
+    <span class="ident">container</span>::<span class="ident">Container</span>,
     <span class="ident">network</span>::<span class="ident">Network</span>,
+    <span class="ident">node</span>::<span class="ident">Node</span>,
     <span class="ident">process</span>::{<span class="ident">Process</span>, <span class="ident">ProcessState</span>, <span class="ident">Stoppable</span>},
     <span class="ident">system</span>::<span class="ident">System</span>,
     <span class="ident">Config</span>, <span class="ident">RUNTIME_ENV</span>,
 };
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">info</span>};
-<span class="kw">use</span> <span class="ident">nix</span>::{
-    <span class="ident">sys</span>::<span class="ident">signal</span>::{<span class="ident">kill</span>, <span class="ident">Signal</span>},
-    <span class="ident">unistd</span>::<span class="ident">Pid</span>,
-};
-<span class="kw">use</span> <span class="ident">psutil</span>::<span class="ident">process</span>;
 <span class="kw">use</span> <span class="ident">serde_json</span>::{<span class="ident">json</span>, <span class="ident">to_string_pretty</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">fmt</span>::{<span class="ident">Display</span>, <span class="ident">Formatter</span>, <span class="prelude-ty">Result</span>},
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">create_dir_all</span>},
     <span class="ident">path</span>::<span class="ident">PathBuf</span>,
     <span class="ident">process</span>::<span class="ident">Command</span>,
-    <span class="ident">thread</span>::<span class="ident">sleep</span>,
-    <span class="ident">time</span>::{<span class="ident">Duration</span>, <span class="ident">Instant</span>},
 };
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Crio</span> {
     <span class="ident">process</span>: <span class="ident">Process</span>,
     <span class="ident">socket</span>: <span class="ident">CriSocket</span>,
+    <span class="ident">node_name</span>: <span class="ident">String</span>,
 }
 
 <span class="doccomment">/// Simple CRI socket abstraction</span>
@@ -259,9 +244,12 @@
     }
 }
 
+<span class="kw">const</span> <span class="ident">CRIO</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;crio&quot;</span>;
+
 <span class="kw">impl</span> <span class="ident">Crio</span> {
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>) <span class="op">-&gt;</span> <span class="ident">ProcessState</span> {
-        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Starting CRI-O&quot;</span>);
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">node</span>: <span class="ident">u8</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>) <span class="op">-&gt;</span> <span class="ident">ProcessState</span> {
+        <span class="kw">let</span> <span class="ident">node_name</span> <span class="op">=</span> <span class="ident">Node</span>::<span class="ident">name</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>);
+        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Starting CRI-O ({})&quot;</span>, <span class="ident">node_name</span>);
 
         <span class="kw">let</span> <span class="ident">conmon</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;conmon&quot;</span>)<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">loopback</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;loopback&quot;</span>)<span class="question-mark">?</span>;
@@ -269,120 +257,100 @@
             .<span class="ident">parent</span>()
             .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to find CNI plugin dir&quot;</span>))<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">path</span>(<span class="ident">config</span>);
+        <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">path</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>);
         <span class="kw">let</span> <span class="ident">crio_config</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;crio.conf&quot;</span>);
-        <span class="kw">let</span> <span class="ident">policy_json</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;policy.json&quot;</span>);
         <span class="kw">let</span> <span class="ident">cni</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;cni&quot;</span>);
 
         <span class="kw">if</span> <span class="op">!</span><span class="ident">dir</span>.<span class="ident">exists</span>() {
             <span class="ident">create_dir_all</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>)<span class="question-mark">?</span>;
             <span class="ident">create_dir_all</span>(<span class="kw-2">&amp;</span><span class="ident">cni</span>)<span class="question-mark">?</span>;
 
+            <span class="kw">let</span> <span class="ident">cidr</span> <span class="op">=</span> <span class="ident">network</span>
+                .<span class="ident">crio_cidrs</span>()
+                .<span class="ident">get</span>(<span class="ident">node</span> <span class="kw">as</span> <span class="ident">usize</span>)
+                .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to find CIDR for {}&quot;</span>, <span class="ident">node_name</span>))<span class="question-mark">?</span>;
             <span class="ident">fs</span>::<span class="ident">write</span>(
                 <span class="ident">cni</span>.<span class="ident">join</span>(<span class="string">&quot;10-bridge.json&quot;</span>),
                 <span class="ident">to_string_pretty</span>(<span class="kw-2">&amp;</span><span class="macro">json</span><span class="macro">!</span>({
                     <span class="string">&quot;cniVersion&quot;</span>: <span class="string">&quot;0.3.1&quot;</span>,
-                    <span class="string">&quot;name&quot;</span>: <span class="string">&quot;crio-kubernix&quot;</span>,
+                    <span class="string">&quot;name&quot;</span>: <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;kubernix-{}&quot;</span>, <span class="ident">node_name</span>),
                     <span class="string">&quot;type&quot;</span>: <span class="string">&quot;bridge&quot;</span>,
-                    <span class="string">&quot;bridge&quot;</span>:  <span class="ident">Network</span>::<span class="ident">INTERFACE</span>,
+                    <span class="string">&quot;bridge&quot;</span>: <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;{}.{}&quot;</span>, <span class="ident">Network</span>::<span class="ident">INTERFACE_PREFIX</span>, <span class="ident">node</span>),
                     <span class="string">&quot;isGateway&quot;</span>: <span class="bool-val">true</span>,
                     <span class="string">&quot;ipMasq&quot;</span>: <span class="bool-val">true</span>,
                     <span class="string">&quot;hairpinMode&quot;</span>: <span class="bool-val">true</span>,
                     <span class="string">&quot;ipam&quot;</span>: {
                         <span class="string">&quot;type&quot;</span>: <span class="string">&quot;host-local&quot;</span>,
                         <span class="string">&quot;routes&quot;</span>: [{ <span class="string">&quot;dst&quot;</span>: <span class="string">&quot;0.0.0.0/0&quot;</span> }],
-                        <span class="string">&quot;ranges&quot;</span>: [[{ <span class="string">&quot;subnet&quot;</span>: <span class="ident">network</span>.<span class="ident">crio_cidr</span>() }]]
+                        <span class="string">&quot;ranges&quot;</span>: [[{ <span class="string">&quot;subnet&quot;</span>: <span class="ident">cidr</span> }]]
                     }
-                }))<span class="question-mark">?</span>,
-            )<span class="question-mark">?</span>;
-
-            <span class="ident">fs</span>::<span class="ident">write</span>(
-                <span class="kw-2">&amp;</span><span class="ident">policy_json</span>,
-                <span class="ident">to_string_pretty</span>(<span class="kw-2">&amp;</span><span class="macro">json</span><span class="macro">!</span>({
-                    <span class="string">&quot;default&quot;</span>: [{ <span class="string">&quot;type&quot;</span>: <span class="string">&quot;insecureAcceptAnything&quot;</span> }]
                 }))<span class="question-mark">?</span>,
             )<span class="question-mark">?</span>;
 
             <span class="comment">// Pseudo config to not load local configuration values</span>
             <span class="ident">fs</span>::<span class="ident">write</span>(<span class="kw-2">&amp;</span><span class="ident">crio_config</span>, <span class="string">&quot;&quot;</span>)<span class="question-mark">?</span>;
         }
-        <span class="kw">let</span> <span class="ident">socket</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">socket</span>(<span class="ident">config</span>);
+        <span class="kw">let</span> <span class="ident">socket</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">socket</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>);
 
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">process</span> <span class="op">=</span> <span class="ident">Process</span>::<span class="ident">start</span>(
-            <span class="kw-2">&amp;</span><span class="ident">dir</span>,
-            <span class="string">&quot;crio&quot;</span>,
-            <span class="kw-2">&amp;</span>[
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--config={}&quot;</span>, <span class="ident">crio_config</span>.<span class="ident">display</span>()),
-                <span class="string">&quot;--log-level=debug&quot;</span>,
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
-                    <span class="string">&quot;--storage-driver={}&quot;</span>,
-                    <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">container</span>() { <span class="string">&quot;vfs&quot;</span> } <span class="kw">else</span> { <span class="string">&quot;overlay&quot;</span> }
-                ),
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--conmon={}&quot;</span>, <span class="ident">conmon</span>.<span class="ident">display</span>()),
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--listen={}&quot;</span>, <span class="ident">socket</span>),
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--root={}&quot;</span>, <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;storage&quot;</span>).<span class="ident">display</span>()),
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--runroot={}&quot;</span>, <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;run&quot;</span>).<span class="ident">display</span>()),
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--cni-config-dir={}&quot;</span>, <span class="ident">cni</span>.<span class="ident">display</span>()),
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--cni-plugin-dir={}&quot;</span>, <span class="ident">cni_plugin</span>.<span class="ident">display</span>()),
-                <span class="string">&quot;--registry=docker.io&quot;</span>,
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--signature-policy={}&quot;</span>, <span class="ident">policy_json</span>.<span class="ident">display</span>()),
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
-                    <span class="string">&quot;--runtimes=local-runc:{}:{}&quot;</span>,
-                    <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;runc&quot;</span>)<span class="question-mark">?</span>.<span class="ident">display</span>(),
-                    <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;runc&quot;</span>).<span class="ident">display</span>()
-                ),
-                <span class="string">&quot;--default-runtime=local-runc&quot;</span>,
-            ],
-        )<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">args</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[
+            <span class="string">&quot;--log-level=debug&quot;</span>,
+            <span class="string">&quot;--registry=docker.io&quot;</span>,
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--config={}&quot;</span>, <span class="ident">crio_config</span>.<span class="ident">display</span>()),
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--conmon={}&quot;</span>, <span class="ident">conmon</span>.<span class="ident">display</span>()),
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--listen={}&quot;</span>, <span class="ident">socket</span>),
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--root={}&quot;</span>, <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;storage&quot;</span>).<span class="ident">display</span>()),
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--runroot={}&quot;</span>, <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;run&quot;</span>).<span class="ident">display</span>()),
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--cni-config-dir={}&quot;</span>, <span class="ident">cni</span>.<span class="ident">display</span>()),
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--cni-plugin-dir={}&quot;</span>, <span class="ident">cni_plugin</span>.<span class="ident">display</span>()),
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
+                <span class="string">&quot;--signature-policy={}&quot;</span>,
+                <span class="ident">Container</span>::<span class="ident">policy_json</span>(<span class="ident">config</span>).<span class="ident">display</span>()
+            ),
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
+                <span class="string">&quot;--runtimes=local-runc:{}:{}&quot;</span>,
+                <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;runc&quot;</span>)<span class="question-mark">?</span>.<span class="ident">display</span>(),
+                <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;runc&quot;</span>).<span class="ident">display</span>()
+            ),
+            <span class="string">&quot;--default-runtime=local-runc&quot;</span>,
+            <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
+                <span class="string">&quot;--storage-driver={}&quot;</span>,
+                <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> { <span class="string">&quot;vfs&quot;</span> } <span class="kw">else</span> { <span class="string">&quot;overlay&quot;</span> }
+            ),
+        ];
 
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">process</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> {
+            <span class="comment">// Run inside a container</span>
+            <span class="ident">Container</span>::<span class="ident">start</span>(<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="string">&quot;CRI-O&quot;</span>, <span class="ident">CRIO</span>, <span class="kw-2">&amp;</span><span class="ident">node_name</span>, <span class="ident">args</span>)<span class="question-mark">?</span>
+        } <span class="kw">else</span> {
+            <span class="comment">// Run as usual process</span>
+            <span class="ident">Process</span>::<span class="ident">start</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="string">&quot;CRI-O&quot;</span>, <span class="ident">CRIO</span>, <span class="ident">args</span>)<span class="question-mark">?</span>
+        };
         <span class="ident">process</span>.<span class="ident">wait_ready</span>(<span class="string">&quot;sandboxes:&quot;</span>)<span class="question-mark">?</span>;
-        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;CRI-O is ready&quot;</span>);
-        <span class="prelude-val">Ok</span>(<span class="ident">Box</span>::<span class="ident">new</span>(<span class="ident">Crio</span> { <span class="ident">process</span>, <span class="ident">socket</span> }))
+
+        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;CRI-O is ready ({})&quot;</span>, <span class="ident">node_name</span>);
+        <span class="prelude-val">Ok</span>(<span class="ident">Box</span>::<span class="ident">new</span>(<span class="self">Self</span> {
+            <span class="ident">process</span>,
+            <span class="ident">socket</span>,
+            <span class="ident">node_name</span>,
+        }))
     }
 
     <span class="doccomment">/// Retrieve the CRI socket</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">socket</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">CriSocket</span> {
-        <span class="ident">CriSocket</span>(<span class="self">Self</span>::<span class="ident">path</span>(<span class="ident">config</span>).<span class="ident">join</span>(<span class="string">&quot;crio.sock&quot;</span>))
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">socket</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>, <span class="ident">node</span>: <span class="ident">u8</span>) <span class="op">-&gt;</span> <span class="ident">CriSocket</span> {
+        <span class="ident">CriSocket</span>(<span class="self">Self</span>::<span class="ident">path</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>).<span class="ident">join</span>(<span class="string">&quot;crio.sock&quot;</span>))
     }
 
     <span class="doccomment">/// Retrieve the working path for the node</span>
-    <span class="kw">fn</span> <span class="ident">path</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">PathBuf</span> {
-        <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="string">&quot;crio&quot;</span>)
-    }
-
-    <span class="doccomment">/// Try to cleanup all related resources</span>
-    <span class="kw">fn</span> <span class="ident">stop_conmons</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {
-        <span class="comment">// Remove all conmon processes</span>
-        <span class="kw">let</span> <span class="ident">now</span> <span class="op">=</span> <span class="ident">Instant</span>::<span class="ident">now</span>();
-        <span class="kw">while</span> <span class="ident">now</span>.<span class="ident">elapsed</span>().<span class="ident">as_secs</span>() <span class="op">&lt;</span> <span class="number">5</span> {
-            <span class="kw">match</span> <span class="ident">process</span>::<span class="ident">all</span>() {
-                <span class="prelude-val">Err</span>(<span class="ident">e</span>) <span class="op">=&gt;</span> {
-                    <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Unable to retrieve processes: {}&quot;</span>, <span class="ident">e</span>);
-                    <span class="ident">sleep</span>(<span class="ident">Duration</span>::<span class="ident">from_secs</span>(<span class="number">1</span>));
-                }
-                <span class="prelude-val">Ok</span>(<span class="ident">procs</span>) <span class="op">=&gt;</span> {
-                    <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">found</span> <span class="op">=</span> <span class="bool-val">false</span>;
-                    <span class="kw">for</span> <span class="ident">p</span> <span class="kw">in</span> <span class="ident">procs</span>.<span class="ident">iter</span>().<span class="ident">filter</span>(<span class="op">|</span><span class="ident">p</span><span class="op">|</span> <span class="kw-2">&amp;</span><span class="ident">p</span>.<span class="ident">comm</span> <span class="op">==</span> <span class="string">&quot;conmon&quot;</span>) {
-                        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Killing conmon process {}&quot;</span>, <span class="ident">p</span>.<span class="ident">pid</span>);
-                        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Err</span>(<span class="ident">e</span>) <span class="op">=</span> <span class="ident">kill</span>(<span class="ident">Pid</span>::<span class="ident">from_raw</span>(<span class="ident">p</span>.<span class="ident">pid</span>), <span class="ident">Signal</span>::<span class="ident">SIGTERM</span>) {
-                            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Unable to kill PID {}: {}&quot;</span>, <span class="ident">p</span>.<span class="ident">pid</span>, <span class="ident">e</span>);
-                        }
-                        <span class="ident">found</span> <span class="op">=</span> <span class="bool-val">true</span>;
-                    }
-                    <span class="kw">if</span> <span class="op">!</span><span class="ident">found</span> {
-                        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;All conmon processes exited&quot;</span>);
-                        <span class="kw">break</span>;
-                    }
-                    <span class="comment">// Give the signal time to arrive</span>
-                    <span class="ident">sleep</span>(<span class="ident">Duration</span>::<span class="ident">from_millis</span>(<span class="number">100</span>));
-                }
-            }
-        }
+    <span class="kw">fn</span> <span class="ident">path</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>, <span class="ident">node</span>: <span class="ident">u8</span>) <span class="op">-&gt;</span> <span class="ident">PathBuf</span> {
+        <span class="ident">config</span>
+            .<span class="ident">root</span>()
+            .<span class="ident">join</span>(<span class="ident">CRIO</span>)
+            .<span class="ident">join</span>(<span class="ident">Node</span>::<span class="ident">name</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>))
     }
 
     <span class="doccomment">/// Remove all containers via crictl invocations</span>
     <span class="kw">fn</span> <span class="ident">remove_all_containers</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Removing all CRI-O workloads&quot;</span>);
+        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Removing all CRI-O workloads on {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
 
         <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;crictl&quot;</span>)
             .<span class="ident">env</span>(<span class="ident">RUNTIME_ENV</span>, <span class="self">self</span>.<span class="ident">socket</span>.<span class="ident">to_socket_string</span>())
@@ -391,13 +359,17 @@
             .<span class="ident">output</span>()<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">stdout</span> <span class="op">=</span> <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>;
         <span class="kw">if</span> <span class="op">!</span><span class="ident">output</span>.<span class="ident">status</span>.<span class="ident">success</span>() {
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;critcl pods stdout: {}&quot;</span>, <span class="ident">stdout</span>);
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;critcl pods stderr: {}&quot;</span>, <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>);
-            <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;crictl pods command failed&quot;</span>);
+            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;critcl pods stdout ({}): {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>, <span class="ident">stdout</span>);
+            <span class="macro">debug</span><span class="macro">!</span>(
+                <span class="string">&quot;critcl pods stderr ({}): {}&quot;</span>,
+                <span class="self">self</span>.<span class="ident">node_name</span>,
+                <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>
+            );
+            <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;crictl pods command failed ({})&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
         }
 
         <span class="kw">for</span> <span class="ident">x</span> <span class="kw">in</span> <span class="ident">stdout</span>.<span class="ident">lines</span>() {
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Removing pod {}&quot;</span>, <span class="ident">x</span>);
+            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Removing pod {} on {}&quot;</span>, <span class="ident">x</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
             <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;crictl&quot;</span>)
                 .<span class="ident">env</span>(<span class="ident">RUNTIME_ENV</span>, <span class="self">self</span>.<span class="ident">socket</span>.<span class="ident">to_socket_string</span>())
                 .<span class="ident">arg</span>(<span class="string">&quot;rmp&quot;</span>)
@@ -405,13 +377,21 @@
                 .<span class="ident">arg</span>(<span class="ident">x</span>)
                 .<span class="ident">output</span>()<span class="question-mark">?</span>;
             <span class="kw">if</span> <span class="op">!</span><span class="ident">output</span>.<span class="ident">status</span>.<span class="ident">success</span>() {
-                <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;critcl rmp stdout: {}&quot;</span>, <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>);
-                <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;critcl rmp stderr: {}&quot;</span>, <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>);
-                <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;crictl rmp command failed&quot;</span>);
+                <span class="macro">debug</span><span class="macro">!</span>(
+                    <span class="string">&quot;critcl rmp stdout ({}): {}&quot;</span>,
+                    <span class="self">self</span>.<span class="ident">node_name</span>,
+                    <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>
+                );
+                <span class="macro">debug</span><span class="macro">!</span>(
+                    <span class="string">&quot;critcl rmp stderr ({}): {}&quot;</span>,
+                    <span class="self">self</span>.<span class="ident">node_name</span>,
+                    <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>
+                );
+                <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;crictl rmp command failed ({})&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
             }
         }
 
-        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;All workloads removed&quot;</span>);
+        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;All workloads removed on {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
         <span class="prelude-val">Ok</span>(())
     }
 }
@@ -419,18 +399,16 @@
 <span class="kw">impl</span> <span class="ident">Stoppable</span> <span class="kw">for</span> <span class="ident">Crio</span> {
     <span class="kw">fn</span> <span class="ident">stop</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">// Remove all running containers</span>
-        <span class="self">self</span>.<span class="ident">remove_all_containers</span>()
-            .<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to remove CRI-O containers: {}&quot;</span>, <span class="ident">e</span>))<span class="question-mark">?</span>;
+        <span class="self">self</span>.<span class="ident">remove_all_containers</span>().<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> {
+            <span class="macro">format_err</span><span class="macro">!</span>(
+                <span class="string">&quot;Unable to remove CRI-O containers on {}: {}&quot;</span>,
+                <span class="self">self</span>.<span class="ident">node_name</span>,
+                <span class="ident">e</span>
+            )
+        })<span class="question-mark">?</span>;
 
         <span class="comment">// Stop the process, should never really fail</span>
         <span class="self">self</span>.<span class="ident">process</span>.<span class="ident">stop</span>()
-    }
-}
-
-<span class="kw">impl</span> <span class="ident">Drop</span> <span class="kw">for</span> <span class="ident">Crio</span> {
-    <span class="kw">fn</span> <span class="ident">drop</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) {
-        <span class="comment">// Remove conmon processes</span>
-        <span class="self">self</span>.<span class="ident">stop_conmons</span>();
     }
 }
 </pre></div>

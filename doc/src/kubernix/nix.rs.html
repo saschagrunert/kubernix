@@ -94,13 +94,13 @@
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Nix</span>;
 
 <span class="kw">impl</span> <span class="ident">Nix</span> {
-    <span class="kw">const</span> <span class="ident">NIX_DIR</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;nix&quot;</span>;
+    <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">DIR</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;nix&quot;</span>;
     <span class="kw">const</span> <span class="ident">NIX_ENV</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;IN_NIX&quot;</span>;
 
     <span class="doccomment">/// Bootstrap the nix environment</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bootstrap</span>(<span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">// Prepare the nix dir</span>
-        <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">NIX_DIR</span>);
+        <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">DIR</span>);
 
         <span class="comment">// Write the configuration if not existing</span>
         <span class="kw">if</span> <span class="op">!</span><span class="ident">dir</span>.<span class="ident">exists</span>() {
@@ -153,7 +153,7 @@
             .<span class="ident">env</span>(<span class="self">Self</span>::<span class="ident">NIX_ENV</span>, <span class="string">&quot;true&quot;</span>)
             .<span class="ident">arg</span>(<span class="string">&quot;run&quot;</span>)
             .<span class="ident">arg</span>(<span class="string">&quot;-f&quot;</span>)
-            .<span class="ident">arg</span>(<span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">NIX_DIR</span>))
+            .<span class="ident">arg</span>(<span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">DIR</span>))
             .<span class="ident">arg</span>(<span class="string">&quot;-c&quot;</span>)
             .<span class="ident">args</span>(<span class="ident">args</span>)
             .<span class="ident">status</span>()<span class="question-mark">?</span>;

@@ -150,10 +150,23 @@
 <span id="150">150</span>
 <span id="151">151</span>
 <span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
+<span id="155">155</span>
+<span id="156">156</span>
+<span id="157">157</span>
+<span id="158">158</span>
+<span id="159">159</span>
+<span id="160">160</span>
+<span id="161">161</span>
+<span id="162">162</span>
+<span id="163">163</span>
+<span id="164">164</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">Config</span>;
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
 <span class="kw">use</span> <span class="ident">getset</span>::<span class="ident">Getters</span>;
+<span class="kw">use</span> <span class="ident">hostname</span>::<span class="ident">get_hostname</span>;
 <span class="kw">use</span> <span class="ident">ipnetwork</span>::<span class="ident">Ipv4Network</span>;
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">warn</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
@@ -167,7 +180,7 @@
     <span class="ident">cluster_cidr</span>: <span class="ident">Ipv4Network</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="ident">crio_cidr</span>: <span class="ident">Ipv4Network</span>,
+    <span class="ident">crio_cidrs</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">Ipv4Network</span><span class="op">&gt;</span>,
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">service_cidr</span>: <span class="ident">Ipv4Network</span>,
@@ -177,11 +190,14 @@
 
     <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="ident">etcd_peer</span>: <span class="ident">SocketAddr</span>,
+
+    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
+    <span class="ident">hostname</span>: <span class="ident">String</span>,
 }
 
 <span class="kw">impl</span> <span class="ident">Network</span> {
     <span class="doccomment">/// The global name for the interface</span>
-    <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">INTERFACE</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernix.1&quot;</span>;
+    <span class="kw">pub</span> <span class="kw">const</span> <span class="ident">INTERFACE_PREFIX</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernix&quot;</span>;
 
     <span class="doccomment">/// Create a new network from the provided config</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
@@ -195,37 +211,45 @@
         <span class="self">Self</span>::<span class="ident">warn_overlapping_route</span>(<span class="ident">config</span>.<span class="ident">cidr</span>())<span class="question-mark">?</span>;
 
         <span class="comment">// Calculate the CIDRs</span>
-        <span class="kw">let</span> <span class="ident">crio_cidr</span> <span class="op">=</span> <span class="ident">Ipv4Network</span>::<span class="ident">new</span>(<span class="ident">config</span>.<span class="ident">cidr</span>().<span class="ident">ip</span>(), <span class="ident">config</span>.<span class="ident">cidr</span>().<span class="ident">prefix</span>() <span class="op">+</span> <span class="number">1</span>)<span class="question-mark">?</span>;
-        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Using crio CIDR {}&quot;</span>, <span class="ident">crio_cidr</span>);
-
-        <span class="kw">let</span> <span class="ident">cluster_cidr</span> <span class="op">=</span> <span class="ident">Ipv4Network</span>::<span class="ident">new</span>(
-            <span class="ident">config</span>
-                .<span class="ident">cidr</span>()
-                .<span class="ident">nth</span>(<span class="ident">config</span>.<span class="ident">cidr</span>().<span class="ident">size</span>() <span class="op">/</span> <span class="number">2</span>)
-                .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to retrieve cluster CIDR start IP&quot;</span>))<span class="question-mark">?</span>,
-            <span class="ident">config</span>.<span class="ident">cidr</span>().<span class="ident">prefix</span>() <span class="op">+</span> <span class="number">2</span>,
-        )<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">cluster_cidr</span> <span class="op">=</span> <span class="ident">Ipv4Network</span>::<span class="ident">new</span>(<span class="ident">config</span>.<span class="ident">cidr</span>().<span class="ident">ip</span>(), <span class="number">24</span>)<span class="question-mark">?</span>;
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Using cluster CIDR {}&quot;</span>, <span class="ident">cluster_cidr</span>);
 
         <span class="kw">let</span> <span class="ident">service_cidr</span> <span class="op">=</span> <span class="ident">Ipv4Network</span>::<span class="ident">new</span>(
             <span class="ident">config</span>
                 .<span class="ident">cidr</span>()
-                .<span class="ident">nth</span>(<span class="ident">config</span>.<span class="ident">cidr</span>().<span class="ident">size</span>() <span class="op">/</span> <span class="number">2</span> <span class="op">+</span> <span class="ident">cluster_cidr</span>.<span class="ident">size</span>())
+                .<span class="ident">nth</span>(<span class="ident">cluster_cidr</span>.<span class="ident">size</span>())
                 .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to retrieve service CIDR start IP&quot;</span>))<span class="question-mark">?</span>,
-            <span class="ident">config</span>.<span class="ident">cidr</span>().<span class="ident">prefix</span>() <span class="op">+</span> <span class="number">3</span>,
+            <span class="number">24</span>,
         )<span class="question-mark">?</span>;
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Using service CIDR {}&quot;</span>, <span class="ident">service_cidr</span>);
+
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">crio_cidrs</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[];
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">offset</span> <span class="op">=</span> <span class="ident">cluster_cidr</span>.<span class="ident">size</span>() <span class="op">+</span> <span class="ident">service_cidr</span>.<span class="ident">size</span>();
+        <span class="kw">for</span> <span class="ident">node</span> <span class="kw">in</span> <span class="number">0</span>..<span class="ident">config</span>.<span class="ident">nodes</span>() {
+            <span class="kw">let</span> <span class="ident">cidr</span> <span class="op">=</span> <span class="ident">Ipv4Network</span>::<span class="ident">new</span>(
+                <span class="ident">config</span>
+                    .<span class="ident">cidr</span>()
+                    .<span class="ident">nth</span>(<span class="ident">offset</span>)
+                    .<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to retrieve CRI-O CIDR start IP&quot;</span>))<span class="question-mark">?</span>,
+                <span class="number">24</span>,
+            )<span class="question-mark">?</span>;
+            <span class="ident">offset</span> <span class="op">+=</span> <span class="ident">cidr</span>.<span class="ident">size</span>();
+            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Using CRI-O ({}) CIDR {}&quot;</span>, <span class="ident">node</span>, <span class="ident">cidr</span>);
+            <span class="ident">crio_cidrs</span>.<span class="ident">push</span>(<span class="ident">cidr</span>);
+        }
 
         <span class="comment">// Set the rest of the networking related adresses and paths</span>
         <span class="kw">let</span> <span class="ident">etcd_client</span> <span class="op">=</span> <span class="ident">SocketAddr</span>::<span class="ident">new</span>(<span class="ident">Ipv4Addr</span>::<span class="ident">LOCALHOST</span>.<span class="ident">into</span>(), <span class="number">2379</span>);
         <span class="kw">let</span> <span class="ident">etcd_peer</span> <span class="op">=</span> <span class="ident">SocketAddr</span>::<span class="ident">new</span>(<span class="ident">Ipv4Addr</span>::<span class="ident">LOCALHOST</span>.<span class="ident">into</span>(), <span class="number">2380</span>);
+        <span class="kw">let</span> <span class="ident">hostname</span> <span class="op">=</span> <span class="ident">get_hostname</span>().<span class="ident">ok_or_else</span>(<span class="op">||</span> <span class="macro">format_err</span><span class="macro">!</span>(<span class="string">&quot;Unable to get hostname&quot;</span>))<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(<span class="self">Self</span> {
             <span class="ident">cluster_cidr</span>,
-            <span class="ident">crio_cidr</span>,
+            <span class="ident">crio_cidrs</span>,
             <span class="ident">service_cidr</span>,
             <span class="ident">etcd_client</span>,
             <span class="ident">etcd_peer</span>,
+            <span class="ident">hostname</span>,
         })
     }
 
@@ -237,7 +261,7 @@
         }
         <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">cmd</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>
             .<span class="ident">lines</span>()
-            .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="op">!</span><span class="ident">x</span>.<span class="ident">contains</span>(<span class="self">Self</span>::<span class="ident">INTERFACE</span>))
+            .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="op">!</span><span class="ident">x</span>.<span class="ident">contains</span>(<span class="self">Self</span>::<span class="ident">INTERFACE_PREFIX</span>))
             .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">split_whitespace</span>().<span class="ident">nth</span>(<span class="number">0</span>))
             .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">parse</span>::<span class="op">&lt;</span><span class="ident">Ipv4Network</span><span class="op">&gt;</span>().<span class="ident">ok</span>())
             .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">is_supernet_of</span>(<span class="ident">cidr</span>))
@@ -299,7 +323,7 @@
     <span class="kw">fn</span> <span class="ident">dns_success</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">test_config</span>()<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">n</span> <span class="op">=</span> <span class="ident">Network</span>::<span class="ident">new</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>)<span class="question-mark">?</span>;
-        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">n</span>.<span class="ident">dns</span>()<span class="question-mark">?</span>, <span class="ident">Ipv4Addr</span>::<span class="ident">new</span>(<span class="number">10</span>, <span class="number">10</span>, <span class="number">192</span>, <span class="number">2</span>));
+        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">n</span>.<span class="ident">dns</span>()<span class="question-mark">?</span>, <span class="ident">Ipv4Addr</span>::<span class="ident">new</span>(<span class="number">10</span>, <span class="number">10</span>, <span class="number">1</span>, <span class="number">2</span>));
         <span class="prelude-val">Ok</span>(())
     }
 }
