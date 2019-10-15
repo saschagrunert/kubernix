@@ -57,8 +57,8 @@ impl Idendity {
         Idendity {
             cert: dir.join(format!("{}.pem", name)),
             key: dir.join(format!("{}-key.pem", name)),
-            name: name.to_owned(),
-            user: user.to_owned(),
+            name: name.into(),
+            user: user.into(),
         }
     }
 }
@@ -138,12 +138,12 @@ impl Pki {
             let mut hostnames = vec![
                 network.api()?.to_string(),
                 Ipv4Addr::LOCALHOST.to_string(),
-                network.hostname().to_owned(),
-                "kubernetes".to_owned(),
-                "kubernetes.default".to_owned(),
-                "kubernetes.default.svc".to_owned(),
-                "kubernetes.default.svc.cluster".to_owned(),
-                "kubernetes.svc.cluster.local".to_owned(),
+                network.hostname().into(),
+                "kubernetes".into(),
+                "kubernetes.default".into(),
+                "kubernetes.default.svc".into(),
+                "kubernetes.default.svc.cluster".into(),
+                "kubernetes.svc.cluster.local".into(),
             ];
             hostnames.extend(nodes.clone());
 

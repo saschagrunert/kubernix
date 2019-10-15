@@ -10,13 +10,13 @@ use std::{
 pub struct Nix;
 
 impl Nix {
-    const NIX_DIR: &'static str = "nix";
+    pub const DIR: &'static str = "nix";
     const NIX_ENV: &'static str = "IN_NIX";
 
     /// Bootstrap the nix environment
     pub fn bootstrap(config: Config) -> Fallible<()> {
         // Prepare the nix dir
-        let dir = config.root().join(Self::NIX_DIR);
+        let dir = config.root().join(Self::DIR);
 
         // Write the configuration if not existing
         if !dir.exists() {
@@ -69,7 +69,7 @@ impl Nix {
             .env(Self::NIX_ENV, "true")
             .arg("run")
             .arg("-f")
-            .arg(config.root().join(Self::NIX_DIR))
+            .arg(config.root().join(Self::DIR))
             .arg("-c")
             .args(args)
             .status()?;

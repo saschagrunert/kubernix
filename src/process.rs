@@ -107,12 +107,12 @@ impl Process {
         set_permissions(run_file, perms)?;
 
         Ok(Process {
-            command: command.to_owned(),
+            command: command.into(),
             kill,
             log_file,
-            name: identifier.to_owned(),
+            name: identifier.into(),
             pid,
-            readyness_timeout: 10,
+            readyness_timeout: 30,
             watch: Some(watch),
         })
     }
@@ -140,11 +140,11 @@ impl Process {
 
         // Cleanup since process is not ready
         self.stop()?;
-        bail!(
+        error!(
             "Timed out waiting for process '{}' ({}) to become ready",
-            self.name,
-            self.command
-        )
+            self.name, self.command
+        );
+        bail!("Process timeout")
     }
 
     /// Retrieve a pseudo state for stopped processes

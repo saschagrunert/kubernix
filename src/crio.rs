@@ -105,13 +105,15 @@ impl Crio {
                 dir.join("runc").display()
             ),
             "--default-runtime=local-runc",
+            &format!(
+                "--storage-driver={}",
+                if config.nodes() > 1 { "vfs" } else { "overlay" }
+            ),
         ];
 
         let mut process = if config.nodes() > 1 {
             // Run inside a container
-            let mut modargs = vec!["--storage-driver=vfs"];
-            modargs.extend(args);
-            Container::start(config, &dir, "CRI-O", CRIO, &node_name, &modargs)?
+            Container::start(config, &dir, "CRI-O", CRIO, &node_name, args)?
         } else {
             // Run as usual process
             Process::start(&dir, "CRI-O", CRIO, args)?

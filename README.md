@@ -222,7 +222,10 @@ up over the necessary cluster components.
 
 #### Multinode Support
 
-TBD
+It is possible to spawn multiple worker nodes, too. To do this, simply adjust
+the `-n, --nodes` command line argument as well as your preferred container
+runtime via `-u, --runtime`. The default runtime is [podman][41], but every
+other Docker drop-in replacement should work out of the box.
 
 #### Overlays
 

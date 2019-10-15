@@ -1,8 +1,8 @@
-use crate::{process::Process, system::System, Config, PODMAN};
+use crate::{nix::Nix, process::Process, system::System, Config, PODMAN};
 use failure::{bail, Fallible};
 use log::{info, trace, LevelFilter};
 use std::{
-    fs,
+    fs::{self, create_dir_all},
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -15,6 +15,9 @@ pub struct Container;
 impl Container {
     /// Build the base image used for the nodes
     pub fn build(config: &Config) -> Fallible<()> {
+        // Verify that the provided runtime exists
+        System::find_executable(config.container_runtime())?;
+
         // Write the policy file
         let policy_json = Self::policy_json(config);
         fs::write(&policy_json, include_str!("assets/policy.json"))?;
@@ -32,29 +35,39 @@ impl Container {
         if !file.exists() {
             fs::write(
                 &file,
-                format!(include_str!("assets/Dockerfile"), root = DEFAULT_ROOT),
+                format!(
+                    include_str!("assets/Dockerfile"),
+                    nix = Nix::DIR,
+                    root = DEFAULT_ROOT
+                ),
             )?;
         }
 
-        // Add podman specific arguments
         let mut args = vec![];
         if config.container_runtime() == PODMAN {
+            // Prepare podman CNI
+            let dir = Self::podman_cni_dir(config);
+            create_dir_all(&dir)?;
+            fs::write(
+                &dir.join("87-podman-bridge.conflist"),
+                include_str!("assets/podman-bridge.json"),
+            )?;
+
+            // Add podman specific arguments
             args.extend(Self::default_podman_args(config));
-            args.push(format!("--signature-policy={}", policy_json.display()));
+            args.extend(vec![
+                "build".into(),
+                format!("--signature-policy={}", policy_json.display()),
+            ]);
+        } else {
+            args.push("build".into());
         }
 
         // Run the build
-        System::find_executable(config.container_runtime())?;
-        args.push("build".to_owned());
-        args.extend(vec![
-            "-t".to_owned(),
-            DEFAULT_IMAGE.to_owned(),
-            "-f".to_owned(),
-            file.display().to_string(),
-            ".".to_owned(),
-        ]);
+        args.extend(vec![format!("-t={}", DEFAULT_IMAGE), ".".into()]);
         trace!("Podman build args: {:?}", args);
         let status = Command::new(config.container_runtime())
+            .current_dir(config.root())
             .args(args)
             .stderr(Self::stdio(config))
             .stdout(Self::stdio(config))
@@ -174,7 +187,7 @@ impl Container {
     /// Podman args which should apply to every command
     fn default_podman_args(config: &Config) -> Vec<String> {
         let log_level = if config.log_level() >= LevelFilter::Debug {
-            "DEBUG".to_owned()
+            "DEBUG".into()
         } else {
             config.log_level().to_string()
         };
@@ -184,13 +197,21 @@ impl Container {
                 "--storage-driver={}",
                 if config.container() { "vfs" } else { "" }
             ),
-            "--events-backend=none".to_owned(),
-            "--cgroup-manager=cgroupfs".to_owned(),
+            format!(
+                "--cni-config-dir={}",
+                Self::podman_cni_dir(config).display()
+            ),
+            "--events-backend=none".into(),
+            "--cgroup-manager=cgroupfs".into(),
         ]
     }
 
     /// Retrieve a prefixed container name
     fn prefixed_container_name(name: &str) -> String {
         format!("{}-{}", DEFAULT_ROOT, name)
+    }
+
+    fn podman_cni_dir(config: &Config) -> PathBuf {
+        config.root().join("podman")
     }
 }

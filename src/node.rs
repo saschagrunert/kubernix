@@ -6,10 +6,15 @@ impl Node {
     /// Retrieve the node name for the node number
     pub fn name(config: &Config, network: &Network, number: u8) -> String {
         if config.nodes() == 1 {
-            network.hostname().to_owned()
+            network.hostname().into()
         } else {
-            const PREFIX: &str = "node";
-            format!("{}-{}", PREFIX, number)
+            Self::raw(number)
         }
+    }
+
+    /// Retrieve the raw node name
+    pub fn raw(number: u8) -> String {
+        const PREFIX: &str = "node";
+        format!("{}-{}", PREFIX, number)
     }
 }

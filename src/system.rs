@@ -1,18 +1,22 @@
-use crate::Config;
+use crate::{node::Node, Config};
 use failure::{bail, format_err, Fallible};
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::{
     env::{split_paths, var, var_os},
     fmt::Display,
+    fs::{self, read_to_string},
+    net::Ipv4Addr,
     path::{Path, PathBuf},
     process::Command,
 };
 
-pub struct System;
+pub struct System {
+    hosts: Option<String>,
+}
 
 impl System {
     /// Create a new system
-    pub fn setup(config: &Config) -> Fallible<()> {
+    pub fn setup(config: &Config) -> Fallible<Self> {
         if config.container() {
             info!("Skipping modprobe and sysctl for sake of containerization")
         } else {
@@ -29,7 +33,50 @@ impl System {
             }
         }
 
-        Ok(())
+        let hosts = if config.nodes() > 1 {
+            // Try to write the hostnames, which does not work on every system
+            let hosts_file = Self::hosts();
+            let hosts = read_to_string(&hosts_file)?;
+            let local_hosts = (0..config.nodes())
+                .into_iter()
+                .map(|x| format!("{} {}", Ipv4Addr::LOCALHOST, Node::raw(x)))
+                .collect::<Vec<_>>();
+
+            let mut new_hosts = hosts
+                .lines()
+                .filter(|x| !local_hosts.iter().any(|y| x == y))
+                .map(|x| x.into())
+                .collect::<Vec<_>>();
+            new_hosts.extend(local_hosts);
+
+            match fs::write(&hosts_file, new_hosts.join("\n")) {
+                Err(e) => {
+                    warn!(
+                        "Unable to write hosts file '{}'. The nodes may be not reachable: {}",
+                        hosts_file.display(),
+                        e
+                    );
+                    None
+                }
+                _ => Some(hosts),
+            }
+        } else {
+            None
+        };
+
+        Ok(Self { hosts })
+    }
+
+    /// Restore the initial system state
+    pub fn cleanup(&self) {
+        if let Some(hosts) = &self.hosts {
+            if let Err(e) = fs::write(Self::hosts(), hosts) {
+                warn!(
+                    "Unable to restore hosts file, may need manual cleanup: {}",
+                    e
+                )
+            }
+        }
     }
 
     /// Find an executable inside the current $PATH environment
@@ -55,7 +102,7 @@ impl System {
 
     /// Return the full path to the default system shell
     pub fn shell() -> Fallible<String> {
-        let shell = var("SHELL").unwrap_or_else(|_| "sh".to_owned());
+        let shell = var("SHELL").unwrap_or_else(|_| "sh".into());
         Ok(format!(
             "{}",
             Self::find_executable(&shell)
@@ -88,6 +135,10 @@ impl System {
             bail!("Unable to set sysctl '{}': {}", enable_arg, stderr);
         }
         Ok(())
+    }
+
+    fn hosts() -> PathBuf {
+        PathBuf::from("/").join("etc").join("hosts")
     }
 }
 

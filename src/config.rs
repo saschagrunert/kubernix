@@ -188,7 +188,7 @@ impl Config {
             .shell()
             .as_ref()
             .ok_or_else(|| format_err!("No shell set"))?;
-        Ok(shell.to_owned())
+        Ok(shell.into())
     }
 
     fn create_root_dir(&self) -> Fallible<()> {

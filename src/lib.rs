@@ -66,6 +66,7 @@ pub struct Kubernix {
     network: Network,
     kubeconfig: KubeConfig,
     processes: Stoppables,
+    system: System,
 }
 
 impl Kubernix {
@@ -147,7 +148,7 @@ impl Kubernix {
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config) -> Fallible<()> {
         // Ensure that the system is prepared
-        System::setup(&config)?;
+        let system = System::setup(&config)?;
         Container::build(&config)?;
 
         // Setup the network
@@ -175,20 +176,24 @@ impl Kubernix {
 
         // Spawn the processes
         info!("Starting processes");
-        scope(|s| {
+        scope(|a| {
             // Control plane
-            s.spawn(|_| etcd = Etcd::start(&config, &network, &pki));
-            s.spawn(|_| {
-                api_server =
-                    ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubeconfig)
+            a.spawn(|b| {
+                etcd = Etcd::start(&config, &network, &pki);
+                b.spawn(|c| {
+                    api_server =
+                        ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubeconfig);
+                    c.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
+                    c.spawn(|_| {
+                        controller_manager =
+                            ControllerManager::start(&config, &network, &pki, &kubeconfig)
+                    });
+                    c.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
+                });
             });
-            s.spawn(|_| {
-                controller_manager = ControllerManager::start(&config, &network, &pki, &kubeconfig)
-            });
-            s.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
 
             // Node processes
-            s.spawn(|_| {
+            a.spawn(|_| {
                 crios
                     .par_iter_mut()
                     .zip(kubelets.par_iter_mut())
@@ -200,7 +205,6 @@ impl Kubernix {
                         }
                     });
             });
-            s.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
         });
 
         // This order is important since we will shut down the processes in order
@@ -224,6 +228,7 @@ impl Kubernix {
             network,
             kubeconfig,
             processes,
+            system,
         };
 
         // No dead processes
@@ -309,5 +314,6 @@ impl Drop for Kubernix {
         info!("Cleaning up");
         self.stop();
         self.umount();
+        self.system.cleanup();
     }
 }
