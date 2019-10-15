@@ -8,7 +8,7 @@ use std::{
     time::Instant,
 };
 
-const TIMEOUT: u64 = 120;
+const TIMEOUT: u64 = 300;
 const PATTERN: &str = "Spawning interactive shell";
 
 fn test(run: usize, args: &[&str]) -> Fallible<()> {
