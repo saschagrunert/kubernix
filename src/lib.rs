@@ -3,6 +3,7 @@
 
 mod apiserver;
 mod config;
+mod container;
 mod controllermanager;
 mod coredns;
 mod crio;
@@ -13,6 +14,7 @@ mod kubectl;
 mod kubelet;
 mod network;
 mod nix;
+mod node;
 mod pki;
 mod process;
 mod proxy;
@@ -23,6 +25,7 @@ pub use config::Config;
 
 use crate::nix::Nix;
 use apiserver::ApiServer;
+use container::Container;
 use controllermanager::ControllerManager;
 use coredns::CoreDNS;
 use crio::Crio;
@@ -43,9 +46,9 @@ use ::nix::{
 };
 use env_logger::Builder;
 use failure::{bail, Fallible};
-use log::{debug, error, info};
+use log::{debug, error, info, LevelFilter};
 use proc_mounts::MountIter;
-use rayon::scope;
+use rayon::{prelude::*, scope};
 use std::{
     fs,
     process::Command,
@@ -53,6 +56,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+const PODMAN: &str = "podman";
 const KUBERNIX_ENV: &str = "kubernix.env";
 const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
@@ -62,6 +66,7 @@ pub struct Kubernix {
     network: Network,
     kubeconfig: KubeConfig,
     processes: Stoppables,
+    system: System,
 }
 
 impl Kubernix {
@@ -124,6 +129,7 @@ impl Kubernix {
         let mut builder = Builder::new();
         builder
             .format_timestamp(None)
+            .format_module_path(config.log_level() > LevelFilter::Info)
             .filter(None, config.log_level())
             .try_init()?;
 
@@ -142,7 +148,8 @@ impl Kubernix {
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config) -> Fallible<()> {
         // Ensure that the system is prepared
-        System::setup(&config)?;
+        let system = System::setup(&config)?;
+        Container::build(&config)?;
 
         // Setup the network
         let network = Network::new(&config)?;
@@ -157,51 +164,61 @@ impl Kubernix {
         // All processes
         let mut api_server = Process::stopped();
         let mut controller_manager = Process::stopped();
-        let mut crio = Process::stopped();
         let mut etcd = Process::stopped();
-        let mut kubelet = Process::stopped();
-        let mut proxy = Process::stopped();
         let mut scheduler = Process::stopped();
+        let mut proxy = Process::stopped();
+        let mut crios = (0..config.nodes())
+            .map(|_| Process::stopped())
+            .collect::<Vec<_>>();
+        let mut kubelets = (0..config.nodes())
+            .map(|_| Process::stopped())
+            .collect::<Vec<_>>();
 
         // Spawn the processes
         info!("Starting processes");
-        scope(|s| {
+        scope(|a| {
             // Control plane
-            s.spawn(|_| etcd = Etcd::start(&config, &network, &pki));
-            s.spawn(|_| {
-                api_server =
-                    ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubeconfig)
+            a.spawn(|b| {
+                etcd = Etcd::start(&config, &network, &pki);
+                b.spawn(|c| {
+                    api_server =
+                        ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubeconfig);
+                    c.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
+                    c.spawn(|_| {
+                        controller_manager =
+                            ControllerManager::start(&config, &network, &pki, &kubeconfig)
+                    });
+                    c.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
+                });
             });
-            s.spawn(|_| {
-                controller_manager = ControllerManager::start(&config, &network, &pki, &kubeconfig)
-            });
-            s.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
 
             // Node processes
-            s.spawn(|_| crio = Crio::start(&config, &network));
-            s.spawn(|_| kubelet = Kubelet::start(&config, &network, &pki, &kubeconfig));
-            s.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
+            a.spawn(|_| {
+                crios
+                    .par_iter_mut()
+                    .zip(kubelets.par_iter_mut())
+                    .enumerate()
+                    .for_each(|(i, (c, k))| {
+                        *c = Crio::start(&config, i as u8, &network);
+                        if c.is_ok() {
+                            *k = Kubelet::start(&config, i as u8, &network, &pki, &kubeconfig);
+                        }
+                    });
+            });
         });
 
-        let mut processes = vec![];
-
         // This order is important since we will shut down the processes in order
-        let results = vec![
-            kubelet,
-            crio,
-            scheduler,
-            proxy,
-            controller_manager,
-            api_server,
-            etcd,
-        ];
+        let mut results = vec![scheduler, proxy, controller_manager, api_server, etcd];
+        results.extend(kubelets);
+        results.extend(crios);
         let all_ok = results.iter().all(|x| x.is_ok());
 
         // Note: wait for `drain_filter()` to be stable and make it more straightforward
+        let mut processes = vec![];
         for process in results {
             match process {
                 Ok(p) => processes.push(p),
-                Err(e) => error!("{}", e),
+                Err(e) => debug!("{}", e),
             }
         }
 
@@ -211,6 +228,7 @@ impl Kubernix {
             network,
             kubeconfig,
             processes,
+            system,
         };
 
         // No dead processes
@@ -242,7 +260,7 @@ impl Kubernix {
             format!(
                 "export {}={}\nexport {}={}",
                 RUNTIME_ENV,
-                Crio::socket(&self.config).to_socket_string(),
+                Crio::socket(&self.config, &self.network, 0).to_socket_string(),
                 "KUBECONFIG",
                 self.kubeconfig.admin().display(),
             ),
@@ -296,5 +314,6 @@ impl Drop for Kubernix {
         info!("Cleaning up");
         self.stop();
         self.umount();
+        self.system.cleanup();
     }
 }

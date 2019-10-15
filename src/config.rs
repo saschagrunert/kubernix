@@ -1,5 +1,5 @@
 //! Configuration related structures
-use crate::system::System;
+use crate::{system::System, PODMAN};
 use clap::{crate_version, AppSettings, Clap};
 use failure::{format_err, Fallible};
 use getset::{CopyGetters, Getters};
@@ -100,8 +100,30 @@ pub struct Config {
         short = "s",
         value_name = "SHELL"
     )]
-    /// The shell executable to be used, defaults to $SHELL, fallback is 'sh'
+    /// The shell executable to be used, defaults to $SHELL, fallback is `sh`
     shell: Option<String>,
+
+    #[get_copy = "pub"]
+    #[clap(
+        default_value = "1",
+        env = "KUBERNIX_NODES",
+        long = "nodes",
+        short = "n",
+        value_name = "NODES"
+    )]
+    /// The number of nodes to be registered
+    nodes: u8,
+
+    #[get = "pub"]
+    #[clap(
+        env = "KUBERNIX_CONTAINER_RUNTIME",
+        long = "container-runtime",
+        raw(default_value = "PODMAN"),
+        short = "u",
+        value_name = "RUNTIME"
+    )]
+    /// The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1`
+    container_runtime: String,
 }
 
 /// Possible subcommands
@@ -166,7 +188,7 @@ impl Config {
             .shell()
             .as_ref()
             .ok_or_else(|| format_err!("No shell set"))?;
-        Ok(shell.to_owned())
+        Ok(shell.into())
     }
 
     fn create_root_dir(&self) -> Fallible<()> {
@@ -235,11 +257,13 @@ pub mod tests {
         fs::write(
             c.root.join(Config::FILENAME),
             r#"
-root = "root"
-log-level = "DEBUG"
 cidr = "1.1.1.1/16"
-packages = []
+container-runtime = "podman"
 container = false
+log-level = "DEBUG"
+nodes = 1
+packages = []
+root = "root"
             "#,
         )?;
         c.try_load_file()?;

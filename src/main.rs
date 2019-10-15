@@ -1,10 +1,11 @@
+use ansi_term::Colour::Red;
 use failure::Fallible;
 use kubernix::{Config, Kubernix};
 use std::process::exit;
 
 pub fn main() {
     if let Err(e) = run() {
-        println!("Error: {}", e);
+        println!("{} {}", Red.paint("[ERROR]"), e);
         exit(1);
     }
 }

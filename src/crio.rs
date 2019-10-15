@@ -1,29 +1,25 @@
 use crate::{
+    container::Container,
     network::Network,
+    node::Node,
     process::{Process, ProcessState, Stoppable},
     system::System,
     Config, RUNTIME_ENV,
 };
 use failure::{bail, format_err, Fallible};
 use log::{debug, info};
-use nix::{
-    sys::signal::{kill, Signal},
-    unistd::Pid,
-};
-use psutil::process;
 use serde_json::{json, to_string_pretty};
 use std::{
     fmt::{Display, Formatter, Result},
     fs::{self, create_dir_all},
     path::PathBuf,
     process::Command,
-    thread::sleep,
-    time::{Duration, Instant},
 };
 
 pub struct Crio {
     process: Process,
     socket: CriSocket,
+    node_name: String,
 }
 
 /// Simple CRI socket abstraction
@@ -41,9 +37,12 @@ impl CriSocket {
     }
 }
 
+const CRIO: &str = "crio";
+
 impl Crio {
-    pub fn start(config: &Config, network: &Network) -> ProcessState {
-        info!("Starting CRI-O");
+    pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
+        let node_name = Node::name(config, network, node);
+        info!("Starting CRI-O ({})", node_name);
 
         let conmon = System::find_executable("conmon")?;
         let loopback = System::find_executable("loopback")?;
@@ -51,120 +50,100 @@ impl Crio {
             .parent()
             .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
 
-        let dir = Self::path(config);
+        let dir = Self::path(config, network, node);
         let crio_config = dir.join("crio.conf");
-        let policy_json = dir.join("policy.json");
         let cni = dir.join("cni");
 
         if !dir.exists() {
             create_dir_all(&dir)?;
             create_dir_all(&cni)?;
 
+            let cidr = network
+                .crio_cidrs()
+                .get(node as usize)
+                .ok_or_else(|| format_err!("Unable to find CIDR for {}", node_name))?;
             fs::write(
                 cni.join("10-bridge.json"),
                 to_string_pretty(&json!({
                     "cniVersion": "0.3.1",
-                    "name": "crio-kubernix",
+                    "name": format!("kubernix-{}", node_name),
                     "type": "bridge",
-                    "bridge":  Network::INTERFACE,
+                    "bridge": format!("{}.{}", Network::INTERFACE_PREFIX, node),
                     "isGateway": true,
                     "ipMasq": true,
                     "hairpinMode": true,
                     "ipam": {
                         "type": "host-local",
                         "routes": [{ "dst": "0.0.0.0/0" }],
-                        "ranges": [[{ "subnet": network.crio_cidr() }]]
+                        "ranges": [[{ "subnet": cidr }]]
                     }
-                }))?,
-            )?;
-
-            fs::write(
-                &policy_json,
-                to_string_pretty(&json!({
-                    "default": [{ "type": "insecureAcceptAnything" }]
                 }))?,
             )?;
 
             // Pseudo config to not load local configuration values
             fs::write(&crio_config, "")?;
         }
-        let socket = Self::socket(config);
+        let socket = Self::socket(config, network, node);
 
-        let mut process = Process::start(
-            &dir,
-            "crio",
-            &[
-                &format!("--config={}", crio_config.display()),
-                "--log-level=debug",
-                &format!(
-                    "--storage-driver={}",
-                    if config.container() { "vfs" } else { "overlay" }
-                ),
-                &format!("--conmon={}", conmon.display()),
-                &format!("--listen={}", socket),
-                &format!("--root={}", dir.join("storage").display()),
-                &format!("--runroot={}", dir.join("run").display()),
-                &format!("--cni-config-dir={}", cni.display()),
-                &format!("--cni-plugin-dir={}", cni_plugin.display()),
-                "--registry=docker.io",
-                &format!("--signature-policy={}", policy_json.display()),
-                &format!(
-                    "--runtimes=local-runc:{}:{}",
-                    System::find_executable("runc")?.display(),
-                    dir.join("runc").display()
-                ),
-                "--default-runtime=local-runc",
-            ],
-        )?;
+        let args = &[
+            "--log-level=debug",
+            "--registry=docker.io",
+            &format!("--config={}", crio_config.display()),
+            &format!("--conmon={}", conmon.display()),
+            &format!("--listen={}", socket),
+            &format!("--root={}", dir.join("storage").display()),
+            &format!("--runroot={}", dir.join("run").display()),
+            &format!("--cni-config-dir={}", cni.display()),
+            &format!("--cni-plugin-dir={}", cni_plugin.display()),
+            &format!(
+                "--signature-policy={}",
+                Container::policy_json(config).display()
+            ),
+            &format!(
+                "--runtimes=local-runc:{}:{}",
+                System::find_executable("runc")?.display(),
+                dir.join("runc").display()
+            ),
+            "--default-runtime=local-runc",
+            &format!(
+                "--storage-driver={}",
+                if config.nodes() > 1 { "vfs" } else { "overlay" }
+            ),
+        ];
 
+        let mut process = if config.nodes() > 1 {
+            // Run inside a container
+            Container::start(config, &dir, "CRI-O", CRIO, &node_name, args)?
+        } else {
+            // Run as usual process
+            Process::start(&dir, "CRI-O", CRIO, args)?
+        };
         process.wait_ready("sandboxes:")?;
-        info!("CRI-O is ready");
-        Ok(Box::new(Crio { process, socket }))
+
+        info!("CRI-O is ready ({})", node_name);
+        Ok(Box::new(Self {
+            process,
+            socket,
+            node_name,
+        }))
     }
 
     /// Retrieve the CRI socket
-    pub fn socket(config: &Config) -> CriSocket {
-        CriSocket(Self::path(config).join("crio.sock"))
+    pub fn socket(config: &Config, network: &Network, node: u8) -> CriSocket {
+        CriSocket(Self::path(config, network, node).join("crio.sock"))
     }
 
     /// Retrieve the working path for the node
-    fn path(config: &Config) -> PathBuf {
-        config.root().join("crio")
-    }
-
-    /// Try to cleanup all related resources
-    fn stop_conmons(&self) {
-        // Remove all conmon processes
-        let now = Instant::now();
-        while now.elapsed().as_secs() < 5 {
-            match process::all() {
-                Err(e) => {
-                    debug!("Unable to retrieve processes: {}", e);
-                    sleep(Duration::from_secs(1));
-                }
-                Ok(procs) => {
-                    let mut found = false;
-                    for p in procs.iter().filter(|p| &p.comm == "conmon") {
-                        debug!("Killing conmon process {}", p.pid);
-                        if let Err(e) = kill(Pid::from_raw(p.pid), Signal::SIGTERM) {
-                            debug!("Unable to kill PID {}: {}", p.pid, e);
-                        }
-                        found = true;
-                    }
-                    if !found {
-                        debug!("All conmon processes exited");
-                        break;
-                    }
-                    // Give the signal time to arrive
-                    sleep(Duration::from_millis(100));
-                }
-            }
-        }
+    fn path(config: &Config, network: &Network, node: u8) -> PathBuf {
+        config
+            .root()
+            .join(CRIO)
+            .join(Node::name(config, network, node))
     }
 
     /// Remove all containers via crictl invocations
     fn remove_all_containers(&self) -> Fallible<()> {
-        debug!("Removing all CRI-O workloads");
+        debug!("Removing all CRI-O workloads on {}", self.node_name);
 
         let output = Command::new("crictl")
             .env(RUNTIME_ENV, self.socket.to_socket_string())
@@ -173,13 +152,17 @@ impl Crio {
             .output()?;
         let stdout = String::from_utf8(output.stdout)?;
         if !output.status.success() {
-            debug!("critcl pods stdout: {}", stdout);
-            debug!("critcl pods stderr: {}", String::from_utf8(output.stderr)?);
-            bail!("crictl pods command failed");
+            debug!("critcl pods stdout ({}): {}", self.node_name, stdout);
+            debug!(
+                "critcl pods stderr ({}): {}",
+                self.node_name,
+                String::from_utf8(output.stderr)?
+            );
+            bail!("crictl pods command failed ({})", self.node_name);
         }
 
         for x in stdout.lines() {
-            debug!("Removing pod {}", x);
+            debug!("Removing pod {} on {}", x, self.node_name);
             let output = Command::new("crictl")
                 .env(RUNTIME_ENV, self.socket.to_socket_string())
                 .arg("rmp")
@@ -187,13 +170,21 @@ impl Crio {
                 .arg(x)
                 .output()?;
             if !output.status.success() {
-                debug!("critcl rmp stdout: {}", String::from_utf8(output.stdout)?);
-                debug!("critcl rmp stderr: {}", String::from_utf8(output.stderr)?);
-                bail!("crictl rmp command failed");
+                debug!(
+                    "critcl rmp stdout ({}): {}",
+                    self.node_name,
+                    String::from_utf8(output.stdout)?
+                );
+                debug!(
+                    "critcl rmp stderr ({}): {}",
+                    self.node_name,
+                    String::from_utf8(output.stderr)?
+                );
+                bail!("crictl rmp command failed ({})", self.node_name);
             }
         }
 
-        debug!("All workloads removed");
+        debug!("All workloads removed on {}", self.node_name);
         Ok(())
     }
 }
@@ -201,17 +192,15 @@ impl Crio {
 impl Stoppable for Crio {
     fn stop(&mut self) -> Fallible<()> {
         // Remove all running containers
-        self.remove_all_containers()
-            .map_err(|e| format_err!("Unable to remove CRI-O containers: {}", e))?;
+        self.remove_all_containers().map_err(|e| {
+            format_err!(
+                "Unable to remove CRI-O containers on {}: {}",
+                self.node_name,
+                e
+            )
+        })?;
 
         // Stop the process, should never really fail
         self.process.stop()
-    }
-}
-
-impl Drop for Crio {
-    fn drop(&mut self) {
-        // Remove conmon processes
-        self.stop_conmons();
     }
 }

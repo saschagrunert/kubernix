@@ -15,14 +15,16 @@ pub struct Etcd {
 impl Etcd {
     pub fn start(config: &Config, network: &Network, pki: &Pki) -> ProcessState {
         info!("Starting etcd");
+        const ETCD: &str = "etcd";
 
         // Remove the etcd data dir if already exists (configuration re-use)
-        let dir = config.root().join("etcd");
+        let dir = config.root().join(ETCD);
         create_dir_all(&dir)?;
 
         let mut process = Process::start(
             &dir,
-            "etcd",
+            ETCD,
+            ETCD,
             &[
                 &format!("--advertise-client-urls=https://{}", network.etcd_client()),
                 "--client-cert-auth",
@@ -49,7 +51,7 @@ impl Etcd {
 
         process.wait_ready("ready to serve client requests")?;
         info!("etcd is ready");
-        Ok(Box::new(Etcd { process }))
+        Ok(Box::new(Self { process }))
     }
 }
 

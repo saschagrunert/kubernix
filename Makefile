@@ -2,18 +2,26 @@ ARGS ?=
 SUDO := sudo -E
 KUBERNIX := $(SUDO) target/release/kubernix $(ARGS)
 CONTAINER_RUNTIME := sudo podman
-IMAGE := saschagrunert/kubernix:latest
+IMAGE := docker.io/saschagrunert/kubernix
 RUN_DIR := $(shell pwd)/kubernix-run
 
+define nix
+	nix run -f nix/build.nix $(1)
+endef
+
 define nix-run
-	nix run -if nix/build.nix -k SSH_AUTH_SOCK -c $(1)
+	$(call nix,-c $(1))
+endef
+
+define nix-run-pure
+	$(call nix,-ik SSH_AUTH_SOCK -c $(1))
 endef
 
 all: build
 
 .PHONY: build
 build:
-	$(call nix-run,cargo build)
+	$(call nix-run-pure,cargo build)
 
 .PHONY: build-image
 build-image:
@@ -21,27 +29,27 @@ build-image:
 
 .PHONY: build-release
 build-release:
-	$(call nix-run,cargo build --release)
+	$(call nix-run-pure,cargo build --release)
 
 .PHONY: coverage
 coverage:
-	$(call nix-run,cargo kcov)
+	$(call nix-run-pure,cargo kcov)
 
 .PHONY: docs
 docs:
-	$(call nix-run,cargo doc --no-deps)
+	$(call nix-run-pure,cargo doc --no-deps)
 
 .PHONY: lint-clippy
 lint-clippy:
-	$(call nix-run,cargo clippy --all -- -D warnings)
+	$(call nix-run-pure,cargo clippy --all -- -D warnings)
 
 .PHONY: lint-rustfmt
 lint-rustfmt:
-	$(call nix-run,cargo fmt && git diff --exit-code)
+	$(call nix-run-pure,cargo fmt && git diff --exit-code)
 
 .PHONY: nix
 nix:
-	$(call nix-run,$(shell which bash))
+	$(call nix-run-pure,$(shell which bash))
 
 .PHONY: nixpkgs
 nixpkgs:
@@ -55,12 +63,16 @@ run: build-release
 .PHONY: run-image
 run-image:
 	mkdir -p $(RUN_DIR)
+	if [ -d /dev/mapper ]; then \
+		DEV_MAPPER=-v/dev/mapper:/dev/mapper ;\
+	fi ;\
 	$(CONTAINER_RUNTIME) run \
 		-v $(RUN_DIR):/kubernix-run \
 		--rm \
 		--privileged \
 		--net=host \
-		-it $(IMAGE)
+		$$DEV_MAPPER \
+		-it $(IMAGE) $(ARGS)
 
 .PHONY: shell
 shell: build-release
@@ -68,8 +80,8 @@ shell: build-release
 
 .PHONY: test-integration
 test-integration: build-release
-	$(SUDO) test/integration
+	$(call nix-run,cargo test --test integration -- --test-threads=1 --nocapture)
 
 .PHONY: test-unit
 test-unit:
-	$(call nix-run,cargo test)
+	$(call nix-run-pure,cargo test --lib)

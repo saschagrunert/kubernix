@@ -27,6 +27,7 @@ impl ControllerManager {
 
         let mut process = Process::start(
             &dir,
+            "Controller Manager",
             "kube-controller-manager",
             &[
                 "--bind-address=0.0.0.0",
@@ -49,7 +50,7 @@ impl ControllerManager {
 
         process.wait_ready("Serving securely")?;
         info!("Controller Manager is ready");
-        Ok(Box::new(ControllerManager { process }))
+        Ok(Box::new(Self { process }))
     }
 }
 

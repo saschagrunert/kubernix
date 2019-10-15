@@ -17,6 +17,7 @@ name = "kubernix"
 path = "src/main.rs"
 
 [dependencies]
+ansi_term = "0.12.1"
 base64 = "0.10.1"
 clap = { git = "https://github.com/clap-rs/clap", features = ["wrap_help"] }
 crossbeam-channel = "0.3.9"
@@ -28,7 +29,6 @@ ipnetwork = "0.15.0"
 log = { version = "0.4.8", features = ["serde"] }
 nix = "0.15.0"
 proc-mounts = "0.2.2"
-psutil = "1.7.0"
 rand = "0.7.2"
 rayon = "1.2.0"
 serde = { version = "1.0.101", features = ["derive"] }

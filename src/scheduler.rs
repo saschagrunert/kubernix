@@ -30,13 +30,14 @@ impl Scheduler {
 
         let mut process = Process::start(
             &dir,
+            "Scheduler",
             "kube-scheduler",
             &[&format!("--config={}", cfg.display()), "--v=2"],
         )?;
 
         process.wait_ready("Serving securely")?;
         info!("Scheduler is ready");
-        Ok(Box::new(Scheduler { process }))
+        Ok(Box::new(Self { process }))
     }
 }
 
