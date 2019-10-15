@@ -38,7 +38,6 @@ impl System {
             let hosts_file = Self::hosts();
             let hosts = read_to_string(&hosts_file)?;
             let local_hosts = (0..config.nodes())
-                .into_iter()
                 .map(|x| format!("{} {}", Ipv4Addr::LOCALHOST, Node::raw(x)))
                 .collect::<Vec<_>>();
 
