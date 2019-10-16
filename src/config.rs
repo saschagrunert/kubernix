@@ -1,5 +1,5 @@
 //! Configuration related structures
-use crate::{system::System, PODMAN};
+use crate::{podman::Podman, system::System};
 use clap::{crate_version, AppSettings, Clap};
 use failure::{format_err, Fallible};
 use getset::{CopyGetters, Getters};
@@ -118,7 +118,7 @@ pub struct Config {
     #[clap(
         env = "KUBERNIX_CONTAINER_RUNTIME",
         long = "container-runtime",
-        raw(default_value = "PODMAN"),
+        raw(default_value = "Podman::EXECUTABLE"),
         short = "u",
         value_name = "RUNTIME"
     )]

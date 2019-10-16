@@ -1,9 +1,10 @@
 ARGS ?=
-SUDO := sudo -E
-KUBERNIX := $(SUDO) target/release/kubernix $(ARGS)
-CONTAINER_RUNTIME := sudo podman
-IMAGE := docker.io/saschagrunert/kubernix
-RUN_DIR := $(shell pwd)/kubernix-run
+SUDO ?= sudo -E
+KUBERNIX ?= $(SUDO) target/release/kubernix $(ARGS)
+CONTAINER_RUNTIME ?= sudo podman
+RUN_DIR ?= $(shell pwd)/kubernix-run
+
+export IMAGE ?= docker.io/saschagrunert/kubernix
 
 define nix
 	nix run -f nix/build.nix $(1)
@@ -33,7 +34,20 @@ build-release:
 
 .PHONY: coverage
 coverage:
-	$(call nix-run-pure,cargo kcov)
+	$(call nix-run-pure,cargo kcov --lib)
+
+.PHONY: e2e
+e2e:
+	$(call nix-run,sudo \
+		KUBERNETES_SERVICE_HOST=127.0.0.1 \
+		KUBERNETES_SERVICE_PORT=6443 \
+		KUBECONFIG=$(RUN_DIR)/kubeconfig/admin.kubeconfig \
+		e2e.test \
+			--provider=local \
+			--ginkgo.focus='.*\[Conformance\].*' \
+			--ginkgo.progress \
+			$(ARGS) \
+	)
 
 .PHONY: docs
 docs:
@@ -68,6 +82,7 @@ run: build-release
 
 .PHONY: run-image
 run-image:
+	sudo contrib/prepare-system.sh
 	mkdir -p $(RUN_DIR)
 	if [ -d /dev/mapper ]; then \
 		DEV_MAPPER=-v/dev/mapper:/dev/mapper ;\
@@ -85,8 +100,14 @@ shell: build-release
 	$(KUBERNIX) shell
 
 .PHONY: test-integration
-test-integration: build-release
-	$(call nix-run,cargo test --test integration -- --test-threads=1 --nocapture)
+test-integration:
+	$(call nix-run,\
+		cargo test \
+			--test integration $(ARGS) \
+			-- \
+			--test-threads 1 \
+			--nocapture \
+	)
 
 .PHONY: test-unit
 test-unit:

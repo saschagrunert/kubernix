@@ -1,16 +1,28 @@
 ---
 version: 2.1
 
+stdenv: &stdenv
+  environment:
+    CONTAINER_RUNTIME: docker
+    IMAGE: docker.io/saschagrunert/kubernix:latest
+    LOCAL_IMAGE: &local_image image.tar
+
 executors:
   container:
     docker:
       - image: &image nixos/nix
+    <<: *stdenv
+
   container-musl:
     docker:
       - image: ekidd/rust-musl-builder:stable
+    <<: *stdenv
+
   machine:
     machine:
       image: ubuntu-1604:201903-01
+    <<: *stdenv
+
 
 workflows:
   version: 2
@@ -19,7 +31,10 @@ workflows:
       - build
       - build-release
       - build-static
+      - build-image
       - deploy-image:
+          requires:
+            - build-image
           filters:
             branches:
               only: master
@@ -40,7 +55,50 @@ workflows:
               only: master
       - lint-clippy
       - lint-rustfmt
-      - test
+      - machine-run:
+          name: test-integration-docker-single-node
+          cache: v2-test-integration-docker-single-node
+          run: |
+            docker load -i $LOCAL_IMAGE
+            make test-integration ARGS=docker_single_node
+          requires:
+            - build-image
+      - machine-run:
+          name: test-integration-podman-single-node
+          cache: v2-test-integration-podman-single-node
+          run: |
+            sudo podman load -i $LOCAL_IMAGE
+            sudo podman tag localhost/saschagrunert/kubernix:latest $IMAGE
+            make test-integration ARGS=podman_single_node
+          requires:
+            - build-image
+      - machine-run:
+          name: test-integration-podman-multi-node
+          cache: v2-test-integration-podman-multi-node
+          run: |
+            sudo podman load -i $LOCAL_IMAGE
+            sudo podman tag localhost/saschagrunert/kubernix:latest $IMAGE
+            make test-integration ARGS=podman_multi_node
+          requires:
+            - build-image
+      - machine-run:
+          name: test-integration-local-multi-node
+          cache: v2-test-integration-local-multi-node
+          run: make test-integration ARGS=local_multi_node
+          requires:
+            - build-release
+      - machine-run:
+          name: test-integration-local-single-node
+          cache: v2-test-integration-local-single-node
+          run: make test-integration ARGS=local_single_node
+          requires:
+            - build-release
+      - machine-run:
+          name: test-unit
+          cache: v2-test-unit
+          run: |
+            make coverage
+            bash <(curl -s https://codecov.io/bash)
 
 prepare-env: &prepare-env
   run:
@@ -80,6 +138,10 @@ jobs:
       - run:
           name: build release
           command: make build-release
+      - persist_to_workspace:
+          root: .
+          paths:
+            - target/release/kubernix
       - save_cache:
           key: v1-build-release-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:
@@ -131,16 +193,32 @@ jobs:
   deploy-image:
     executor: machine
     steps:
-      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          name: Load the image
+          command: docker load -i $LOCAL_IMAGE
       - run:
           name: Login to registry
           command: docker login -u $DOCKER_USER -p $DOCKER_PASS
       - run:
-          name: Build the image
-          command: make build-image CONTAINER_RUNTIME=docker
-      - run:
           name: Push the image
-          command: docker push saschagrunert/kubernix:latest
+          command: docker push $IMAGE
+
+  build-image:
+    executor: machine
+    steps:
+      - checkout
+      - run:
+          name: Build the image
+          command: make build-image
+      - run:
+          name: Save the image
+          command: docker save $IMAGE -o $LOCAL_IMAGE
+      - persist_to_workspace:
+          root: .
+          paths:
+            - *local_image
 
   docs:
     executor: container
@@ -149,12 +227,12 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-doc-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+            - v1-docs-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
       - run:
           name: documentation
           command: make docs
       - save_cache:
-          key: v1-doc-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+          key: v1-docs-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:
             - target
       - persist_to_workspace:
@@ -224,19 +302,45 @@ jobs:
             - target
             - ~/.cargo
 
-  test:
-    executor: container
+  machine-run:
+    executor: machine
+    parameters:
+      run:
+        type: string
+      cache:
+        type: string
     steps:
-      - <<: *prepare-env
       - checkout
+      - run:
+          name: Prepare cache dir
+          command: |
+            sudo mkdir /nix
+            sudo chown $(id -u):$(id -g) /nix
       - restore_cache:
           keys:
-            - v1-build-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+            - << parameters.cache>>-machine-run-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+      - attach_workspace:
+          at: .
       - run:
-          name: build
-          command: make test-unit
+          name: Install podman
+          command: |
+            sudo add-apt-repository -y ppa:projectatomic/ppa
+            sudo apt-get update -y
+            sudo apt-get install -y podman
+      - run:
+          name: Install Nix
+          command: curl https://nixos.org/nix/install | sh
+      - run:
+          name: Run the tests
+          command: |
+            sudo hostnamectl set-hostname test
+            . $HOME/.nix-profile/etc/profile.d/nix.sh
+            sudo ln -s $HOME/.nix-profile/bin/nix /usr/bin
+            sudo contrib/prepare-system.sh
+            << parameters.run >>
+            sudo chown -R $(id -u):$(id -g) /nix
       - save_cache:
-          key: v1-build-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+          key: << parameters.cache>>-machine-run-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:
             - /nix
             - target

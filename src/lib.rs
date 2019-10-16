@@ -16,6 +16,7 @@ mod network;
 mod nix;
 mod node;
 mod pki;
+mod podman;
 mod process;
 mod proxy;
 mod scheduler;
@@ -56,7 +57,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-const PODMAN: &str = "podman";
 const KUBERNIX_ENV: &str = "kubernix.env";
 const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
@@ -233,8 +233,10 @@ impl Kubernix {
 
         // No dead processes
         if all_ok {
+            // Apply all cluster addons
             kubernix.apply_addons()?;
 
+            // Spawn the shell
             info!("Everything is up and running");
             kubernix.spawn_shell()?;
         } else {

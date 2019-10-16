@@ -1,8 +1,8 @@
-use crate::{nix::Nix, process::Process, system::System, Config, PODMAN};
+use crate::{nix::Nix, podman::Podman, process::Process, system::System, Config};
 use failure::{bail, Fallible};
 use log::{info, trace, LevelFilter};
 use std::{
-    fs::{self, create_dir_all},
+    fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
@@ -43,29 +43,16 @@ impl Container {
             )?;
         }
 
-        let mut args = vec![];
-        if config.container_runtime() == PODMAN {
-            // Prepare podman CNI
-            let dir = Self::podman_cni_dir(config);
-            create_dir_all(&dir)?;
-            fs::write(
-                &dir.join("87-podman-bridge.conflist"),
-                include_str!("assets/podman-bridge.json"),
-            )?;
-
-            // Add podman specific arguments
-            args.extend(Self::default_podman_args(config));
-            args.extend(vec![
-                "build".into(),
-                format!("--signature-policy={}", policy_json.display()),
-            ]);
+        // Prepare the arguments
+        let mut args = if Podman::is_configured(config) {
+            Podman::build_args(config, &policy_json)?
         } else {
-            args.push("build".into());
-        }
+            vec!["build".into()]
+        };
+        args.extend(vec![format!("-t={}", DEFAULT_IMAGE), ".".into()]);
+        trace!("Container runtime build args: {:?}", args);
 
         // Run the build
-        args.extend(vec![format!("-t={}", DEFAULT_IMAGE), ".".into()]);
-        trace!("Podman build args: {:?}", args);
         let status = Command::new(config.container_runtime())
             .current_dir(config.root())
             .args(args)
@@ -112,8 +99,8 @@ impl Container {
         ];
 
         // Podman specific arguments
-        let podman_args = Self::default_podman_args(config);
-        if config.container_runtime() == PODMAN {
+        let podman_args = Podman::default_args(config);
+        if Podman::is_configured(config) {
             args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::<Vec<_>>())
         }
 
@@ -129,7 +116,7 @@ impl Container {
         args_vec.extend(args);
 
         // Start the process
-        trace!("Podman start args: {:?}", args_vec);
+        trace!("Container runtime start args: {:?}", args_vec);
         Process::start(dir, identifier, config.container_runtime(), &args_vec)
     }
 
@@ -143,12 +130,17 @@ impl Container {
         args: &[&str],
     ) -> Fallible<Process> {
         // Prepare the args
-        let n = Self::prefixed_container_name(container_name);
-        let a = Self::default_podman_args(config);
-        let mut args_vec = a.iter().map(|x| x.as_str()).collect::<Vec<_>>();
+        let mut args_vec = vec![];
+
+        let podman_args = Podman::default_args(config);
+        if Podman::is_configured(config) {
+            args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::<Vec<_>>())
+        }
+
+        let name = Self::prefixed_container_name(container_name);
         args_vec.extend(vec![
             "exec",
-            &n,
+            &name,
             "nix",
             "run",
             "-f",
@@ -159,7 +151,7 @@ impl Container {
         args_vec.extend(args);
 
         // Run as usual process
-        trace!("Podman exec args: {:?}", args_vec);
+        trace!("Container runtime exec args: {:?}", args_vec);
         Process::start(dir, identifier, config.container_runtime(), &args_vec)
     }
 
@@ -184,34 +176,8 @@ impl Container {
         }
     }
 
-    /// Podman args which should apply to every command
-    fn default_podman_args(config: &Config) -> Vec<String> {
-        let log_level = if config.log_level() >= LevelFilter::Debug {
-            "DEBUG".into()
-        } else {
-            config.log_level().to_string()
-        };
-        vec![
-            format!("--log-level={}", log_level),
-            format!(
-                "--storage-driver={}",
-                if config.container() { "vfs" } else { "" }
-            ),
-            format!(
-                "--cni-config-dir={}",
-                Self::podman_cni_dir(config).display()
-            ),
-            "--events-backend=none".into(),
-            "--cgroup-manager=cgroupfs".into(),
-        ]
-    }
-
     /// Retrieve a prefixed container name
     fn prefixed_container_name(name: &str) -> String {
         format!("{}-{}", DEFAULT_ROOT, name)
-    }
-
-    fn podman_cni_dir(config: &Config) -> PathBuf {
-        config.root().join("podman")
     }
 }

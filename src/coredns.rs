@@ -19,7 +19,7 @@ impl CoreDNS {
             fs::write(&file, yml)?;
         }
 
-        Kubectl::apply(kubeconfig, &file)
+        Kubectl::apply(kubeconfig.admin(), &file)
             .map_err(|e| format_err!("Unable to deploy CoreDNS: {}", e))?;
 
         info!("CoreDNS deployed");
