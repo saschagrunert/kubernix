@@ -124,7 +124,8 @@ impl Crio {
 
         let mut process = if config.nodes() > 1 {
             // Run inside a container
-            Container::start(config, &dir, "CRI-O", CRIO, &node_name, args)?
+            let identifier = format!("CRI-O {}", node_name);
+            Container::start(config, &dir, &identifier, CRIO, &node_name, args)?
         } else {
             // Run as usual process
             Process::start(&dir, "CRI-O", CRIO, args)?
