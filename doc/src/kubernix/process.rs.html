@@ -242,9 +242,17 @@
 <span id="242">242</span>
 <span id="243">243</span>
 <span id="244">244</span>
+<span id="245">245</span>
+<span id="246">246</span>
+<span id="247">247</span>
+<span id="248">248</span>
+<span id="249">249</span>
+<span id="250">250</span>
+<span id="251">251</span>
+<span id="252">252</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">system</span>::<span class="ident">System</span>;
-<span class="kw">use</span> <span class="ident">crossbeam_channel</span>::{<span class="ident">bounded</span>, <span class="ident">Sender</span>};
+<span class="kw">use</span> <span class="ident">crossbeam_channel</span>::{<span class="ident">bounded</span>, <span class="ident">Receiver</span>, <span class="ident">Sender</span>};
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">format_err</span>, <span class="ident">Fallible</span>};
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">error</span>, <span class="ident">info</span>};
 <span class="kw">use</span> <span class="ident">nix</span>::{
@@ -264,6 +272,7 @@
 <span class="doccomment">/// A general process abstraction</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Process</span> {
     <span class="ident">command</span>: <span class="ident">String</span>,
+    <span class="ident">died</span>: <span class="ident">Receiver</span><span class="op">&lt;</span>()<span class="op">&gt;</span>,
     <span class="ident">kill</span>: <span class="ident">Sender</span><span class="op">&lt;</span>()<span class="op">&gt;</span>,
     <span class="ident">log_file</span>: <span class="ident">PathBuf</span>,
     <span class="ident">name</span>: <span class="ident">String</span>,
@@ -320,6 +329,7 @@
             })<span class="question-mark">?</span>;
 
         <span class="kw">let</span> (<span class="ident">kill</span>, <span class="ident">killed</span>) <span class="op">=</span> <span class="ident">bounded</span>(<span class="number">1</span>);
+        <span class="kw">let</span> (<span class="ident">dead</span>, <span class="ident">died</span>) <span class="op">=</span> <span class="ident">bounded</span>(<span class="number">1</span>);
         <span class="kw">let</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">command</span>.<span class="ident">to_owned</span>();
         <span class="kw">let</span> <span class="ident">n</span> <span class="op">=</span> <span class="ident">identifier</span>.<span class="ident">to_owned</span>();
         <span class="kw">let</span> <span class="ident">pid</span> <span class="op">=</span> <span class="ident">child</span>.<span class="ident">id</span>();
@@ -330,6 +340,7 @@
             <span class="comment">// No kill send, we assume that the process died</span>
             <span class="kw">if</span> <span class="ident">killed</span>.<span class="ident">try_recv</span>().<span class="ident">is_err</span>() {
                 <span class="macro">error</span><span class="macro">!</span>(<span class="string">&quot;Process &#39;{}&#39; ({}) died unexpectedly&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>);
+                <span class="ident">dead</span>.<span class="ident">send</span>(())<span class="question-mark">?</span>;
             } <span class="kw">else</span> {
                 <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Process &#39;{}&#39; ({}) stopped&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>);
             }
@@ -353,6 +364,7 @@
 
         <span class="prelude-val">Ok</span>(<span class="ident">Process</span> {
             <span class="ident">command</span>: <span class="ident">command</span>.<span class="ident">into</span>(),
+            <span class="ident">died</span>,
             <span class="ident">kill</span>,
             <span class="ident">log_file</span>,
             <span class="ident">name</span>: <span class="ident">identifier</span>.<span class="ident">into</span>(),
@@ -380,6 +392,10 @@
             <span class="kw">if</span> <span class="ident">line</span>.<span class="ident">contains</span>(<span class="ident">pattern</span>) {
                 <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Found pattern &#39;{}&#39; in line &#39;{}&#39;&quot;</span>, <span class="ident">pattern</span>, <span class="ident">line</span>.<span class="ident">trim</span>());
                 <span class="kw">return</span> <span class="prelude-val">Ok</span>(());
+            }
+
+            <span class="kw">if</span> <span class="self">self</span>.<span class="ident">died</span>.<span class="ident">try_recv</span>().<span class="ident">is_ok</span>() {
+                <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Process &#39;{}&#39; ({}) died&quot;</span>, <span class="self">self</span>.<span class="ident">command</span>, <span class="self">self</span>.<span class="ident">name</span>)
             }
         }
 
