@@ -8,7 +8,7 @@ use crate::{
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
 };
-use failure::{format_err, Fallible};
+use failure::{bail, format_err, Fallible};
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -29,6 +29,14 @@ impl Kubelet {
         const KUBELET: &str = "kubelet";
 
         let dir = config.root().join(KUBELET).join(&node_name);
+        let root_dir = dir.join("run");
+        if root_dir.display().to_string().len() + "kubelet.sock".len() > 100 {
+            bail!(
+                "Kubelet run path '{}' is too long for kubelet.sock",
+                root_dir.display()
+            )
+        }
+
         create_dir_all(&dir)?;
 
         let idendity = pki
@@ -58,10 +66,10 @@ impl Kubelet {
         let args = &[
             "--container-runtime=remote",
             &format!("--config={}", cfg.display()),
-            &format!("--root-dir={}", dir.join("run").display()),
+            &format!("--root-dir={}", root_dir.display()),
             &format!(
                 "--container-runtime-endpoint={}",
-                Crio::socket(config, network, node).to_socket_string(),
+                Crio::socket(config, network, node)?.to_socket_string(),
             ),
             &format!(
                 "--kubeconfig={}",

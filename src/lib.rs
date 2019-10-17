@@ -262,7 +262,7 @@ impl Kubernix {
             format!(
                 "export {}={}\nexport {}={}",
                 RUNTIME_ENV,
-                Crio::socket(&self.config, &self.network, 0).to_socket_string(),
+                Crio::socket(&self.config, &self.network, 0)?.to_socket_string(),
                 "KUBECONFIG",
                 self.kubeconfig.admin().display(),
             ),
