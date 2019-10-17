@@ -107,6 +107,7 @@
 <span id="107">107</span>
 <span id="108">108</span>
 <span id="109">109</span>
+<span id="110">110</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{
     <span class="ident">config</span>::<span class="ident">Config</span>,
@@ -200,7 +201,8 @@
             <span class="kw">let</span> <span class="ident">arg_hostname</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--hostname-override={}&quot;</span>, <span class="ident">node_name</span>);
             <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">modargs</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="kw-2">&amp;</span><span class="ident">str</span><span class="op">&gt;</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[<span class="ident">arg_hostname</span>];
             <span class="ident">modargs</span>.<span class="ident">extend</span>(<span class="ident">args</span>);
-            <span class="ident">Container</span>::<span class="ident">exec</span>(<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="string">&quot;Kubelet&quot;</span>, <span class="ident">KUBELET</span>, <span class="kw-2">&amp;</span><span class="ident">node_name</span>, <span class="kw-2">&amp;</span><span class="ident">modargs</span>)<span class="question-mark">?</span>
+            <span class="kw">let</span> <span class="ident">identifier</span> <span class="op">=</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;Kubelet {}&quot;</span>, <span class="ident">node_name</span>);
+            <span class="ident">Container</span>::<span class="ident">exec</span>(<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="kw-2">&amp;</span><span class="ident">identifier</span>, <span class="ident">KUBELET</span>, <span class="kw-2">&amp;</span><span class="ident">node_name</span>, <span class="kw-2">&amp;</span><span class="ident">modargs</span>)<span class="question-mark">?</span>
         } <span class="kw">else</span> {
             <span class="comment">// Run as usual process</span>
             <span class="ident">Process</span>::<span class="ident">start</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="string">&quot;Kubelet&quot;</span>, <span class="ident">KUBELET</span>, <span class="ident">args</span>)<span class="question-mark">?</span>
