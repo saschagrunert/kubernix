@@ -584,7 +584,7 @@
             <span class="macro">format</span><span class="macro">!</span>(
                 <span class="string">&quot;export {}={}\nexport {}={}&quot;</span>,
                 <span class="ident">RUNTIME_ENV</span>,
-                <span class="ident">Crio</span>::<span class="ident">socket</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">network</span>, <span class="number">0</span>).<span class="ident">to_socket_string</span>(),
+                <span class="ident">Crio</span>::<span class="ident">socket</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">network</span>, <span class="number">0</span>)<span class="question-mark">?</span>.<span class="ident">to_socket_string</span>(),
                 <span class="string">&quot;KUBECONFIG&quot;</span>,
                 <span class="self">self</span>.<span class="ident">kubeconfig</span>.<span class="ident">admin</span>().<span class="ident">display</span>(),
             ),
