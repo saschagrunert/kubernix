@@ -90,7 +90,8 @@ impl Kubelet {
             let arg_hostname = &format!("--hostname-override={}", node_name);
             let mut modargs: Vec<&str> = vec![arg_hostname];
             modargs.extend(args);
-            Container::exec(config, &dir, "Kubelet", KUBELET, &node_name, &modargs)?
+            let identifier = format!("Kubelet {}", node_name);
+            Container::exec(config, &dir, &identifier, KUBELET, &node_name, &modargs)?
         } else {
             // Run as usual process
             Process::start(&dir, "Kubelet", KUBELET, args)?
