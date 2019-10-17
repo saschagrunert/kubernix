@@ -204,6 +204,10 @@
 <span id="204">204</span>
 <span id="205">205</span>
 <span id="206">206</span>
+<span id="207">207</span>
+<span id="208">208</span>
+<span id="209">209</span>
+<span id="210">210</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{
     <span class="ident">container</span>::<span class="ident">Container</span>,
@@ -314,7 +318,11 @@
             <span class="string">&quot;--default-runtime=local-runc&quot;</span>,
             <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
                 <span class="string">&quot;--storage-driver={}&quot;</span>,
-                <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> { <span class="string">&quot;vfs&quot;</span> } <span class="kw">else</span> { <span class="string">&quot;overlay&quot;</span> }
+                <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> <span class="op">||</span> <span class="ident">config</span>.<span class="ident">container</span>() {
+                    <span class="string">&quot;vfs&quot;</span>
+                } <span class="kw">else</span> {
+                    <span class="string">&quot;overlay&quot;</span>
+                }
             ),
         ];
 

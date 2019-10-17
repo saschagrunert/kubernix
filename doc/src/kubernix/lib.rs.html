@@ -317,6 +317,8 @@
 <span id="317">317</span>
 <span id="318">318</span>
 <span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! # kubernix</span>
 <span class="attribute">#![<span class="ident">deny</span>(<span class="ident">missing_docs</span>)]</span>
@@ -336,6 +338,7 @@
 <span class="kw">mod</span> <span class="ident">nix</span>;
 <span class="kw">mod</span> <span class="ident">node</span>;
 <span class="kw">mod</span> <span class="ident">pki</span>;
+<span class="kw">mod</span> <span class="ident">podman</span>;
 <span class="kw">mod</span> <span class="ident">process</span>;
 <span class="kw">mod</span> <span class="ident">proxy</span>;
 <span class="kw">mod</span> <span class="ident">scheduler</span>;
@@ -376,7 +379,6 @@
     <span class="ident">time</span>::{<span class="ident">Duration</span>, <span class="ident">Instant</span>},
 };
 
-<span class="kw">const</span> <span class="ident">PODMAN</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;podman&quot;</span>;
 <span class="kw">const</span> <span class="ident">KUBERNIX_ENV</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernix.env&quot;</span>;
 <span class="kw">const</span> <span class="ident">RUNTIME_ENV</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;CONTAINER_RUNTIME_ENDPOINT&quot;</span>;
 
@@ -553,8 +555,10 @@
 
         <span class="comment">// No dead processes</span>
         <span class="kw">if</span> <span class="ident">all_ok</span> {
+            <span class="comment">// Apply all cluster addons</span>
             <span class="ident">kubernix</span>.<span class="ident">apply_addons</span>()<span class="question-mark">?</span>;
 
+            <span class="comment">// Spawn the shell</span>
             <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Everything is up and running&quot;</span>);
             <span class="ident">kubernix</span>.<span class="ident">spawn_shell</span>()<span class="question-mark">?</span>;
         } <span class="kw">else</span> {

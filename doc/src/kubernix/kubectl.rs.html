@@ -27,34 +27,74 @@
 <span id="27">27</span>
 <span id="28">28</span>
 <span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
 </pre><div class="example-wrap"><pre class="rust ">
-<span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">kubeconfig</span>::<span class="ident">KubeConfig</span>;
 <span class="kw">use</span> <span class="ident">failure</span>::{<span class="ident">bail</span>, <span class="ident">Fallible</span>};
-<span class="kw">use</span> <span class="ident">log</span>::<span class="ident">debug</span>;
+<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">trace</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{<span class="ident">path</span>::<span class="ident">Path</span>, <span class="ident">process</span>::<span class="ident">Command</span>};
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Kubectl</span>;
 
 <span class="kw">impl</span> <span class="ident">Kubectl</span> {
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">apply</span>(<span class="ident">kubeconfig</span>: <span class="kw-2">&amp;</span><span class="ident">KubeConfig</span>, <span class="ident">file</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="doccomment">/// Run a generic kubectl command</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">execute</span>(<span class="ident">kubeconfig</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>, <span class="ident">args</span>: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="ident">str</span>]) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;kubectl&quot;</span>)
-            .<span class="ident">arg</span>(<span class="string">&quot;apply&quot;</span>)
-            .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--kubeconfig={}&quot;</span>, <span class="ident">kubeconfig</span>.<span class="ident">admin</span>().<span class="ident">display</span>()))
-            .<span class="ident">arg</span>(<span class="string">&quot;-f&quot;</span>)
-            .<span class="ident">arg</span>(<span class="ident">file</span>)
+            .<span class="ident">args</span>(<span class="ident">args</span>)
+            .<span class="ident">arg</span>(<span class="string">&quot;--kubeconfig&quot;</span>)
+            .<span class="ident">arg</span>(<span class="ident">kubeconfig</span>)
             .<span class="ident">output</span>()<span class="question-mark">?</span>;
         <span class="kw">if</span> <span class="op">!</span><span class="ident">output</span>.<span class="ident">status</span>.<span class="ident">success</span>() {
-            <span class="macro">debug</span><span class="macro">!</span>(
-                <span class="string">&quot;kubectl apply stdout: {}&quot;</span>,
-                <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>
-            );
-            <span class="macro">debug</span><span class="macro">!</span>(
-                <span class="string">&quot;kubectl apply stderr: {}&quot;</span>,
-                <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>
-            );
-            <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;kubectl apply command failed&quot;</span>);
+            <span class="macro">trace</span><span class="macro">!</span>(<span class="string">&quot;kubectl args: {:?}&quot;</span>, <span class="ident">args</span>);
+            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;kubectl stdout: {}&quot;</span>, <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>);
+            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;kubectl stderr: {}&quot;</span>, <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>);
+            <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;kubectl command failed&quot;</span>);
         }
         <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="doccomment">/// Run kubectl config</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">config</span>(<span class="ident">kubeconfig</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>, <span class="ident">args</span>: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="ident">str</span>]) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">final_args</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[<span class="string">&quot;config&quot;</span>];
+        <span class="ident">final_args</span>.<span class="ident">extend</span>(<span class="ident">args</span>);
+        <span class="self">Self</span>::<span class="ident">execute</span>(<span class="ident">kubeconfig</span>, <span class="kw-2">&amp;</span><span class="ident">final_args</span>)
+    }
+
+    <span class="doccomment">/// Run kubectl apply</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">apply</span>(<span class="ident">kubeconfig</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>, <span class="ident">file</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>) <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="ident">file_arg</span> <span class="op">=</span> <span class="ident">file</span>.<span class="ident">display</span>().<span class="ident">to_string</span>();
+        <span class="kw">let</span> <span class="ident">args</span> <span class="op">=</span> <span class="kw-2">&amp;</span>[<span class="string">&quot;apply&quot;</span>, <span class="string">&quot;-f&quot;</span>, <span class="kw-2">&amp;</span><span class="ident">file_arg</span>];
+        <span class="self">Self</span>::<span class="ident">execute</span>(<span class="ident">kubeconfig</span>, <span class="ident">args</span>)
+    }
+}
+
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
+<span class="kw">mod</span> <span class="ident">tests</span> {
+    <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
+    <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">path</span>::<span class="ident">PathBuf</span>;
+
+    <span class="attribute">#[<span class="ident">test</span>]</span>
+    <span class="kw">fn</span> <span class="ident">execute_success</span>() <span class="op">-&gt;</span> <span class="ident">Fallible</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="kw">let</span> <span class="ident">k</span> <span class="op">=</span> <span class="ident">PathBuf</span>::<span class="ident">from</span>(<span class="string">&quot;&quot;</span>);
+        <span class="ident">Kubectl</span>::<span class="ident">execute</span>(<span class="kw-2">&amp;</span><span class="ident">k</span>, <span class="kw-2">&amp;</span>[])
     }
 }
 </pre></div>
