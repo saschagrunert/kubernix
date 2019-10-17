@@ -1,29 +1,49 @@
-use crate::kubeconfig::KubeConfig;
 use failure::{bail, Fallible};
-use log::debug;
+use log::{debug, trace};
 use std::{path::Path, process::Command};
 
 pub struct Kubectl;
 
 impl Kubectl {
-    pub fn apply(kubeconfig: &KubeConfig, file: &Path) -> Fallible<()> {
+    /// Run a generic kubectl command
+    pub fn execute(kubeconfig: &Path, args: &[&str]) -> Fallible<()> {
         let output = Command::new("kubectl")
-            .arg("apply")
-            .arg(format!("--kubeconfig={}", kubeconfig.admin().display()))
-            .arg("-f")
-            .arg(file)
+            .args(args)
+            .arg("--kubeconfig")
+            .arg(kubeconfig)
             .output()?;
         if !output.status.success() {
-            debug!(
-                "kubectl apply stdout: {}",
-                String::from_utf8(output.stdout)?
-            );
-            debug!(
-                "kubectl apply stderr: {}",
-                String::from_utf8(output.stderr)?
-            );
-            bail!("kubectl apply command failed");
+            trace!("kubectl args: {:?}", args);
+            debug!("kubectl stdout: {}", String::from_utf8(output.stdout)?);
+            debug!("kubectl stderr: {}", String::from_utf8(output.stderr)?);
+            bail!("kubectl command failed");
         }
         Ok(())
+    }
+
+    /// Run kubectl config
+    pub fn config(kubeconfig: &Path, args: &[&str]) -> Fallible<()> {
+        let mut final_args = vec!["config"];
+        final_args.extend(args);
+        Self::execute(kubeconfig, &final_args)
+    }
+
+    /// Run kubectl apply
+    pub fn apply(kubeconfig: &Path, file: &Path) -> Fallible<()> {
+        let file_arg = file.display().to_string();
+        let args = &["apply", "-f", &file_arg];
+        Self::execute(kubeconfig, args)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn execute_success() -> Fallible<()> {
+        let k = PathBuf::from("");
+        Kubectl::execute(&k, &[])
     }
 }

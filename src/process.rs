@@ -112,7 +112,7 @@ impl Process {
             log_file,
             name: identifier.into(),
             pid,
-            readyness_timeout: 30,
+            readyness_timeout: 120,
             watch: Some(watch),
         })
     }

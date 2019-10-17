@@ -12,10 +12,9 @@ let
       "rustfmt-preview"
     ];
   });
-  cargo-kcov = pkgs.callPackage ./cargo-kcov.nix {};
   deps = with pkgs; (import ./default.nix) ++ [
+    (pkgs.callPackage ./derivations/cargo-kcov.nix {})
     binutils
-    cargo-kcov
     coreutils
     curl
     gcc

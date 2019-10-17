@@ -7,7 +7,7 @@ use crate::{
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
 };
-use failure::Fallible;
+use failure::{format_err, Fallible};
 use log::{debug, info};
 use std::{
     fs::{self, create_dir_all},
@@ -89,7 +89,8 @@ impl ApiServer {
             fs::write(&file, include_str!("assets/apiserver.yml"))?;
         }
 
-        Kubectl::apply(kubeconfig, &file)?;
+        Kubectl::apply(kubeconfig.admin(), &file)
+            .map_err(|e| format_err!("Unable to deploy API server RBAC rules: {}", e))?;
 
         debug!("API Server RBAC rule created");
         Ok(())
