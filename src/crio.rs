@@ -32,6 +32,13 @@ impl Display for CriSocket {
 }
 
 impl CriSocket {
+    pub fn new(path: PathBuf) -> Fallible<CriSocket> {
+        if path.display().to_string().len() > 100 {
+            bail!("Socket path '{}' is too long")
+        }
+        Ok(CriSocket(path))
+    }
+
     pub fn to_socket_string(&self) -> String {
         format!("unix://{}", self.0.display())
     }
@@ -83,7 +90,7 @@ impl Crio {
             // Pseudo config to not load local configuration values
             fs::write(&crio_config, "")?;
         }
-        let socket = Self::socket(config, network, node);
+        let socket = Self::socket(config, network, node)?;
 
         let args = &[
             "--log-level=debug",
@@ -133,8 +140,8 @@ impl Crio {
     }
 
     /// Retrieve the CRI socket
-    pub fn socket(config: &Config, network: &Network, node: u8) -> CriSocket {
-        CriSocket(Self::path(config, network, node).join("crio.sock"))
+    pub fn socket(config: &Config, network: &Network, node: u8) -> Fallible<CriSocket> {
+        CriSocket::new(Self::path(config, network, node).join("crio.sock"))
     }
 
     /// Retrieve the working path for the node
@@ -206,5 +213,21 @@ impl Stoppable for Crio {
 
         // Stop the process, should never really fail
         self.process.stop()
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn cri_socket_success() -> Fallible<()> {
+        CriSocket::new("/some/path.sock".into())?;
+        Ok(())
+    }
+
+    #[test]
+    fn cri_socket_failure() {
+        assert!(CriSocket::new("a".repeat(101).into()).is_err());
     }
 }
