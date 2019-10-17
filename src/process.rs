@@ -1,5 +1,5 @@
 use crate::system::System;
-use crossbeam_channel::{bounded, Sender};
+use crossbeam_channel::{bounded, Receiver, Sender};
 use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
 use nix::{
@@ -19,6 +19,7 @@ use std::{
 /// A general process abstraction
 pub struct Process {
     command: String,
+    died: Receiver<()>,
     kill: Sender<()>,
     log_file: PathBuf,
     name: String,
@@ -75,6 +76,7 @@ impl Process {
             })?;
 
         let (kill, killed) = bounded(1);
+        let (dead, died) = bounded(1);
         let c = command.to_owned();
         let n = identifier.to_owned();
         let pid = child.id();
@@ -85,6 +87,7 @@ impl Process {
             // No kill send, we assume that the process died
             if killed.try_recv().is_err() {
                 error!("Process '{}' ({}) died unexpectedly", n, c);
+                dead.send(())?;
             } else {
                 info!("Process '{}' ({}) stopped", n, c);
             }
@@ -108,6 +111,7 @@ impl Process {
 
         Ok(Process {
             command: command.into(),
+            died,
             kill,
             log_file,
             name: identifier.into(),
@@ -135,6 +139,10 @@ impl Process {
             if line.contains(pattern) {
                 debug!("Found pattern '{}' in line '{}'", pattern, line.trim());
                 return Ok(());
+            }
+
+            if self.died.try_recv().is_ok() {
+                bail!("Process '{}' ({}) died", self.command, self.name)
             }
         }
 
