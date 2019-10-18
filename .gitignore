@@ -1,4 +1,5 @@
 **/*.rs.bk
+*.orig
 .kube
 /target
 /test-*

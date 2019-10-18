@@ -1,7 +1,7 @@
 ARGS ?=
 SUDO ?= sudo -E
 KUBERNIX ?= $(SUDO) target/release/kubernix $(ARGS)
-CONTAINER_RUNTIME ?= sudo podman
+CONTAINER_RUNTIME ?= $(SUDO) podman
 RUN_DIR ?= $(shell pwd)/kubernix-run
 
 export IMAGE ?= docker.io/saschagrunert/kubernix
@@ -38,7 +38,7 @@ coverage:
 
 .PHONY: e2e
 e2e:
-	$(call nix-run,sudo \
+	$(call nix-run,$(SUDO) \
 		KUBERNETES_SERVICE_HOST=127.0.0.1 \
 		KUBERNETES_SERVICE_PORT=6443 \
 		KUBECONFIG=$(RUN_DIR)/kubeconfig/admin.kubeconfig \
@@ -82,7 +82,7 @@ run: build-release
 
 .PHONY: run-image
 run-image:
-	sudo contrib/prepare-system.sh
+	$(SUDO) contrib/prepare-system.sh
 	mkdir -p $(RUN_DIR)
 	if [ -d /dev/mapper ]; then \
 		DEV_MAPPER=-v/dev/mapper:/dev/mapper ;\
@@ -99,15 +99,22 @@ run-image:
 shell: build-release
 	$(KUBERNIX) shell
 
-.PHONY: test-integration
-test-integration:
+define test
 	$(call nix-run,\
 		cargo test \
-			--test integration $(ARGS) \
+			--test $(1) $(ARGS) \
 			-- \
 			--test-threads 1 \
-			--nocapture \
-	)
+			--nocapture)
+endef
+
+.PHONY: test-integration
+test-integration:
+	$(call test,integration)
+
+.PHONY: test-e2e
+test-e2e:
+	$(call test,e2e)
 
 .PHONY: test-unit
 test-unit:

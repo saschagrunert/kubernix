@@ -21,6 +21,7 @@ let
     git
     kcov
     nix-prefetch-git
+    procps
     ruststable
   ];
 in deps

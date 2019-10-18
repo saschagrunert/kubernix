@@ -124,6 +124,16 @@ pub struct Config {
     )]
     /// The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1`
     container_runtime: String,
+
+    #[get_copy = "pub"]
+    #[clap(
+        env = "KUBERNIX_NO_SHELL",
+        long = "no-shell",
+        short = "e",
+        takes_value = false
+    )]
+    /// Do not spawn an interactive shell after bootstrap
+    no_shell: bool,
 }
 
 /// Possible subcommands
@@ -258,9 +268,10 @@ pub mod tests {
             c.root.join(Config::FILENAME),
             r#"
 cidr = "1.1.1.1/16"
-container-runtime = "podman"
 container = false
+container-runtime = "podman"
 log-level = "DEBUG"
+no-shell = false
 nodes = 1
 packages = []
 root = "root"
