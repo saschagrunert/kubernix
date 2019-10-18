@@ -10,24 +10,26 @@
 
 ## Kubernetes development cluster bootstrapping with Nix packages
 
-This project aims to provide you **single dependency** [Kubernetes][1] clusters
+This project aims to provide **single dependency** [Kubernetes][1] clusters
 for local testing, experimenting and development purposes.
 
 [1]: https://kubernetes.io
 
-Moving pictures are more worth a thousand words, so here is the demo:
+Moving pictures are worth more than a thousand words, so here is a short demo:
 
 ![demo](.github/kubernix.svg)
 
 ### Nix?
 
-Do you ever heard from [Nix][2], the functional package manager? Don’t worry if
-not, all you need to know is that it provides all the third party dependencies
-for this project, pinned to a dedicated and reproducible version.
+Have you ever heard about [Nix][2], the functional package manager?
+
+In case you haven't, don’t worry -- the important thing is that it provides all the third-party
+dependencies needed for this project, pinned to a dedicated version. This guarantees stable,
+reproducible installations.
 
 [2]: https://nixos.org/nix
 
-KuberNix itself is the Rusty helper program, which takes care of bootstrapping
+KuberNix itself is a Rusty helper program, which takes care of bootstrapping
 the Kubernetes cluster, passing the right configuration parameters around and
 keeping track of the running processes.
 
