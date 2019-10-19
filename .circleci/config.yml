@@ -23,7 +23,6 @@ executors:
       image: ubuntu-1604:201903-01
     <<: *stdenv
 
-
 workflows:
   version: 2
   pipeline:
@@ -337,12 +336,11 @@ jobs:
           name: Install Nix
           command: |
             curl https://nixos.org/nix/install | sh
-            echo ". $HOME/.nix-profile/etc/profile.d/nix.sh" >> .bashrc
       - run:
           name: Set hostname
           command: |
-            sudo hostnamectl set-hostname test
             echo "127.0.0.1 test" | sudo tee -a /etc/hosts
+            sudo hostnamectl set-hostname test
       - run:
           name: Prepare the system
           command: sudo contrib/prepare-system.sh
@@ -351,6 +349,8 @@ jobs:
           command: |
             nix --version
             << parameters.run >>
+          environment:
+            BASH_ENV: ~/.nix-profile/etc/profile.d/nix.sh
       - run:
           name: Fixup Cache
           command: sudo chown -R $(id -u):$(id -g) /nix
