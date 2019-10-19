@@ -2,10 +2,9 @@
 use failure::{bail, Fallible};
 use std::{
     env::{current_dir, var},
-    fmt::Display,
     fs::{canonicalize, create_dir_all, File},
     io::{BufRead, BufReader},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Command, Stdio},
     time::Instant,
 };
