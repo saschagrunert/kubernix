@@ -112,26 +112,6 @@ pub fn none_hook() -> Fallible<()> {
     Ok(())
 }
 
-pub fn find_executable<P>(name: P) -> Fallible<PathBuf>
-where
-    P: AsRef<Path> + Display,
-{
-    var_os("PATH")
-        .and_then(|paths| {
-            split_paths(&paths)
-                .filter_map(|dir| {
-                    let full_path = dir.join(&name);
-                    if full_path.is_file() {
-                        Some(full_path)
-                    } else {
-                        None
-                    }
-                })
-                .next()
-        })
-        .ok_or_else(|| format_err!("Unable to find executable '{}' in $PATH", name))
-}
-
 fn run_test<F>(test: &str, args: &[&str], hook: F) -> Fallible<bool>
 where
     F: Fn() -> Fallible<()>,
