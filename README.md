@@ -155,6 +155,7 @@ kubernix.env
 kubernix.toml
 nix/
 pki/
+policy.json
 proxy/
 scheduler/
 ```
@@ -201,6 +202,41 @@ removed after the exit of KuberNix. This means that you’re still able to
 access the log and configuration files for further processing. If you start
 the cluster again, then the cluster files will be reused. This is especially
 handy if you want to test configuration changes.
+
+#### Restart
+
+If you start KuberNix again, then it will re-use the configuration during
+cluster bootstrap. This means that you can modify all data inside the run root
+for testing purposes. The startup of the process itself will be initiated by a
+parsed YAML file named `run.yaml`, which is available inside the directory for
+the corresponding component. This means for example for the etc component:
+
+```
+> cat kubernix-run/etcd/run.yml
+```
+
+```yml
+---
+command: /nix/store/qlbsv0hvi0j5qj3631dzl9srl75finlk-etcd-3.3.13-bin/bin/etcd
+args:
+  - "--advertise-client-urls=https://127.0.0.1:2379"
+  - "--client-cert-auth"
+  - "--data-dir=/…/kubernix-run/etcd/run"
+  - "--initial-advertise-peer-urls=https://127.0.0.1:2380"
+  - "--initial-cluster-state=new"
+  - "--initial-cluster-token=etcd-cluster"
+  - "--initial-cluster=etcd=https://127.0.0.1:2380"
+  - "--listen-client-urls=https://127.0.0.1:2379"
+  - "--listen-peer-urls=https://127.0.0.1:2380"
+  - "--name=etcd"
+  - "--peer-client-cert-auth"
+  - "--cert-file=/…/kubernix-run/pki/kubernetes.pem"
+  - "--key-file=/…/kubernix-run/pki/kubernetes-key.pem"
+  - "--peer-cert-file=/…/kubernix-run/pki/kubernetes.pem"
+  - "--peer-key-file=/…/kubernix-run/pki/kubernetes-key.pem"
+  - "--peer-trusted-ca-file=/…/kubernix-run/pki/ca.pem"
+  - "--trusted-ca-file=/…/kubernix-run/pki/ca.pem"
+```
 
 ### Configuration
 
@@ -270,7 +306,7 @@ comes to using always the same [Helm][20] version, you could simply run:
 $ sudo kubernix -p kubernetes-helm
 [INFO  kubernix] Nix environment not found, bootstrapping one
 [INFO  kubernix] Bootstrapping cluster inside nix environment
-...
+…
 > helm init
 > helm version
 Client: &version.Version{SemVer:"v2.14.3", GitCommit:"", GitTreeState:"clean"}
