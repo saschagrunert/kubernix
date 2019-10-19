@@ -99,7 +99,7 @@ impl Kubernix {
                 &config.shell_ok()?,
                 "-c",
                 &format!(
-                    "source {} && {}",
+                    ". {} && {}",
                     config.root().join(KUBERNIX_ENV).display(),
                     config.shell_ok()?,
                 ),
@@ -272,7 +272,7 @@ impl Kubernix {
             .current_dir(self.config.root())
             .arg("-c")
             .arg(format!(
-                "source {} && {}",
+                ". {} && {}",
                 env_file.display(),
                 self.config.shell_ok()?,
             ))
