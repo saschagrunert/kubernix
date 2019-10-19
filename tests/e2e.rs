@@ -14,9 +14,7 @@ fn local_single_node() -> Fallible<()> {
             .arg("-E")
             .arg(e2e)
             .arg("--provider=local")
-            // TODO: enable more tests
-            // .arg("--ginkgo.focus=.*\\[Conformance\\].*")
-            .arg("--ginkgo.focus=.*should serve a basic endpoint from pods.*")
+            .arg("--ginkgo.focus=.*\\[Conformance\\].*")
             .env("KUBECONFIG", kubeconfig)
             .env("KUBERNETES_SERVICE_HOST", Ipv4Addr::LOCALHOST.to_string())
             .env("KUBERNETES_SERVICE_PORT", "6443")
