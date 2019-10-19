@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use failure::{bail, format_err, Fallible};
 use std::{
-    env::{current_dir, split_paths, var, var_os},
+    env::{current_dir, var},
     fmt::Display,
     fs::{canonicalize, create_dir_all, File},
     io::{BufRead, BufReader},
