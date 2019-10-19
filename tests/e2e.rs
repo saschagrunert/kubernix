@@ -2,17 +2,14 @@ mod common;
 
 use common::{run_local_test, run_root, SUDO};
 use failure::{bail, Fallible};
-use std::{env::var, net::Ipv4Addr, process::Command};
+use std::{net::Ipv4Addr, process::Command};
 
 #[test]
 fn local_single_node() -> Fallible<()> {
     let test = "e2e-single-node";
     run_local_test(test, None, || {
-        println!("::: {:?}", var("PATH"));
         let kubeconfig = run_root(test).join("kubeconfig").join("admin.kubeconfig");
-        if !Command::new(SUDO)
-            .arg("-E")
-            .arg("e2e.test")
+        if !Command::new("e2e.test")
             .arg("--provider=local")
             // TODO: enable more tests
             // .arg("--ginkgo.focus=.*\\[Conformance\\].*")
