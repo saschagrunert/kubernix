@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use failure::{bail, format_err, Fallible};
+use failure::{bail, Fallible};
 use std::{
     env::{current_dir, var},
     fmt::Display,
