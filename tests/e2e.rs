@@ -12,7 +12,7 @@ fn local_single_node() -> Fallible<()> {
         if !Command::new(SUDO)
 	    .arg("env")
             .arg(format!("PATH={}", var("PATH")?))
-            .arg(format!("KUBECONFIG={}", kubeconfig.display())
+            .arg(format!("KUBECONFIG={}", kubeconfig.display()))
             .arg("KUBERNETES_SERVICE_HOST=127.0.0.1")
             .arg("KUBERNETES_SERVICE_PORT=6443")
             .arg("e2e.test")
