@@ -1,5 +1,5 @@
 ARGS ?=
-SUDO ?= sudo -E
+SUDO ?= sudo env "PATH=$PATH"
 KUBERNIX ?= $(SUDO) target/release/kubernix $(ARGS)
 CONTAINER_RUNTIME ?= $(SUDO) podman
 RUN_DIR ?= $(shell pwd)/kubernix-run
