@@ -52,34 +52,17 @@ impl Process {
             bail!("No valid command provided")
         }
 
-        // Write the executed command into the dir
-        create_dir_all(dir)?;
-        let command_path = System::find_executable(command)?;
-        let run_file = dir.join("run.sh");
-
-        // If the run file exists, exists only that one
-        if !run_file.exists() {
-            // Write the run file
-            let sep = format!(" \\\n{}", " ".repeat(4));
-            let full_command = format!(r#"{}{}{}"#, command_path.display(), sep, args.join(&sep));
-            fs::write(
-                &run_file,
-                format!(include_str!("assets/run.sh"), full_command),
-            )
-            .map_err(|e| format_err!("Unable to create '{}': {}", run_file.display(), e))?;
-            let mut perms = metadata(&run_file)?.permissions();
-            perms.set_mode(0o755);
-            set_permissions(&run_file, perms)?;
-        };
-
         // Prepare the log dir and file
         let mut log_file = dir.join(command);
         log_file.set_extension("log");
+
         let out_file = File::create(&log_file)?;
         let err_file = out_file.try_clone()?;
 
         // Spawn the process child
-        let mut child = Command::new(run_file)
+        let command_path = System::find_executable(command)?;
+        let mut child = Command::new(&command_path)
+            .args(args)
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file))
             .spawn()
@@ -111,6 +94,20 @@ impl Process {
             debug!("{} ({}) {}", n, c, status);
             Ok(())
         });
+
+        // Write the executed command into the dir
+        create_dir_all(dir)?;
+        let run_file = dir.join("run.sh");
+        let sep = format!(" \\\n{}", " ".repeat(4));
+        let full_command = format!(r#"{}{}{}"#, command_path.display(), sep, args.join(&sep));
+        fs::write(
+            &run_file,
+            format!(include_str!("assets/run.sh"), full_command),
+        )
+        .map_err(|e| format_err!("Unable to create '{}': {}", run_file.display(), e))?;
+        let mut perms = metadata(&run_file)?.permissions();
+        perms.set_mode(0o755);
+        set_permissions(run_file, perms)?;
 
         Ok(Process {
             command: command.into(),
