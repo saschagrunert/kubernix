@@ -1,6 +1,6 @@
 mod common;
 
-use common::{find_executable, run_local_test, run_root, SUDO};
+use common::{run_local_test, run_root, SUDO};
 use failure::{bail, Fallible};
 use std::{env::var, net::Ipv4Addr, process::Command};
 
@@ -8,7 +8,7 @@ use std::{env::var, net::Ipv4Addr, process::Command};
 fn local_single_node() -> Fallible<()> {
     let test = "e2e-single-node";
     run_local_test(test, None, || {
-        println("::: {:?}", var("PATH"));
+        println!("::: {:?}", var("PATH"));
         let kubeconfig = run_root(test).join("kubeconfig").join("admin.kubeconfig");
         if !Command::new(SUDO)
             .arg("-E")
