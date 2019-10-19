@@ -56,8 +56,14 @@ workflows:
       - lint-clippy
       - lint-rustfmt
       - machine-run:
+          name: test-e2e-local-single-node
+          cache: v10
+          run: make test-e2e ARGS=local_single_node
+          requires:
+            - build-release
+      - machine-run:
           name: test-integration-docker-single-node
-          cache: v2-test-integration-docker-single-node
+          cache: v11
           run: |
             docker load -i $LOCAL_IMAGE
             make test-integration ARGS=docker_single_node
@@ -65,7 +71,7 @@ workflows:
             - build-image
       - machine-run:
           name: test-integration-podman-single-node
-          cache: v2-test-integration-podman-single-node
+          cache: v12
           run: |
             sudo podman load -i $LOCAL_IMAGE
             sudo podman tag localhost/saschagrunert/kubernix:latest $IMAGE
@@ -74,7 +80,7 @@ workflows:
             - build-image
       - machine-run:
           name: test-integration-podman-multi-node
-          cache: v2-test-integration-podman-multi-node
+          cache: v13
           run: |
             sudo podman load -i $LOCAL_IMAGE
             sudo podman tag localhost/saschagrunert/kubernix:latest $IMAGE
@@ -83,19 +89,19 @@ workflows:
             - build-image
       - machine-run:
           name: test-integration-local-multi-node
-          cache: v2-test-integration-local-multi-node
+          cache: v14
           run: make test-integration ARGS=local_multi_node
           requires:
             - build-release
       - machine-run:
           name: test-integration-local-single-node
-          cache: v2-test-integration-local-single-node
+          cache: v15
           run: make test-integration ARGS=local_single_node
           requires:
             - build-release
       - machine-run:
           name: test-unit
-          cache: v2-test-unit
+          cache: v16
           run: |
             make coverage
             bash <(curl -s https://codecov.io/bash)
@@ -318,7 +324,7 @@ jobs:
             sudo chown $(id -u):$(id -g) /nix
       - restore_cache:
           keys:
-            - << parameters.cache>>-machine-run-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+            - << parameters.cache >>-machine-run-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
       - attach_workspace:
           at: .
       - run:
@@ -340,7 +346,7 @@ jobs:
             << parameters.run >>
             sudo chown -R $(id -u):$(id -g) /nix
       - save_cache:
-          key: << parameters.cache>>-machine-run-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
+          key: << parameters.cache >>-machine-run-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:
             - /nix
             - target

@@ -50,9 +50,15 @@ use failure::{bail, Fallible};
 use log::{debug, error, info, LevelFilter};
 use proc_mounts::MountIter;
 use rayon::{prelude::*, scope};
+use signal_hook::{flag, SIGHUP, SIGINT, SIGTERM};
 use std::{
     fs,
-    process::Command,
+    path::PathBuf,
+    process::{id, Command},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread::sleep,
     time::{Duration, Instant},
 };
@@ -223,6 +229,7 @@ impl Kubernix {
         }
 
         // Setup the main instance
+        let spawn_shell = !config.no_shell();
         let mut kubernix = Kubernix {
             config,
             network,
@@ -236,9 +243,14 @@ impl Kubernix {
             // Apply all cluster addons
             kubernix.apply_addons()?;
 
-            // Spawn the shell
             info!("Everything is up and running");
-            kubernix.spawn_shell()?;
+            kubernix.write_env_file()?;
+
+            if spawn_shell {
+                kubernix.spawn_shell()?;
+            } else {
+                kubernix.wait()?;
+            }
         } else {
             error!("Unable to start all processes")
         }
@@ -252,13 +264,46 @@ impl Kubernix {
         CoreDNS::apply(&self.config, &self.network, &self.kubeconfig)
     }
 
+    /// Wait until a termination signal occurs
+    fn wait(&self) -> Fallible<()> {
+        // Setup the signal handlers
+        let term = Arc::new(AtomicBool::new(false));
+        flag::register(SIGTERM, Arc::clone(&term))?;
+        flag::register(SIGINT, Arc::clone(&term))?;
+        flag::register(SIGHUP, Arc::clone(&term))?;
+        info!("Waiting for interrupt…");
+
+        // Write the pid file
+        let pid_file = self.config.root().join("kubernix.pid");
+        debug!("Writing pid file to: {}", pid_file.display());
+        fs::write(pid_file, id().to_string())?;
+
+        // Wait for the signals
+        while !term.load(Ordering::Relaxed) {}
+        Ok(())
+    }
+
     /// Spawn a new interactive default system shell
     fn spawn_shell(&self) -> Fallible<()> {
         info!("Spawning interactive shell");
         info!("Please be aware that the cluster gets destroyed if you exit the shell");
-        let env_file = self.config.root().join(KUBERNIX_ENV);
+
+        Command::new(self.config.shell_ok()?)
+            .current_dir(self.config.root())
+            .arg("-c")
+            .arg(format!(
+                ". {} && {}",
+                self.env_file().display(),
+                self.config.shell_ok()?,
+            ))
+            .status()?;
+        Ok(())
+    }
+
+    /// Lay out the env file
+    fn write_env_file(&self) -> Fallible<()> {
         fs::write(
-            &env_file,
+            &self.env_file(),
             format!(
                 "export {}={}\nexport {}={}",
                 RUNTIME_ENV,
@@ -267,17 +312,12 @@ impl Kubernix {
                 self.kubeconfig.admin().display(),
             ),
         )?;
-
-        Command::new(self.config.shell_ok()?)
-            .current_dir(self.config.root())
-            .arg("-c")
-            .arg(format!(
-                ". {} && {}",
-                env_file.display(),
-                self.config.shell_ok()?,
-            ))
-            .status()?;
         Ok(())
+    }
+
+    /// Retrieve the path to the env file
+    fn env_file(&self) -> PathBuf {
+        self.config.root().join(KUBERNIX_ENV)
     }
 
     /// Remove all stale mounts
@@ -317,5 +357,6 @@ impl Drop for Kubernix {
         self.stop();
         self.umount();
         self.system.cleanup();
+        debug!("Cleanup done")
     }
 }

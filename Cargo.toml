@@ -33,6 +33,7 @@ rand = "0.7.2"
 rayon = "1.2.0"
 serde = { version = "1.0.101", features = ["derive"] }
 serde_json = "1.0.41"
+signal-hook = "0.1.10"
 toml = "0.5.3"
 
 [dev-dependencies]
