@@ -132,7 +132,8 @@ where
     let out_file = File::create(&log_file)?;
     let err_file = out_file.try_clone()?;
     Command::new(SUDO)
-        .arg("-E")
+        .arg("env")
+        .arg(format!("PATH={}", var("PATH")?))
         .args(args)
         .arg("--no-shell")
         .stderr(Stdio::from(err_file))
