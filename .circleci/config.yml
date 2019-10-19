@@ -334,8 +334,7 @@ jobs:
             sudo apt-get install -y podman
       - run:
           name: Install Nix
-          command: |
-            curl https://nixos.org/nix/install | sh
+          command: curl https://nixos.org/nix/install | sh
       - run:
           name: Set hostname
           command: |
@@ -346,13 +345,11 @@ jobs:
           command: sudo contrib/prepare-system.sh
       - run:
           name: Run the tests
-          command: |
-            nix --version
-            << parameters.run >>
+          command: << parameters.run >>
           environment:
             BASH_ENV: ~/.nix-profile/etc/profile.d/nix.sh
       - run:
-          name: Fixup Cache
+          name: Fixup cache
           command: sudo chown -R $(id -u):$(id -g) /nix
       - save_cache:
           key: << parameters.cache >>-machine-run-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
