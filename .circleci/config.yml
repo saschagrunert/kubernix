@@ -342,7 +342,7 @@ jobs:
             sudo hostnamectl set-hostname test
       - run:
           name: Prepare the system
-          command: sudo contrib/prepare-system.sh
+          command: sudo contrib/prepare-system
       - run:
           name: Run the tests
           command: << parameters.run >>

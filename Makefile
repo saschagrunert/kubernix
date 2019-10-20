@@ -82,7 +82,7 @@ run: build-release
 
 .PHONY: run-image
 run-image:
-	$(SUDO) contrib/prepare-system.sh
+	$(SUDO) contrib/prepare-system
 	mkdir -p $(RUN_DIR)
 	if [ -d /dev/mapper ]; then \
 		DEV_MAPPER=-v/dev/mapper:/dev/mapper ;\
