@@ -6,10 +6,11 @@ use nix::{
     sys::signal::{kill, Signal},
     unistd::Pid,
 };
+use serde::{Deserialize, Serialize};
+use serde_yaml;
 use std::{
-    fs::{self, create_dir_all, metadata, set_permissions, File},
+    fs::{self, create_dir_all, File},
     io::{BufRead, BufReader},
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread::{spawn, JoinHandle},
@@ -43,8 +44,14 @@ pub type Stoppables = Vec<Started>;
 /// The process state as result
 pub type ProcessState = Fallible<Started>;
 
+#[derive(Deserialize, Serialize)]
+struct Run {
+    command: PathBuf,
+    args: Vec<String>,
+}
+
 impl Process {
-    /// Creates a new `Process` instance by spawning the provided command `cmd`.
+    /// Creates a new `Process` instance by spawning the provided `command` and `args`.
     /// If the process creation fails, an `Error` will be returned.
     pub fn start(dir: &Path, identifier: &str, command: &str, args: &[&str]) -> Fallible<Process> {
         // Prepare the commands
@@ -52,17 +59,38 @@ impl Process {
             bail!("No valid command provided")
         }
 
+        // Write the executed command into the dir
+        create_dir_all(dir)?;
+
+        // If the run file exists, execute only that one
+        let run_file = dir.join("run.yml");
+        let run = if !run_file.exists() {
+            debug!(
+                "No previous run file '{}' found, writing new one",
+                run_file.display()
+            );
+            // Write the run file
+            let f = Run {
+                command: System::find_executable(command)?,
+                args: args.iter().map(|x| x.to_string()).collect(),
+            };
+            fs::write(run_file, serde_yaml::to_string(&f)?)?;
+            f
+        } else {
+            debug!("Re using run file '{}'", run_file.display());
+            let f = File::open(run_file)?;
+            serde_yaml::from_reader(f)?
+        };
+
         // Prepare the log dir and file
         let mut log_file = dir.join(command);
         log_file.set_extension("log");
-
         let out_file = File::create(&log_file)?;
         let err_file = out_file.try_clone()?;
 
         // Spawn the process child
-        let command_path = System::find_executable(command)?;
-        let mut child = Command::new(&command_path)
-            .args(args)
+        let mut child = Command::new(run.command)
+            .args(run.args)
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file))
             .spawn()
@@ -75,6 +103,7 @@ impl Process {
                 )
             })?;
 
+        // Start the watcher thread
         let (kill, killed) = bounded(1);
         let (dead, died) = bounded(1);
         let c = command.to_owned();
@@ -95,20 +124,6 @@ impl Process {
             Ok(())
         });
 
-        // Write the executed command into the dir
-        create_dir_all(dir)?;
-        let run_file = dir.join("run.sh");
-        let sep = format!(" \\\n{}", " ".repeat(4));
-        let full_command = format!(r#"{}{}{}"#, command_path.display(), sep, args.join(&sep));
-        fs::write(
-            &run_file,
-            format!(include_str!("assets/run.sh"), full_command),
-        )
-        .map_err(|e| format_err!("Unable to create '{}': {}", run_file.display(), e))?;
-        let mut perms = metadata(&run_file)?.permissions();
-        perms.set_mode(0o755);
-        set_permissions(run_file, perms)?;
-
         Ok(Process {
             command: command.into(),
             died,
@@ -121,8 +136,8 @@ impl Process {
         })
     }
 
-    // Wait for the process to become ready, by searching for the pattern in
-    // every line of its output.
+    /// Wait for the process to become ready, by searching for the pattern in
+    /// every line of its output.
     pub fn wait_ready(&mut self, pattern: &str) -> Fallible<()> {
         debug!(
             "Waiting for process '{}' ({}) to become ready with pattern: '{}'",
