@@ -4,20 +4,9 @@ use common::{run_local_test, run_root, SUDO};
 use failure::{bail, Fallible};
 use std::{env::var, process::Command};
 
-// Possible conformance test scopes for now:
-// [k8s.io]
-// [sig-api-machinery]
-// [sig-apps]
-// [sig-auth]
-// [sig-cli]
-// [sig-network]
-// [sig-node]
-// [sig-scheduling]
-// [sig-storage]
-
 #[test]
-fn local_single_node_sig_node() -> Fallible<()> {
-    e2e_local_single_node("sig-node")
+fn local_single_node_conformance() -> Fallible<()> {
+    e2e_local_single_node("NodeConformance")
 }
 
 fn e2e_local_single_node(focus: &str) -> Fallible<()> {
@@ -33,6 +22,7 @@ fn e2e_local_single_node(focus: &str) -> Fallible<()> {
             .arg("e2e.test")
             .arg("--provider=local")
             .arg(format!("--ginkgo.focus=.*\\[{}\\].*", focus))
+            .arg("--ginkgo.dryRun")
             .status()?
             .success()
         {

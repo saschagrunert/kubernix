@@ -55,9 +55,9 @@ workflows:
       - lint-clippy
       - lint-rustfmt
       - machine-run:
-          name: test-e2e-local-single-node
+          name: test-e2e-conformance
           cache: v10
-          run: make test-e2e ARGS=local_single_node
+          run: make test-e2e ARGS=local_single_node_conformance
           requires:
             - build-release
       - machine-run:
