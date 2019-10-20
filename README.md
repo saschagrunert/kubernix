@@ -124,9 +124,9 @@ If everything went fine, you should be dropped into a new shell session,
 like this:
 
 ```
-[INFO  kubernix] Everything is up and running
-[INFO  kubernix] Spawning interactive shell
-[INFO  kubernix] Please be aware that the cluster gets destroyed if you exit the shell
+[INFO ] Everything is up and running
+[INFO ] Spawning interactive shell
+[INFO ] Please be aware that the cluster gets destroyed if you exit the shell
 >
 ```
 
@@ -194,7 +194,7 @@ from the initial process:
 
 ```
 > exit
-[INFO  kubernix] Cleaning up
+[INFO ] Cleaning up
 ```
 
 Please note that the directory where all the data is stored is not being
@@ -305,8 +305,8 @@ comes to using always the same [Helm][20] version, you could simply run:
 
 ```
 $ sudo kubernix -p kubernetes-helm
-[INFO  kubernix] Nix environment not found, bootstrapping one
-[INFO  kubernix] Bootstrapping cluster inside nix environment
+[INFO ] Nix environment not found, bootstrapping one
+[INFO ] Bootstrapping cluster inside nix environment
 …
 > helm init
 > helm version
