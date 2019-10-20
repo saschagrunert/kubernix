@@ -205,11 +205,12 @@ handy if you want to test configuration changes.
 
 #### Restart
 
-If you start KuberNix again, then it will re-use the configuration during
-cluster bootstrap. This means that you can modify all data inside the run root
-for testing purposes. The startup of the process itself will be initiated by a
-parsed YAML file named `run.yaml`, which is available inside the directory for
-the corresponding component. This means for example for the etc component:
+If you start KuberNix again in the same run directory, then it will re-use the
+configuration during the cluster bootstrapping process. This means that you
+can modify all data inside the run root for testing and debugging purposes. The
+startup of the individual components will be initiated by YAML files called
+`run.yml`, which are available inside the directories of the corresponding
+components. For example, etc gets started via:
 
 ```
 > cat kubernix-run/etcd/run.yml
