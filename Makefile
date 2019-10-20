@@ -1,5 +1,5 @@
 ARGS ?=
-SUDO ?= sudo env "PATH=$PATH"
+SUDO ?= sudo -E
 KUBERNIX ?= $(SUDO) target/release/kubernix $(ARGS)
 CONTAINER_RUNTIME ?= $(SUDO) podman
 RUN_DIR ?= $(shell pwd)/kubernix-run
@@ -44,7 +44,7 @@ e2e:
 		KUBECONFIG=$(RUN_DIR)/kubeconfig/admin.kubeconfig \
 		e2e.test \
 			--provider=local \
-			--ginkgo.focus='.*\[Conformance\].*' \
+			--ginkgo.focus='.*$(FOCUS).*' \
 			--ginkgo.progress \
 			$(ARGS) \
 	)
