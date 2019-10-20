@@ -16,8 +16,8 @@ use std::{env::var, process::Command};
 // [sig-storage]
 
 #[test]
-fn local_single_node_sig_cli() -> Fallible<()> {
-    e2e_local_single_node("sig-cli")
+fn local_single_node_sig_node() -> Fallible<()> {
+    e2e_local_single_node("sig-node")
 }
 
 fn e2e_local_single_node(focus: &str) -> Fallible<()> {
