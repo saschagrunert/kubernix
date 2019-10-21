@@ -22,7 +22,6 @@ fn e2e_local_single_node(focus: &str) -> Fallible<()> {
             .arg("e2e.test")
             .arg("--provider=local")
             .arg(format!("--ginkgo.focus=.*\\[{}\\].*", focus))
-            .arg("--ginkgo.dryRun")
             .status()?
             .success()
         {
