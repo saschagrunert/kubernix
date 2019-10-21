@@ -5,7 +5,7 @@ use crate::{
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
 };
-use failure::Fallible;
+use anyhow::Result;
 use log::info;
 use std::fs::create_dir_all;
 
@@ -55,7 +55,7 @@ impl ControllerManager {
 }
 
 impl Stoppable for ControllerManager {
-    fn stop(&mut self) -> Fallible<()> {
+    fn stop(&mut self) -> Result<()> {
         self.process.stop()
     }
 }

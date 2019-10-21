@@ -6,11 +6,11 @@ use crate::{
     system::System,
     Config, RUNTIME_ENV,
 };
-use failure::{bail, format_err, Fallible};
+use anyhow::{bail, Context, Result};
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
 use std::{
-    fmt::{Display, Formatter, Result},
+    fmt::{self, Display, Formatter},
     fs::{self, create_dir_all},
     path::PathBuf,
     process::Command,
@@ -26,13 +26,13 @@ pub struct Crio {
 pub struct CriSocket(PathBuf);
 
 impl Display for CriSocket {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0.display())
     }
 }
 
 impl CriSocket {
-    pub fn new(path: PathBuf) -> Fallible<CriSocket> {
+    pub fn new(path: PathBuf) -> Result<CriSocket> {
         if path.display().to_string().len() > 100 {
             bail!("Socket path '{}' is too long")
         }
@@ -53,9 +53,7 @@ impl Crio {
 
         let conmon = System::find_executable("conmon")?;
         let loopback = System::find_executable("loopback")?;
-        let cni_plugin = loopback
-            .parent()
-            .ok_or_else(|| format_err!("Unable to find CNI plugin dir"))?;
+        let cni_plugin = loopback.parent().context("Unable to find CNI plugin dir")?;
 
         let dir = Self::path(config, network, node);
         let crio_config = dir.join("crio.conf");
@@ -68,7 +66,7 @@ impl Crio {
             let cidr = network
                 .crio_cidrs()
                 .get(node as usize)
-                .ok_or_else(|| format_err!("Unable to find CIDR for {}", node_name))?;
+                .with_context(|| format!("Unable to find CIDR for {}", node_name))?;
             fs::write(
                 cni.join("10-bridge.json"),
                 to_string_pretty(&json!({
@@ -141,7 +139,7 @@ impl Crio {
     }
 
     /// Retrieve the CRI socket
-    pub fn socket(config: &Config, network: &Network, node: u8) -> Fallible<CriSocket> {
+    pub fn socket(config: &Config, network: &Network, node: u8) -> Result<CriSocket> {
         CriSocket::new(Self::path(config, network, node).join("crio.sock"))
     }
 
@@ -154,7 +152,7 @@ impl Crio {
     }
 
     /// Remove all containers via crictl invocations
-    fn remove_all_containers(&self) -> Fallible<()> {
+    fn remove_all_containers(&self) -> Result<()> {
         debug!("Removing all CRI-O workloads on {}", self.node_name);
 
         let output = Command::new("crictl")
@@ -202,15 +200,10 @@ impl Crio {
 }
 
 impl Stoppable for Crio {
-    fn stop(&mut self) -> Fallible<()> {
+    fn stop(&mut self) -> Result<()> {
         // Remove all running containers
-        self.remove_all_containers().map_err(|e| {
-            format_err!(
-                "Unable to remove CRI-O containers on {}: {}",
-                self.node_name,
-                e
-            )
-        })?;
+        self.remove_all_containers()
+            .with_context(|| format!("Unable to remove CRI-O containers on {}", self.node_name,))?;
 
         // Stop the process, should never really fail
         self.process.stop()
@@ -222,7 +215,7 @@ pub mod tests {
     use super::*;
 
     #[test]
-    fn cri_socket_success() -> Fallible<()> {
+    fn cri_socket_success() -> Result<()> {
         CriSocket::new("/some/path.sock".into())?;
         Ok(())
     }

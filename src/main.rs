@@ -1,16 +1,23 @@
 use ansi_term::Colour::Red;
-use failure::Fallible;
+use anyhow::Result;
 use kubernix::{Config, Kubernix};
 use std::process::exit;
 
 pub fn main() {
     if let Err(e) = run() {
-        println!("{} {}", Red.paint("[ERROR]"), e);
+        println!(
+            "{} {}",
+            Red.paint("[ERROR]"),
+            e.chain()
+                .map(|x| x.to_string())
+                .collect::<Vec<String>>()
+                .join(": ")
+        );
         exit(1);
     }
 }
 
-fn run() -> Fallible<()> {
+fn run() -> Result<()> {
     // Parse CLI arguments
     let config = Config::default();
 

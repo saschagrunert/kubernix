@@ -8,7 +8,7 @@ use crate::{
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
 };
-use failure::{bail, format_err, Fallible};
+use anyhow::{bail, Context, Result};
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -42,7 +42,7 @@ impl Kubelet {
         let idendity = pki
             .kubelets()
             .get(node as usize)
-            .ok_or_else(|| format_err!("Unable to retrieve kubelet idendity for {}", node_name))?;
+            .with_context(|| format!("Unable to retrieve kubelet idendity for {}", node_name))?;
 
         let yml = format!(
             include_str!("assets/kubelet.yml"),
@@ -51,7 +51,7 @@ impl Kubelet {
             cidr = network
                 .crio_cidrs()
                 .get(node as usize)
-                .ok_or_else(|| format_err!("Unable to retrieve kubelet CIDR"))?,
+                .context("Unable to retrieve kubelet CIDR")?,
             cert = idendity.cert().display(),
             key = idendity.key().display(),
             port = 11250 + u16::from(node),
@@ -76,7 +76,7 @@ impl Kubelet {
                 kubeconfig
                     .kubelets()
                     .get(node as usize)
-                    .ok_or_else(|| format_err!(
+                    .with_context(|| format!(
                         "Unable to retrieve kubelet config for {}",
                         node_name
                     ))?
@@ -104,7 +104,7 @@ impl Kubelet {
 }
 
 impl Stoppable for Kubelet {
-    fn stop(&mut self) -> Fallible<()> {
+    fn stop(&mut self) -> Result<()> {
         self.process.stop()
     }
 }

@@ -1,6 +1,6 @@
 use crate::Config;
+use anyhow::Result;
 use base64::encode;
-use failure::Fallible;
 use getset::Getters;
 use log::info;
 use rand::{thread_rng, Rng};
@@ -16,7 +16,7 @@ pub struct EncryptionConfig {
 }
 
 impl EncryptionConfig {
-    pub fn new(config: &Config) -> Fallible<EncryptionConfig> {
+    pub fn new(config: &Config) -> Result<EncryptionConfig> {
         let dir = &config.root().join("encryptionconfig");
         create_dir_all(dir)?;
         let path = dir.join("config.yml");
@@ -40,7 +40,7 @@ mod tests {
     use crate::config::tests::{test_config, test_config_wrong_root};
 
     #[test]
-    fn encryptionconfig_success() -> Fallible<()> {
+    fn encryptionconfig_success() -> Result<()> {
         let c = test_config()?;
         let e = EncryptionConfig::new(&c)?;
         assert!(e.path().exists());
@@ -48,7 +48,7 @@ mod tests {
     }
 
     #[test]
-    fn encryptionconfig_failure() -> Fallible<()> {
+    fn encryptionconfig_failure() -> Result<()> {
         let c = test_config_wrong_root()?;
         assert!(EncryptionConfig::new(&c).is_err());
         Ok(())

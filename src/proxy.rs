@@ -4,7 +4,7 @@ use crate::{
     network::Network,
     process::{Process, ProcessState, Stoppable},
 };
-use failure::Fallible;
+use anyhow::Result;
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -44,7 +44,7 @@ impl Proxy {
 }
 
 impl Stoppable for Proxy {
-    fn stop(&mut self) -> Fallible<()> {
+    fn stop(&mut self) -> Result<()> {
         self.process.stop()
     }
 }

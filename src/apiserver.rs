@@ -7,7 +7,7 @@ use crate::{
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
 };
-use failure::{format_err, Fallible};
+use anyhow::{Context, Result};
 use log::{debug, info};
 use std::{
     fs::{self, create_dir_all},
@@ -81,7 +81,7 @@ impl ApiServer {
         Ok(Box::new(Self { process }))
     }
 
-    fn setup_rbac(dir: &Path, kubeconfig: &KubeConfig) -> Fallible<()> {
+    fn setup_rbac(dir: &Path, kubeconfig: &KubeConfig) -> Result<()> {
         debug!("Creating API Server RBAC rule for kubelet");
         let file = dir.join("rbac.yml");
 
@@ -90,7 +90,7 @@ impl ApiServer {
         }
 
         Kubectl::apply(kubeconfig.admin(), &file)
-            .map_err(|e| format_err!("Unable to deploy API server RBAC rules: {}", e))?;
+            .context("Unable to deploy API server RBAC rules")?;
 
         debug!("API Server RBAC rule created");
         Ok(())
@@ -98,7 +98,7 @@ impl ApiServer {
 }
 
 impl Stoppable for ApiServer {
-    fn stop(&mut self) -> Fallible<()> {
+    fn stop(&mut self) -> Result<()> {
         self.process.stop()
     }
 }

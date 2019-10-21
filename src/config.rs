@@ -1,7 +1,7 @@
 //! Configuration related structures
 use crate::{podman::Podman, system::System};
+use anyhow::{Context, Result};
 use clap::{crate_version, AppSettings, Clap};
-use failure::{format_err, Fallible};
 use getset::{CopyGetters, Getters};
 use ipnetwork::Ipv4Network;
 use log::LevelFilter;
@@ -158,34 +158,33 @@ impl Config {
     const FILENAME: &'static str = "kubernix.toml";
 
     /// Make the configs root path absolute
-    pub fn canonicalize_root(&mut self) -> Fallible<()> {
+    pub fn canonicalize_root(&mut self) -> Result<()> {
         self.create_root_dir()?;
-        self.root = canonicalize(self.root())
-            .map_err(|e| format_err!("Unable to canonicalize config root directory: {}", e))?;
+        self.root =
+            canonicalize(self.root()).context("Unable to canonicalize config root directory")?;
         Ok(())
     }
 
     /// Write the current configuration to the internal set root path
-    pub fn to_file(&self) -> Fallible<()> {
+    pub fn to_file(&self) -> Result<()> {
         self.create_root_dir()?;
         fs::write(self.root().join(Self::FILENAME), toml::to_string(&self)?)
-            .map_err(|e| format_err!("Unable to write configuration to file: {}", e))?;
+            .context("Unable to write configuration to file")?;
         Ok(())
     }
 
     /// Read the configuration from the internal set root path
     /// If not existing, write the current configuration to the path.
-    pub fn try_load_file(&mut self) -> Fallible<()> {
+    pub fn try_load_file(&mut self) -> Result<()> {
         let file = self.root().join(Self::FILENAME);
         if file.exists() {
-            *self = toml::from_str(&read_to_string(&file).map_err(|e| {
-                format_err!(
-                    "Unable to read expected configuration file '{}': {}",
+            *self = toml::from_str(&read_to_string(&file).with_context(|| {
+                format!(
+                    "Unable to read expected configuration file '{}'",
                     file.display(),
-                    e
                 )
             })?)
-            .map_err(|e| format_err!("Unable to load config file '{}': {}", file.display(), e))?;
+            .with_context(|| format!("Unable to load config file '{}'", file.display()))?;
         } else {
             self.to_file()?;
         }
@@ -193,17 +192,13 @@ impl Config {
     }
 
     /// Return the set shell as result type
-    pub fn shell_ok(&self) -> Fallible<String> {
-        let shell = self
-            .shell()
-            .as_ref()
-            .ok_or_else(|| format_err!("No shell set"))?;
+    pub fn shell_ok(&self) -> Result<String> {
+        let shell = self.shell().as_ref().context("No shell set")?;
         Ok(shell.into())
     }
 
-    fn create_root_dir(&self) -> Fallible<()> {
-        create_dir_all(self.root())
-            .map_err(|e| format_err!("Unable to create root directory: {}", e))
+    fn create_root_dir(&self) -> Result<()> {
+        create_dir_all(self.root()).context("Unable to create root directory")
     }
 }
 
@@ -213,27 +208,27 @@ pub mod tests {
     use std::path::Path;
     use tempfile::tempdir;
 
-    pub fn test_config() -> Fallible<Config> {
+    pub fn test_config() -> Result<Config> {
         let mut c = Config::default();
         c.root = tempdir()?.into_path();
         c.canonicalize_root()?;
         Ok(c)
     }
 
-    pub fn test_config_wrong_root() -> Fallible<Config> {
+    pub fn test_config_wrong_root() -> Result<Config> {
         let mut c = test_config()?;
         c.root = Path::new("/").join("proc");
         Ok(c)
     }
 
-    pub fn test_config_wrong_cidr() -> Fallible<Config> {
+    pub fn test_config_wrong_cidr() -> Result<Config> {
         let mut c = test_config()?;
         c.cidr = "10.0.0.1/25".parse()?;
         Ok(c)
     }
 
     #[test]
-    fn canonicalize_root_success() -> Fallible<()> {
+    fn canonicalize_root_success() -> Result<()> {
         let mut c = Config::default();
         c.root = tempdir()?.into_path();
         c.canonicalize_root()
@@ -247,7 +242,7 @@ pub mod tests {
     }
 
     #[test]
-    fn to_file_success() -> Fallible<()> {
+    fn to_file_success() -> Result<()> {
         let mut c = Config::default();
         c.root = tempdir()?.into_path();
         c.to_file()
@@ -261,7 +256,7 @@ pub mod tests {
     }
 
     #[test]
-    fn try_load_file_success() -> Fallible<()> {
+    fn try_load_file_success() -> Result<()> {
         let mut c = Config::default();
         c.root = tempdir()?.into_path();
         fs::write(
@@ -285,7 +280,7 @@ root = "root"
     }
 
     #[test]
-    fn try_load_file_failure() -> Fallible<()> {
+    fn try_load_file_failure() -> Result<()> {
         let mut c = Config::default();
         c.root = tempdir()?.into_path();
         fs::write(c.root.join(Config::FILENAME), "invalid")?;

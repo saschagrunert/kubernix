@@ -1,5 +1,5 @@
 use crate::{network::Network, node::Node, Config};
-use failure::{bail, format_err, Fallible};
+use anyhow::{bail, Context, Result};
 use getset::Getters;
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
@@ -90,7 +90,7 @@ const SCHEDULER_USER: &str = "system:kube-scheduler";
 const SERVICE_ACCOUNT_NAME: &str = "service-account";
 
 impl Pki {
-    pub fn new(config: &Config, network: &Network) -> Fallible<Pki> {
+    pub fn new(config: &Config, network: &Network) -> Result<Pki> {
         let dir = &config.root().join("pki");
         let nodes = (0..config.nodes())
             .map(|n| Node::name(config, network, n))
@@ -178,7 +178,7 @@ impl Pki {
         }
     }
 
-    fn setup_ca(dir: &Path) -> Fallible<Idendity> {
+    fn setup_ca(dir: &Path) -> Result<Idendity> {
         debug!("Creating CA certificates");
         const CN: &str = "kubernetes";
         let csr = dir.join("ca-csr.json");
@@ -192,10 +192,7 @@ impl Pki {
             .stderr(Stdio::null())
             .spawn()?;
 
-        let pipe = cfssl
-            .stdout
-            .take()
-            .ok_or_else(|| format_err!("unable to get stdout"))?;
+        let pipe = cfssl.stdout.take().context("unable to get stdout")?;
         let output = Command::new("cfssljson")
             .arg("-bare")
             .arg(dir.join(CA_NAME))
@@ -210,14 +207,14 @@ impl Pki {
         Ok(Idendity::new(dir, CA_NAME, CA_NAME))
     }
 
-    fn setup_kubelet(pki_config: &PkiConfig, node: &str) -> Fallible<Idendity> {
+    fn setup_kubelet(pki_config: &PkiConfig, node: &str) -> Result<Idendity> {
         let user = Self::node_user(node);
         let csr_file = pki_config.dir().join(format!("{}-csr.json", node));
         Self::write_csr(&user, "system:nodes", &csr_file)?;
         Ok(Self::generate(pki_config, node, &csr_file, &user)?)
     }
 
-    fn setup_admin(pki_config: &PkiConfig) -> Fallible<Idendity> {
+    fn setup_admin(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("admin-csr.json");
         Self::write_csr(ADMIN_NAME, "system:masters", &csr_file)?;
         Ok(Self::generate(
@@ -225,7 +222,7 @@ impl Pki {
         )?)
     }
 
-    fn setup_controller_manager(pki_config: &PkiConfig) -> Fallible<Idendity> {
+    fn setup_controller_manager(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("kube-controller-manager-csr.json");
         Self::write_csr(CONTROLLER_MANAGER_USER, CONTROLLER_MANAGER_USER, &csr_file)?;
         Ok(Self::generate(
@@ -236,7 +233,7 @@ impl Pki {
         )?)
     }
 
-    fn setup_proxy(pki_config: &PkiConfig) -> Fallible<Idendity> {
+    fn setup_proxy(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("kube-proxy-csr.json");
         Self::write_csr("system:kube-proxy", "system:node-proxier", &csr_file)?;
         Ok(Self::generate(
@@ -244,7 +241,7 @@ impl Pki {
         )?)
     }
 
-    fn setup_scheduler(pki_config: &PkiConfig) -> Fallible<Idendity> {
+    fn setup_scheduler(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("kube-scheduler-csr.json");
         Self::write_csr(SCHEDULER_USER, SCHEDULER_USER, &csr_file)?;
         Ok(Self::generate(
@@ -255,7 +252,7 @@ impl Pki {
         )?)
     }
 
-    fn setup_apiserver(pki_config: &PkiConfig) -> Fallible<Idendity> {
+    fn setup_apiserver(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("kubernetes-csr.json");
         Self::write_csr(APISERVER_NAME, APISERVER_NAME, &csr_file)?;
         Ok(Self::generate(
@@ -266,7 +263,7 @@ impl Pki {
         )?)
     }
 
-    fn setup_service_account(pki_config: &PkiConfig) -> Fallible<Idendity> {
+    fn setup_service_account(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("service-account-csr.json");
         Self::write_csr("service-accounts", "kubernetes", &csr_file)?;
         Ok(Self::generate(
@@ -277,7 +274,7 @@ impl Pki {
         )?)
     }
 
-    fn generate(pki_config: &PkiConfig, name: &str, csr: &Path, user: &str) -> Fallible<Idendity> {
+    fn generate(pki_config: &PkiConfig, name: &str, csr: &Path, user: &str) -> Result<Idendity> {
         debug!("Creating certificate for {}", name);
 
         let mut cfssl = Command::new("cfssl")
@@ -292,10 +289,7 @@ impl Pki {
             .stderr(Stdio::null())
             .spawn()?;
 
-        let pipe = cfssl
-            .stdout
-            .take()
-            .ok_or_else(|| format_err!("unable to get stdout"))?;
+        let pipe = cfssl.stdout.take().context("unable to get stdout")?;
         let output = Command::new("cfssljson")
             .arg("-bare")
             .arg(pki_config.dir().join(name))
@@ -311,7 +305,7 @@ impl Pki {
         Ok(Idendity::new(pki_config.dir(), name, user))
     }
 
-    fn write_csr(cn: &str, o: &str, dest: &Path) -> Fallible<()> {
+    fn write_csr(cn: &str, o: &str, dest: &Path) -> Result<()> {
         let csr = json!({
             "CN": cn,
             "key": {
@@ -329,7 +323,7 @@ impl Pki {
         Ok(())
     }
 
-    fn write_ca_config(dir: &Path) -> Fallible<PathBuf> {
+    fn write_ca_config(dir: &Path) -> Result<PathBuf> {
         let cfg = json!({
             "signing": {
                 "default": {
@@ -368,7 +362,7 @@ mod tests {
     };
 
     #[test]
-    fn new_success() -> Fallible<()> {
+    fn new_success() -> Result<()> {
         let c = test_config()?;
         let n = test_network()?;
         Pki::new(&c, &n)?;
@@ -376,7 +370,7 @@ mod tests {
     }
 
     #[test]
-    fn new_failure() -> Fallible<()> {
+    fn new_failure() -> Result<()> {
         let c = test_config_wrong_root()?;
         let n = test_network()?;
         assert!(Pki::new(&c, &n).is_err());

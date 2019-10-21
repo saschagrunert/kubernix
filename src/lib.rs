@@ -45,8 +45,8 @@ use ::nix::{
     mount::{umount2, MntFlags},
     unistd::getuid,
 };
+use anyhow::{bail, Context, Result};
 use env_logger::Builder;
-use failure::{bail, Fallible};
 use log::{debug, error, info, LevelFilter};
 use proc_mounts::MountIter;
 use rayon::{prelude::*, scope};
@@ -77,7 +77,7 @@ pub struct Kubernix {
 
 impl Kubernix {
     /// Start kubernix by consuming the provided configuration
-    pub fn start(mut config: Config) -> Fallible<()> {
+    pub fn start(mut config: Config) -> Result<()> {
         Self::prepare_env(&mut config)?;
 
         // Bootstrap if we're not inside a nix shell
@@ -91,7 +91,7 @@ impl Kubernix {
     }
 
     /// Spawn a new shell into the provided configuration environment
-    pub fn new_shell(mut config: Config) -> Fallible<()> {
+    pub fn new_shell(mut config: Config) -> Result<()> {
         Self::prepare_env(&mut config)?;
 
         info!(
@@ -117,7 +117,7 @@ impl Kubernix {
     }
 
     /// Prepare the environment based on the provided config
-    fn prepare_env(config: &mut Config) -> Fallible<()> {
+    fn prepare_env(config: &mut Config) -> Result<()> {
         // Rootless is currently not supported
         if !getuid().is_root() {
             bail!("Please run kubernix as root")
@@ -152,9 +152,9 @@ impl Kubernix {
     }
 
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
-    fn bootstrap_cluster(config: Config) -> Fallible<()> {
+    fn bootstrap_cluster(config: Config) -> Result<()> {
         // Ensure that the system is prepared
-        let system = System::setup(&config)?;
+        let system = System::setup(&config).context("Unable to setup system")?;
         Container::build(&config)?;
 
         // Setup the network
@@ -259,13 +259,13 @@ impl Kubernix {
     }
 
     /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
-    fn apply_addons(&mut self) -> Fallible<()> {
+    fn apply_addons(&mut self) -> Result<()> {
         info!("Applying cluster addons");
         CoreDNS::apply(&self.config, &self.network, &self.kubeconfig)
     }
 
     /// Wait until a termination signal occurs
-    fn wait(&self) -> Fallible<()> {
+    fn wait(&self) -> Result<()> {
         // Setup the signal handlers
         let term = Arc::new(AtomicBool::new(false));
         flag::register(SIGTERM, Arc::clone(&term))?;
@@ -284,7 +284,7 @@ impl Kubernix {
     }
 
     /// Spawn a new interactive default system shell
-    fn spawn_shell(&self) -> Fallible<()> {
+    fn spawn_shell(&self) -> Result<()> {
         info!("Spawning interactive shell");
         info!("Please be aware that the cluster gets destroyed if you exit the shell");
 
@@ -301,7 +301,7 @@ impl Kubernix {
     }
 
     /// Lay out the env file
-    fn write_env_file(&self) -> Fallible<()> {
+    fn write_env_file(&self) -> Result<()> {
         fs::write(
             &self.env_file(),
             format!(

@@ -1,5 +1,5 @@
 use crate::{nix::Nix, podman::Podman, process::Process, system::System, Config};
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use log::{info, trace, LevelFilter};
 use std::{
     fs,
@@ -14,7 +14,7 @@ pub struct Container;
 
 impl Container {
     /// Build the base image used for the nodes
-    pub fn build(config: &Config) -> Fallible<()> {
+    pub fn build(config: &Config) -> Result<()> {
         // Verify that the provided runtime exists
         System::find_executable(config.container_runtime())?;
 
@@ -80,7 +80,7 @@ impl Container {
         process_name: &str,
         container_name: &str,
         args: &[&str],
-    ) -> Fallible<Process> {
+    ) -> Result<Process> {
         // Cleanup possible containers
         Self::remove(config, container_name)?;
 
@@ -128,7 +128,7 @@ impl Container {
         process_name: &str,
         container_name: &str,
         args: &[&str],
-    ) -> Fallible<Process> {
+    ) -> Result<Process> {
         // Prepare the args
         let mut args_vec = vec![];
 
@@ -156,7 +156,7 @@ impl Container {
     }
 
     /// Remove the provided (maybe running) container
-    fn remove(config: &Config, name: &str) -> Fallible<()> {
+    fn remove(config: &Config, name: &str) -> Result<()> {
         Command::new(config.container_runtime())
             .arg("rm")
             .arg("-f")

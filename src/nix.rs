@@ -1,5 +1,5 @@
 use crate::{system::System, Config};
-use failure::Fallible;
+use anyhow::Result;
 use log::{debug, info};
 use std::{
     env::{current_exe, var},
@@ -14,7 +14,7 @@ impl Nix {
     const NIX_ENV: &'static str = "IN_NIX";
 
     /// Bootstrap the nix environment
-    pub fn bootstrap(config: Config) -> Fallible<()> {
+    pub fn bootstrap(config: Config) -> Result<()> {
         // Prepare the nix dir
         let dir = config.root().join(Self::DIR);
 
@@ -64,7 +64,7 @@ impl Nix {
     }
 
     /// Run a pure nix command
-    pub fn run(config: &Config, args: &[&str]) -> Fallible<()> {
+    pub fn run(config: &Config, args: &[&str]) -> Result<()> {
         Command::new(System::find_executable("nix")?)
             .env(Self::NIX_ENV, "true")
             .arg("run")

@@ -1,6 +1,6 @@
 use crate::system::System;
+use anyhow::{bail, Context, Result};
 use crossbeam_channel::{bounded, Receiver, Sender};
-use failure::{bail, format_err, Fallible};
 use log::{debug, error, info};
 use nix::{
     sys::signal::{kill, Signal},
@@ -26,13 +26,13 @@ pub struct Process {
     name: String,
     pid: u32,
     readyness_timeout: u64,
-    watch: Option<JoinHandle<Fallible<()>>>,
+    watch: Option<JoinHandle<Result<()>>>,
 }
 
 /// The trait to stop something
 pub trait Stoppable {
     /// Stop the process
-    fn stop(&mut self) -> Fallible<()>;
+    fn stop(&mut self) -> Result<()>;
 }
 
 /// A started process
@@ -42,7 +42,7 @@ pub type Started = Box<dyn Stoppable + Send + Sync>;
 pub type Stoppables = Vec<Started>;
 
 /// The process state as result
-pub type ProcessState = Fallible<Started>;
+pub type ProcessState = Result<Started>;
 
 #[derive(Deserialize, Serialize)]
 struct Run {
@@ -53,7 +53,7 @@ struct Run {
 impl Process {
     /// Creates a new `Process` instance by spawning the provided `command` and `args`.
     /// If the process creation fails, an `Error` will be returned.
-    pub fn start(dir: &Path, identifier: &str, command: &str, args: &[&str]) -> Fallible<Process> {
+    pub fn start(dir: &Path, identifier: &str, command: &str, args: &[&str]) -> Result<Process> {
         // Prepare the commands
         if command.is_empty() {
             bail!("No valid command provided")
@@ -94,14 +94,7 @@ impl Process {
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file))
             .spawn()
-            .map_err(|e| {
-                format_err!(
-                    "Unable to start process '{}' ({}): {}",
-                    identifier,
-                    command,
-                    e
-                )
-            })?;
+            .with_context(|| format!("Unable to start process '{}' ({})", identifier, command,))?;
 
         // Start the watcher thread
         let (kill, killed) = bounded(1);
@@ -138,7 +131,7 @@ impl Process {
 
     /// Wait for the process to become ready, by searching for the pattern in
     /// every line of its output.
-    pub fn wait_ready(&mut self, pattern: &str) -> Fallible<()> {
+    pub fn wait_ready(&mut self, pattern: &str) -> Result<()> {
         debug!(
             "Waiting for process '{}' ({}) to become ready with pattern: '{}'",
             self.name, self.command, pattern
@@ -178,16 +171,14 @@ impl Process {
 
 impl Stoppable for Process {
     /// Stopping the process by killing it
-    fn stop(&mut self) -> Fallible<()> {
+    fn stop(&mut self) -> Result<()> {
         debug!("Stopping process {} (via {})", self.name, self.command);
 
         // Indicate that this shutdown is intended
-        self.kill.send(()).map_err(|e| {
-            format_err!(
-                "Unable to send kill signal to process {} (via {}): {}",
-                self.name,
-                self.command,
-                e
+        self.kill.send(()).with_context(|| {
+            format!(
+                "Unable to send kill signal to process {} (via {})",
+                self.name, self.command,
             )
         })?;
 
@@ -220,28 +211,28 @@ mod tests {
     }
 
     #[test]
-    fn start_success() -> Fallible<()> {
+    fn start_success() -> Result<()> {
         let d = tempdir()?;
         Process::start(d.path(), "", "echo", &[])?;
         Ok(())
     }
 
     #[test]
-    fn start_failure_no_command() -> Fallible<()> {
+    fn start_failure_no_command() -> Result<()> {
         let d = tempdir()?;
         assert!(Process::start(d.path(), "", "", &[]).is_err());
         Ok(())
     }
 
     #[test]
-    fn start_failure_invalid_command() -> Fallible<()> {
+    fn start_failure_invalid_command() -> Result<()> {
         let d = tempdir()?;
         assert!(Process::start(d.path(), "", "invalid_command", &[]).is_err());
         Ok(())
     }
 
     #[test]
-    fn wait_ready_success() -> Fallible<()> {
+    fn wait_ready_success() -> Result<()> {
         let d = tempdir()?;
         let mut p = Process::start(d.path(), "", "echo", &["test"])?;
         p.wait_ready("test")?;
@@ -249,7 +240,7 @@ mod tests {
     }
 
     #[test]
-    fn wait_ready_failure() -> Fallible<()> {
+    fn wait_ready_failure() -> Result<()> {
         let d = tempdir()?;
         let mut p = Process::start(d.path(), "", "echo", &["test"])?;
         p.readyness_timeout = 1;
@@ -258,7 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn stop_success() -> Fallible<()> {
+    fn stop_success() -> Result<()> {
         let d = tempdir()?;
         let mut p = Process::start(d.path(), "", "sleep", &["500"])?;
         p.stop()?;
