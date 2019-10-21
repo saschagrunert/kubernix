@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use std::{
     env::{current_dir, var},
     fs::{canonicalize, create_dir_all, File},
@@ -12,15 +12,15 @@ use std::{
 const TIMEOUT: u64 = 600;
 pub const SUDO: &str = "sudo";
 
-pub fn run_podman_test(test: &str, args: Option<&[&str]>) -> Fallible<()> {
+pub fn run_podman_test(test: &str, args: Option<&[&str]>) -> Result<()> {
     run_container_test(test, "podman", args)
 }
 
-pub fn run_docker_test(test: &str, args: Option<&[&str]>) -> Fallible<()> {
+pub fn run_docker_test(test: &str, args: Option<&[&str]>) -> Result<()> {
     run_container_test(test, "docker", args)
 }
 
-fn run_container_test(test: &str, command: &str, args: Option<&[&str]>) -> Fallible<()> {
+fn run_container_test(test: &str, command: &str, args: Option<&[&str]>) -> Result<()> {
     let image = var("IMAGE")?;
     let mut full_args = vec![
         command,
@@ -69,9 +69,9 @@ fn run_container_test(test: &str, command: &str, args: Option<&[&str]>) -> Falli
     Ok(())
 }
 
-pub fn run_local_test<F>(test: &str, args: Option<&[&str]>, hook: F) -> Fallible<()>
+pub fn run_local_test<F>(test: &str, args: Option<&[&str]>, hook: F) -> Result<()>
 where
-    F: Fn() -> Fallible<()>,
+    F: Fn() -> Result<()>,
 {
     let binary = current_dir()?
         .join("target")
@@ -107,13 +107,13 @@ pub fn run_root(test: &str) -> PathBuf {
     test_dir(test).join("run")
 }
 
-pub fn none_hook() -> Fallible<()> {
+pub fn none_hook() -> Result<()> {
     Ok(())
 }
 
-fn run_test<F>(test: &str, args: &[&str], hook: F) -> Fallible<bool>
+fn run_test<F>(test: &str, args: &[&str], hook: F) -> Result<bool>
 where
-    F: Fn() -> Fallible<()>,
+    F: Fn() -> Result<()>,
 {
     // Prepare the logs dir
     let test_dir = test_dir(test);
@@ -164,11 +164,7 @@ where
     Ok(success_ready && success_hook)
 }
 
-fn check_file_for_output(
-    test: &str,
-    success_pattern: &str,
-    failure_pattern: &str,
-) -> Fallible<bool> {
+fn check_file_for_output(test: &str, success_pattern: &str, failure_pattern: &str) -> Result<bool> {
     let mut success = false;
     let now = Instant::now();
     let mut reader = BufReader::new(File::open(log_file(test))?);

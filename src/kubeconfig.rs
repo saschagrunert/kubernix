@@ -3,7 +3,7 @@ use crate::{
     pki::{Idendity, Pki},
     Config,
 };
-use failure::Fallible;
+use anyhow::Result;
 use getset::Getters;
 use log::{debug, info};
 use std::{
@@ -31,7 +31,7 @@ pub struct KubeConfig {
 }
 
 impl KubeConfig {
-    pub fn new(config: &Config, pki: &Pki) -> Fallible<KubeConfig> {
+    pub fn new(config: &Config, pki: &Pki) -> Result<KubeConfig> {
         // Create the target dir
         let dir = config.root().join("kubeconfig");
 
@@ -75,7 +75,7 @@ impl KubeConfig {
         }
     }
 
-    fn setup_kubeconfig(dir: &Path, idendity: &Idendity, ca: &Path) -> Fallible<PathBuf> {
+    fn setup_kubeconfig(dir: &Path, idendity: &Idendity, ca: &Path) -> Result<PathBuf> {
         debug!("Creating kubeconfig for {}", idendity.name());
         let kubeconfig = Self::target_config(dir, idendity);
 
@@ -131,7 +131,7 @@ mod tests {
     use crate::{config::tests::test_config, network::tests::test_network};
 
     #[test]
-    fn new_success() -> Fallible<()> {
+    fn new_success() -> Result<()> {
         let c = test_config()?;
         let n = test_network()?;
         let p = Pki::new(&c, &n)?;

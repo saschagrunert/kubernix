@@ -1,5 +1,5 @@
 use crate::Config;
-use failure::{bail, format_err, Fallible};
+use anyhow::{bail, Context, Result};
 use getset::Getters;
 use hostname::get_hostname;
 use ipnetwork::Ipv4Network;
@@ -35,7 +35,7 @@ impl Network {
     pub const INTERFACE_PREFIX: &'static str = "kubernix";
 
     /// Create a new network from the provided config
-    pub fn new(config: &Config) -> Fallible<Self> {
+    pub fn new(config: &Config) -> Result<Self> {
         // Preflight checks
         if config.cidr().prefix() > 24 {
             bail!(
@@ -53,7 +53,7 @@ impl Network {
             config
                 .cidr()
                 .nth(cluster_cidr.size())
-                .ok_or_else(|| format_err!("Unable to retrieve service CIDR start IP"))?,
+                .context("Unable to retrieve service CIDR start IP")?,
             24,
         )?;
         debug!("Using service CIDR {}", service_cidr);
@@ -65,7 +65,7 @@ impl Network {
                 config
                     .cidr()
                     .nth(offset)
-                    .ok_or_else(|| format_err!("Unable to retrieve CRI-O CIDR start IP"))?,
+                    .context("Unable to retrieve CRI-O CIDR start IP")?,
                 24,
             )?;
             offset += cidr.size();
@@ -76,7 +76,7 @@ impl Network {
         // Set the rest of the networking related adresses and paths
         let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2379);
         let etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2380);
-        let hostname = get_hostname().ok_or_else(|| format_err!("Unable to get hostname"))?;
+        let hostname = get_hostname().context("Unable to get hostname")?;
 
         Ok(Self {
             cluster_cidr,
@@ -89,7 +89,7 @@ impl Network {
     }
 
     /// Check if there are overlapping routes and warn
-    fn warn_overlapping_route(cidr: Ipv4Network) -> Fallible<()> {
+    fn warn_overlapping_route(cidr: Ipv4Network) -> Result<()> {
         let cmd = Command::new("ip").arg("route").output()?;
         if !cmd.status.success() {
             bail!("Unable to obtain `ip` routes")
@@ -110,9 +110,9 @@ impl Network {
     }
 
     /// Retrieve the DNS address from the service CIDR
-    pub fn api(&self) -> Fallible<Ipv4Addr> {
-        self.service_cidr().nth(1).ok_or_else(|| {
-            format_err!(
+    pub fn api(&self) -> Result<Ipv4Addr> {
+        self.service_cidr().nth(1).with_context(|| {
+            format!(
                 "Unable to retrieve first IP from service CIDR: {}",
                 self.service_cidr()
             )
@@ -120,9 +120,9 @@ impl Network {
     }
 
     /// Retrieve the DNS address from the service CIDR
-    pub fn dns(&self) -> Fallible<Ipv4Addr> {
-        self.service_cidr().nth(2).ok_or_else(|| {
-            format_err!(
+    pub fn dns(&self) -> Result<Ipv4Addr> {
+        self.service_cidr().nth(2).with_context(|| {
+            format!(
                 "Unable to retrieve second IP from service CIDR: {}",
                 self.service_cidr()
             )
@@ -135,27 +135,27 @@ pub mod tests {
     use super::*;
     use crate::config::tests::{test_config, test_config_wrong_cidr};
 
-    pub fn test_network() -> Fallible<Network> {
+    pub fn test_network() -> Result<Network> {
         let c = test_config()?;
         Network::new(&c)
     }
 
     #[test]
-    fn new_success() -> Fallible<()> {
+    fn new_success() -> Result<()> {
         let c = test_config()?;
         Network::new(&c)?;
         Ok(())
     }
 
     #[test]
-    fn new_failure() -> Fallible<()> {
+    fn new_failure() -> Result<()> {
         let c = test_config_wrong_cidr()?;
         assert!(Network::new(&c).is_err());
         Ok(())
     }
 
     #[test]
-    fn dns_success() -> Fallible<()> {
+    fn dns_success() -> Result<()> {
         let c = test_config()?;
         let n = Network::new(&c)?;
         assert_eq!(n.dns()?, Ipv4Addr::new(10, 10, 1, 2));

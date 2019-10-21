@@ -1,12 +1,12 @@
 use crate::{config::Config, kubeconfig::KubeConfig, kubectl::Kubectl, network::Network};
-use failure::{format_err, Fallible};
+use anyhow::{Context, Result};
 use log::info;
 use std::fs::{self, create_dir_all};
 
 pub struct CoreDNS;
 
 impl CoreDNS {
-    pub fn apply(config: &Config, network: &Network, kubeconfig: &KubeConfig) -> Fallible<()> {
+    pub fn apply(config: &Config, network: &Network, kubeconfig: &KubeConfig) -> Result<()> {
         info!("Deploying CoreDNS");
 
         let dir = config.root().join("coredns");
@@ -19,8 +19,7 @@ impl CoreDNS {
             fs::write(&file, yml)?;
         }
 
-        Kubectl::apply(kubeconfig.admin(), &file)
-            .map_err(|e| format_err!("Unable to deploy CoreDNS: {}", e))?;
+        Kubectl::apply(kubeconfig.admin(), &file).context("Unable to deploy CoreDNS")?;
 
         info!("CoreDNS deployed");
         Ok(())

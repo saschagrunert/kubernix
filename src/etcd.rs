@@ -4,7 +4,7 @@ use crate::{
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
 };
-use failure::Fallible;
+use anyhow::Result;
 use log::info;
 use std::fs::create_dir_all;
 
@@ -56,7 +56,7 @@ impl Etcd {
 }
 
 impl Stoppable for Etcd {
-    fn stop(&mut self) -> Fallible<()> {
+    fn stop(&mut self) -> Result<()> {
         self.process.stop()
     }
 }
@@ -67,7 +67,7 @@ mod tests {
     use crate::{config::tests::test_config, network::tests::test_network};
 
     #[test]
-    fn new_success() -> Fallible<()> {
+    fn new_success() -> Result<()> {
         let c = test_config()?;
         let n = test_network()?;
         let p = Pki::new(&c, &n)?;

@@ -3,7 +3,7 @@ use crate::{
     kubeconfig::KubeConfig,
     process::{Process, ProcessState, Stoppable},
 };
-use failure::Fallible;
+use anyhow::Result;
 use log::info;
 use std::fs::{self, create_dir_all};
 
@@ -42,7 +42,7 @@ impl Scheduler {
 }
 
 impl Stoppable for Scheduler {
-    fn stop(&mut self) -> Fallible<()> {
+    fn stop(&mut self) -> Result<()> {
         self.process.stop()
     }
 }

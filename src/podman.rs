@@ -1,5 +1,5 @@
 use crate::Config;
-use failure::Fallible;
+use anyhow::Result;
 use log::LevelFilter;
 use std::{
     fs::{self, create_dir_all},
@@ -17,7 +17,7 @@ impl Podman {
     }
 
     /// Retrieve the podman build args
-    pub fn build_args(config: &Config, policy_json: &Path) -> Fallible<Vec<String>> {
+    pub fn build_args(config: &Config, policy_json: &Path) -> Result<Vec<String>> {
         // Prepare the CNI dir
         let dir = Self::cni_dir(config);
         create_dir_all(&dir)?;
@@ -65,14 +65,14 @@ mod tests {
     use crate::config::tests::{test_config, test_config_wrong_root};
 
     #[test]
-    fn is_configured_success() -> Fallible<()> {
+    fn is_configured_success() -> Result<()> {
         let c = test_config()?;
         assert!(Podman::is_configured(&c));
         Ok(())
     }
 
     #[test]
-    fn build_args_success() -> Fallible<()> {
+    fn build_args_success() -> Result<()> {
         let c = test_config()?;
         let p = PathBuf::from("policy.json");
         Podman::build_args(&c, &p)?;
@@ -80,7 +80,7 @@ mod tests {
     }
 
     #[test]
-    fn build_args_failure() -> Fallible<()> {
+    fn build_args_failure() -> Result<()> {
         let c = test_config_wrong_root()?;
         let p = PathBuf::from("policy.json");
         assert!(Podman::build_args(&c, &p).is_err());
@@ -88,7 +88,7 @@ mod tests {
     }
 
     #[test]
-    fn default_args_success() -> Fallible<()> {
+    fn default_args_success() -> Result<()> {
         let c = test_config()?;
         assert!(!Podman::default_args(&c).is_empty());
         Ok(())

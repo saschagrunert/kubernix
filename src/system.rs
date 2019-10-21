@@ -1,5 +1,5 @@
 use crate::{node::Node, Config};
-use failure::{bail, format_err, Fallible};
+use anyhow::{bail, Context, Result};
 use log::{debug, info, warn};
 use std::{
     env::{split_paths, var, var_os},
@@ -16,7 +16,7 @@ pub struct System {
 
 impl System {
     /// Create a new system
-    pub fn setup(config: &Config) -> Fallible<Self> {
+    pub fn setup(config: &Config) -> Result<Self> {
         if config.container() {
             info!("Skipping modprobe and sysctl for sake of containerization")
         } else {
@@ -79,7 +79,7 @@ impl System {
     }
 
     /// Find an executable inside the current $PATH environment
-    pub fn find_executable<P>(name: P) -> Fallible<PathBuf>
+    pub fn find_executable<P>(name: P) -> Result<PathBuf>
     where
         P: AsRef<Path> + Display,
     {
@@ -96,22 +96,22 @@ impl System {
                     })
                     .next()
             })
-            .ok_or_else(|| format_err!("Unable to find executable '{}' in $PATH", name))
+            .with_context(|| format!("Unable to find executable '{}' in $PATH", name))
     }
 
     /// Return the full path to the default system shell
-    pub fn shell() -> Fallible<String> {
+    pub fn shell() -> Result<String> {
         let shell = var("SHELL").unwrap_or_else(|_| "sh".into());
         Ok(format!(
             "{}",
             Self::find_executable(&shell)
-                .map_err(|e| format_err!("Unable to find system shell '{}': {}", shell, e))?
+                .with_context(|| format!("Unable to find system shell '{}'", shell))?
                 .display()
         ))
     }
 
     /// Load a single kernel module via 'modprobe'
-    fn modprobe(module: &str) -> Fallible<()> {
+    fn modprobe(module: &str) -> Result<()> {
         debug!("Loading kernel module '{}'", module);
         let output = Command::new("modprobe").arg(module).output()?;
         if !output.status.success() {
@@ -125,7 +125,7 @@ impl System {
     }
 
     /// Enable a single sysctl by setting it to '1'
-    fn sysctl_enable(key: &str) -> Fallible<()> {
+    fn sysctl_enable(key: &str) -> Result<()> {
         debug!("Enabling sysctl '{}'", key);
         let enable_arg = format!("{}=1", key);
         let output = Command::new("sysctl").arg("-w").arg(&enable_arg).output()?;
