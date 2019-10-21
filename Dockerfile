@@ -12,7 +12,6 @@ RUN nix run -f /bootstrap -c echo done
 FROM nixos/nix:latest
 RUN apk add bash
 ENV SHELL /bin/bash
-ENV KUBERNIX_CONTAINER 1
 COPY --from=builder \
      /home/rust/src/target/x86_64-unknown-linux-musl/release/kubernix .
 COPY --from=bootstrapper /nix /nix

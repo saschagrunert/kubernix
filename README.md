@@ -246,7 +246,6 @@ KuberNix has some configuration possibilities, which are currently:
 | CLI argument      | Description                                                                         | Default        | Environment Variable         |
 | ----------------- | ----------------------------------------------------------------------------------- | -------------- | ---------------------------- |
 | `-r, --root`      | Path where all the runtime data is stored                                           | `kubernix-run` | `KUBERNIX_ROOT`              |
-| `-a, --container` | Indicator that KuberNix is running inside a container                               | `false`        | `KUBERNIX_CONTAINER`         |
 | `-l, --log-level` | Logging verbosity                                                                   | `info`         | `KUBERNIX_LOG_LEVEL`         |
 | `-c, --cidr`      | CIDR used for the cluster network                                                   | `10.10.0.0/16` | `KUBERNIX_CIDR`              |
 | `-s, --shell`     | The shell executable to be used                                                     | `$SHELL`/`sh`  | `KUBERNIX_SHELL`             |
