@@ -340,7 +340,7 @@
             <span class="string">&quot;--default-runtime=local-runc&quot;</span>,
             <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
                 <span class="string">&quot;--storage-driver={}&quot;</span>,
-                <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> <span class="op">||</span> <span class="ident">config</span>.<span class="ident">container</span>() {
+                <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> <span class="op">||</span> <span class="ident">System</span>::<span class="ident">in_container</span>()<span class="question-mark">?</span> {
                     <span class="string">&quot;vfs&quot;</span>
                 } <span class="kw">else</span> {
                     <span class="string">&quot;overlay&quot;</span>

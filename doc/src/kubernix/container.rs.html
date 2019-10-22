@@ -283,7 +283,7 @@
         ];
 
         <span class="comment">// Podman specific arguments</span>
-        <span class="kw">let</span> <span class="ident">podman_args</span> <span class="op">=</span> <span class="ident">Podman</span>::<span class="ident">default_args</span>(<span class="ident">config</span>);
+        <span class="kw">let</span> <span class="ident">podman_args</span> <span class="op">=</span> <span class="ident">Podman</span>::<span class="ident">default_args</span>(<span class="ident">config</span>)<span class="question-mark">?</span>;
         <span class="kw">if</span> <span class="ident">Podman</span>::<span class="ident">is_configured</span>(<span class="ident">config</span>) {
             <span class="ident">args_vec</span>.<span class="ident">extend</span>(<span class="ident">podman_args</span>.<span class="ident">iter</span>().<span class="ident">map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">as_str</span>()).<span class="ident">collect</span>::<span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;&gt;</span>())
         }
@@ -316,7 +316,7 @@
         <span class="comment">// Prepare the args</span>
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">args_vec</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[];
 
-        <span class="kw">let</span> <span class="ident">podman_args</span> <span class="op">=</span> <span class="ident">Podman</span>::<span class="ident">default_args</span>(<span class="ident">config</span>);
+        <span class="kw">let</span> <span class="ident">podman_args</span> <span class="op">=</span> <span class="ident">Podman</span>::<span class="ident">default_args</span>(<span class="ident">config</span>)<span class="question-mark">?</span>;
         <span class="kw">if</span> <span class="ident">Podman</span>::<span class="ident">is_configured</span>(<span class="ident">config</span>) {
             <span class="ident">args_vec</span>.<span class="ident">extend</span>(<span class="ident">podman_args</span>.<span class="ident">iter</span>().<span class="ident">map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">as_str</span>()).<span class="ident">collect</span>::<span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;&gt;</span>())
         }
