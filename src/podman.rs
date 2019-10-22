@@ -1,4 +1,4 @@
-use crate::Config;
+use crate::{system::System, Config};
 use anyhow::Result;
 use log::LevelFilter;
 use std::{
@@ -26,7 +26,7 @@ impl Podman {
             include_str!("assets/podman-bridge.json"),
         )?;
 
-        let mut args = Self::default_args(config);
+        let mut args = Self::default_args(config)?;
         args.extend(vec![
             "build".into(),
             format!("--signature-policy={}", policy_json.display()),
@@ -36,22 +36,22 @@ impl Podman {
     }
 
     /// Podman args which should apply to every command
-    pub fn default_args(config: &Config) -> Vec<String> {
+    pub fn default_args(config: &Config) -> Result<Vec<String>> {
         let log_level = if config.log_level() >= LevelFilter::Debug {
             "DEBUG".into()
         } else {
             config.log_level().to_string()
         };
-        vec![
+        Ok(vec![
             format!("--log-level={}", log_level),
             format!(
                 "--storage-driver={}",
-                if config.container() { "vfs" } else { "" }
+                if System::in_container()? { "vfs" } else { "" }
             ),
             format!("--cni-config-dir={}", Self::cni_dir(config).display()),
             "--events-backend=none".into(),
             "--cgroup-manager=cgroupfs".into(),
-        ]
+        ])
     }
 
     fn cni_dir(config: &Config) -> PathBuf {
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn default_args_success() -> Result<()> {
         let c = test_config()?;
-        assert!(!Podman::default_args(&c).is_empty());
+        assert!(!Podman::default_args(&c)?.is_empty());
         Ok(())
     }
 }

@@ -112,7 +112,7 @@ impl Crio {
             "--default-runtime=local-runc",
             &format!(
                 "--storage-driver={}",
-                if config.nodes() > 1 || config.container() {
+                if config.nodes() > 1 || System::in_container()? {
                     "vfs"
                 } else {
                     "overlay"

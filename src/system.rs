@@ -17,7 +17,7 @@ pub struct System {
 impl System {
     /// Create a new system
     pub fn setup(config: &Config) -> Result<Self> {
-        if config.container() {
+        if Self::in_container()? {
             info!("Skipping modprobe and sysctl for sake of containerization")
         } else {
             for module in &["overlay", "br_netfilter", "ip_conntrack"] {
@@ -64,6 +64,16 @@ impl System {
         };
 
         Ok(Self { hosts })
+    }
+
+    /// Returns true if the process is running inside a container
+    pub fn in_container() -> Result<bool> {
+        Ok(
+            read_to_string(PathBuf::from("/").join("proc").join("1").join("cgroup"))
+                .context("Unable to retrieve systems container status")?
+                .lines()
+                .any(|x| x.contains("libpod") || x.contains("podman") || x.contains("docker")),
+        )
     }
 
     /// Restore the initial system state

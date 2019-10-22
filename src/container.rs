@@ -99,7 +99,7 @@ impl Container {
         ];
 
         // Podman specific arguments
-        let podman_args = Podman::default_args(config);
+        let podman_args = Podman::default_args(config)?;
         if Podman::is_configured(config) {
             args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::<Vec<_>>())
         }
@@ -132,7 +132,7 @@ impl Container {
         // Prepare the args
         let mut args_vec = vec![];
 
-        let podman_args = Podman::default_args(config);
+        let podman_args = Podman::default_args(config)?;
         if Podman::is_configured(config) {
             args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::<Vec<_>>())
         }
