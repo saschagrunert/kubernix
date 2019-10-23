@@ -23,7 +23,7 @@ Moving pictures are worth more than a thousand words, so here is a short demo:
 
 Have you ever heard about [Nix][2], the functional package manager?
 
-In case you haven't, don’t worry -- the important thing is that it provides all the third-party
+In case you haven't, don’t worry – the important thing is that it provides all the third-party
 dependencies needed for this project, pinned to a dedicated version. This guarantees stable,
 reproducible installations.
 
