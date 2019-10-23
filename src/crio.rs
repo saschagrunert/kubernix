@@ -56,19 +56,45 @@ impl Crio {
         let cni_plugin = loopback.parent().context("Unable to find CNI plugin dir")?;
 
         let dir = Self::path(config, network, node);
-        let crio_config = dir.join("crio.conf");
-        let cni = dir.join("cni");
+        let config_file = dir.join("crio.conf");
+        let network_dir = dir.join("cni");
+        let socket = Self::socket(config, network, node)?;
 
         if !dir.exists() {
             create_dir_all(&dir)?;
-            create_dir_all(&cni)?;
+            create_dir_all(&network_dir)?;
+
+            let containers_dir = dir.join("containers");
+            fs::write(
+                &config_file,
+                format!(
+                    include_str!("assets/crio.conf"),
+                    conmon = conmon.display(),
+                    containers_root = containers_dir.join("storage").display(),
+                    containers_runroot = containers_dir.join("run").display(),
+                    listen = socket,
+                    log_dir = dir.join("log").display(),
+                    network_dir = network_dir.display(),
+                    plugin_dir = cni_plugin.display(),
+                    run_dir = dir.join("run").display(),
+                    runtime_path = System::find_executable("runc")?.display(),
+                    runtime_root = dir.join("runc").display(),
+                    signature_policy = Container::policy_json(config).display(),
+                    storage_driver = if config.nodes() > 1 || System::in_container()? {
+                        "vfs"
+                    } else {
+                        "overlay"
+                    },
+                    version_file = dir.join("version").display(),
+                ),
+            )?;
 
             let cidr = network
                 .crio_cidrs()
                 .get(node as usize)
                 .with_context(|| format!("Unable to find CIDR for {}", node_name))?;
             fs::write(
-                cni.join("10-bridge.json"),
+                network_dir.join("10-bridge.json"),
                 to_string_pretty(&json!({
                     "cniVersion": "0.3.1",
                     "name": format!("kubernix-{}", node_name),
@@ -84,41 +110,8 @@ impl Crio {
                     }
                 }))?,
             )?;
-
-            // Pseudo config to not load local configuration values
-            fs::write(&crio_config, "")?;
         }
-        let socket = Self::socket(config, network, node)?;
-
-        let args = &[
-            "--log-level=debug",
-            "--registry=docker.io",
-            &format!("--config={}", crio_config.display()),
-            &format!("--conmon={}", conmon.display()),
-            &format!("--listen={}", socket),
-            &format!("--root={}", dir.join("storage").display()),
-            &format!("--runroot={}", dir.join("run").display()),
-            &format!("--cni-config-dir={}", cni.display()),
-            &format!("--cni-plugin-dir={}", cni_plugin.display()),
-            &format!(
-                "--signature-policy={}",
-                Container::policy_json(config).display()
-            ),
-            &format!(
-                "--runtimes=local-runc:{}:{}",
-                System::find_executable("runc")?.display(),
-                dir.join("runc").display()
-            ),
-            "--default-runtime=local-runc",
-            &format!(
-                "--storage-driver={}",
-                if config.nodes() > 1 || System::in_container()? {
-                    "vfs"
-                } else {
-                    "overlay"
-                }
-            ),
-        ];
+        let args: &[&str] = &[&format!("--config={}", config_file.display())];
 
         let mut process = if config.nodes() > 1 {
             // Run inside a container
