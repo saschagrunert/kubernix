@@ -109,6 +109,7 @@ pub struct Config {
         env = "KUBERNIX_CONTAINER_RUNTIME",
         long = "container-runtime",
         raw(default_value = "Podman::EXECUTABLE"),
+        requires = "nodes",
         short = "u",
         value_name = "RUNTIME"
     )]
@@ -117,6 +118,7 @@ pub struct Config {
 
     #[get_copy = "pub"]
     #[clap(
+        conflicts_with = "shell",
         env = "KUBERNIX_NO_SHELL",
         long = "no-shell",
         short = "e",
