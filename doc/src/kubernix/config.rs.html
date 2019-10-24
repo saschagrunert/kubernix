@@ -277,6 +277,8 @@
 <span id="277">277</span>
 <span id="278">278</span>
 <span id="279">279</span>
+<span id="280">280</span>
+<span id="281">281</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
 <span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">podman</span>::<span class="ident">Podman</span>, <span class="ident">system</span>::<span class="ident">System</span>};
@@ -389,6 +391,7 @@
         <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_CONTAINER_RUNTIME&quot;</span>,
         <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;container-runtime&quot;</span>,
         <span class="ident">raw</span>(<span class="ident">default_value</span> <span class="op">=</span> <span class="string">&quot;Podman::EXECUTABLE&quot;</span>),
+        <span class="ident">requires</span> <span class="op">=</span> <span class="string">&quot;nodes&quot;</span>,
         <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;u&quot;</span>,
         <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;RUNTIME&quot;</span>
     )]</span>
@@ -397,6 +400,7 @@
 
     <span class="attribute">#[<span class="ident">get_copy</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
+        <span class="ident">conflicts_with</span> <span class="op">=</span> <span class="string">&quot;shell&quot;</span>,
         <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_NO_SHELL&quot;</span>,
         <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;no-shell&quot;</span>,
         <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;e&quot;</span>,
