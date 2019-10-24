@@ -286,7 +286,7 @@ impl Kubernix {
     /// Spawn a new interactive default system shell
     fn spawn_shell(&self) -> Result<()> {
         info!("Spawning interactive shell");
-        info!("Please be aware that the cluster gets destroyed if you exit the shell");
+        info!("Please be aware that the cluster stops if you exit the shell");
 
         Command::new(self.config.shell_ok()?)
             .current_dir(self.config.root())

@@ -126,7 +126,7 @@ like this:
 ```
 [INFO ] Everything is up and running
 [INFO ] Spawning interactive shell
-[INFO ] Please be aware that the cluster gets destroyed if you exit the shell
+[INFO ] Please be aware that the cluster stops if you exit the shell
 >
 ```
 
