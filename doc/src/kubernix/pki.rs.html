@@ -375,8 +375,6 @@
 <span id="375">375</span>
 <span id="376">376</span>
 <span id="377">377</span>
-<span id="378">378</span>
-<span id="379">379</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">network</span>::<span class="ident">Network</span>, <span class="ident">node</span>::<span class="ident">Node</span>, <span class="ident">Config</span>};
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">bail</span>, <span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
@@ -579,8 +577,7 @@
             .<span class="ident">stdin</span>(<span class="ident">pipe</span>)
             .<span class="ident">output</span>()<span class="question-mark">?</span>;
         <span class="kw">if</span> <span class="op">!</span><span class="ident">output</span>.<span class="ident">status</span>.<span class="ident">success</span>() {
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;cfssl/json stdout: {}&quot;</span>, <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>);
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;cfssl/json stderr: {}&quot;</span>, <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>);
+            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;cfssl/json: {:?}&quot;</span>, <span class="ident">output</span>);
             <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;CA certificate generation failed&quot;</span>);
         }
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;CA certificates created&quot;</span>);
@@ -676,8 +673,7 @@
             .<span class="ident">stdin</span>(<span class="ident">pipe</span>)
             .<span class="ident">output</span>()<span class="question-mark">?</span>;
         <span class="kw">if</span> <span class="op">!</span><span class="ident">output</span>.<span class="ident">status</span>.<span class="ident">success</span>() {
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;cfssl/json stdout: {}&quot;</span>, <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>);
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;cfssl/json stderr: {}&quot;</span>, <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>);
+            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;cfssl/json: {:?}&quot;</span>, <span class="ident">output</span>.<span class="ident">stdout</span>);
             <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;cfssl command failed&quot;</span>);
         }
         <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Certificate created for {}&quot;</span>, <span class="ident">name</span>);

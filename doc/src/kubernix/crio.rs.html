@@ -209,15 +209,6 @@
 <span id="209">209</span>
 <span id="210">210</span>
 <span id="211">211</span>
-<span id="212">212</span>
-<span id="213">213</span>
-<span id="214">214</span>
-<span id="215">215</span>
-<span id="216">216</span>
-<span id="217">217</span>
-<span id="218">218</span>
-<span id="219">219</span>
-<span id="220">220</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{
     <span class="ident">container</span>::<span class="ident">Container</span>,
@@ -394,16 +385,7 @@
                 .<span class="ident">arg</span>(<span class="ident">x</span>)
                 .<span class="ident">output</span>()<span class="question-mark">?</span>;
             <span class="kw">if</span> <span class="op">!</span><span class="ident">output</span>.<span class="ident">status</span>.<span class="ident">success</span>() {
-                <span class="macro">debug</span><span class="macro">!</span>(
-                    <span class="string">&quot;critcl rmp stdout ({}): {}&quot;</span>,
-                    <span class="self">self</span>.<span class="ident">node_name</span>,
-                    <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>
-                );
-                <span class="macro">debug</span><span class="macro">!</span>(
-                    <span class="string">&quot;critcl rmp stderr ({}): {}&quot;</span>,
-                    <span class="self">self</span>.<span class="ident">node_name</span>,
-                    <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>
-                );
+                <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;critcl rmp ({}): {:?}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>, <span class="ident">output</span>);
                 <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;crictl rmp command failed ({})&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
             }
         }
