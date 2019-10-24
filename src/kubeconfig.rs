@@ -81,40 +81,32 @@ impl KubeConfig {
 
         let embed_certs = "--embed-certs=true";
         let cluster = "kubernetes";
-        Kubectl::config(
-            &kubeconfig,
-            &[
-                "set-cluster",
-                cluster,
-                &format!("--certificate-authority={}", ca.display()),
-                &format!("--server=https://{}:6443", &Ipv4Addr::LOCALHOST),
-                embed_certs,
-            ],
-        )?;
+        let kubectl = Kubectl::new(&kubeconfig);
+        kubectl.config(&[
+            "set-cluster",
+            cluster,
+            &format!("--certificate-authority={}", ca.display()),
+            &format!("--server=https://{}:6443", &Ipv4Addr::LOCALHOST),
+            embed_certs,
+        ])?;
 
-        Kubectl::config(
-            &kubeconfig,
-            &[
-                "set-credentials",
-                &idendity.user(),
-                &format!("--client-certificate={}", idendity.cert().display()),
-                &format!("--client-key={}", idendity.key().display()),
-                embed_certs,
-            ],
-        )?;
+        kubectl.config(&[
+            "set-credentials",
+            &idendity.user(),
+            &format!("--client-certificate={}", idendity.cert().display()),
+            &format!("--client-key={}", idendity.key().display()),
+            embed_certs,
+        ])?;
 
         let context = "default";
-        Kubectl::config(
-            &kubeconfig,
-            &[
-                "set-context",
-                context,
-                &format!("--cluster={}", cluster),
-                &format!("--user={}", idendity.user()),
-            ],
-        )?;
+        kubectl.config(&[
+            "set-context",
+            context,
+            &format!("--cluster={}", cluster),
+            &format!("--user={}", idendity.user()),
+        ])?;
 
-        Kubectl::config(&kubeconfig, &["use-context", context])?;
+        kubectl.config(&["use-context", context])?;
 
         debug!("Kubeconfig created for {}", idendity.name());
         Ok(kubeconfig)

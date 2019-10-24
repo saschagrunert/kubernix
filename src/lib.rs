@@ -33,6 +33,7 @@ use crio::Crio;
 use encryptionconfig::EncryptionConfig;
 use etcd::Etcd;
 use kubeconfig::KubeConfig;
+use kubectl::Kubectl;
 use kubelet::Kubelet;
 use network::Network;
 use pki::Pki;
@@ -70,7 +71,7 @@ const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 pub struct Kubernix {
     config: Config,
     network: Network,
-    kubeconfig: KubeConfig,
+    kubectl: Kubectl,
     processes: Stoppables,
     system: System,
 }
@@ -165,6 +166,7 @@ impl Kubernix {
 
         // Setup the configs
         let kubeconfig = KubeConfig::new(&config, &pki)?;
+        let kubectl = Kubectl::new(kubeconfig.admin());
         let encryptionconfig = EncryptionConfig::new(&config)?;
 
         // All processes
@@ -188,7 +190,7 @@ impl Kubernix {
                 etcd = Etcd::start(&config, &network, &pki);
                 b.spawn(|c| {
                     api_server =
-                        ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubeconfig);
+                        ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubectl);
                     c.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
                     c.spawn(|_| {
                         controller_manager =
@@ -233,7 +235,7 @@ impl Kubernix {
         let mut kubernix = Kubernix {
             config,
             network,
-            kubeconfig,
+            kubectl,
             processes,
             system,
         };
@@ -261,7 +263,7 @@ impl Kubernix {
     /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
     fn apply_addons(&mut self) -> Result<()> {
         info!("Applying cluster addons");
-        CoreDNS::apply(&self.config, &self.network, &self.kubeconfig)
+        CoreDNS::apply(&self.config, &self.network, &self.kubectl)
     }
 
     /// Wait until a termination signal occurs
@@ -309,7 +311,7 @@ impl Kubernix {
                 RUNTIME_ENV,
                 Crio::socket(&self.config, &self.network, 0)?.to_socket_string(),
                 "KUBECONFIG",
-                self.kubeconfig.admin().display(),
+                self.kubectl.kubeconfig().display(),
             ),
         )?;
         Ok(())

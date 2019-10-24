@@ -1,7 +1,6 @@
 use crate::{
     config::Config,
     encryptionconfig::EncryptionConfig,
-    kubeconfig::KubeConfig,
     kubectl::Kubectl,
     network::Network,
     pki::Pki,
@@ -24,7 +23,7 @@ impl ApiServer {
         network: &Network,
         pki: &Pki,
         encryptionconfig: &EncryptionConfig,
-        kubeconfig: &KubeConfig,
+        kubectl: &Kubectl,
     ) -> ProcessState {
         info!("Starting API Server");
 
@@ -76,12 +75,12 @@ impl ApiServer {
         )?;
 
         process.wait_ready("etcd ok")?;
-        Self::setup_rbac(&dir, kubeconfig)?;
+        Self::setup_rbac(&dir, kubectl)?;
         info!("API Server is ready");
         Ok(Box::new(Self { process }))
     }
 
-    fn setup_rbac(dir: &Path, kubeconfig: &KubeConfig) -> Result<()> {
+    fn setup_rbac(dir: &Path, kubectl: &Kubectl) -> Result<()> {
         debug!("Creating API Server RBAC rule for kubelet");
         let file = dir.join("rbac.yml");
 
@@ -89,7 +88,8 @@ impl ApiServer {
             fs::write(&file, include_str!("assets/apiserver.yml"))?;
         }
 
-        Kubectl::apply(kubeconfig.admin(), &file)
+        kubectl
+            .apply(&file)
             .context("Unable to deploy API server RBAC rules")?;
 
         debug!("API Server RBAC rule created");
