@@ -173,16 +173,7 @@ impl Crio {
                 .arg(x)
                 .output()?;
             if !output.status.success() {
-                debug!(
-                    "critcl rmp stdout ({}): {}",
-                    self.node_name,
-                    String::from_utf8(output.stdout)?
-                );
-                debug!(
-                    "critcl rmp stderr ({}): {}",
-                    self.node_name,
-                    String::from_utf8(output.stderr)?
-                );
+                debug!("critcl rmp ({}): {:?}", self.node_name, output);
                 bail!("crictl rmp command failed ({})", self.node_name);
             }
         }

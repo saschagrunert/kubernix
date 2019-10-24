@@ -199,8 +199,7 @@ impl Pki {
             .stdin(pipe)
             .output()?;
         if !output.status.success() {
-            debug!("cfssl/json stdout: {}", String::from_utf8(output.stdout)?);
-            debug!("cfssl/json stderr: {}", String::from_utf8(output.stderr)?);
+            debug!("cfssl/json: {:?}", output);
             bail!("CA certificate generation failed");
         }
         debug!("CA certificates created");
@@ -296,8 +295,7 @@ impl Pki {
             .stdin(pipe)
             .output()?;
         if !output.status.success() {
-            debug!("cfssl/json stdout: {}", String::from_utf8(output.stdout)?);
-            debug!("cfssl/json stderr: {}", String::from_utf8(output.stderr)?);
+            debug!("cfssl/json: {:?}", output.stdout);
             bail!("cfssl command failed");
         }
         debug!("Certificate created for {}", name);
