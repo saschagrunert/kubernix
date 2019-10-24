@@ -1,12 +1,15 @@
 use anyhow::{bail, Result};
 use log::{debug, trace};
-use std::{path::Path, process::Command};
+use std::{
+    path::Path,
+    process::{Command, Output},
+};
 
 pub struct Kubectl;
 
 impl Kubectl {
     /// Run a generic kubectl command
-    pub fn execute(kubeconfig: &Path, args: &[&str]) -> Result<()> {
+    pub fn execute(kubeconfig: &Path, args: &[&str]) -> Result<Output> {
         let output = Command::new("kubectl")
             .args(args)
             .arg("--kubeconfig")
@@ -18,21 +21,23 @@ impl Kubectl {
             debug!("kubectl stderr: {}", String::from_utf8(output.stderr)?);
             bail!("kubectl command failed");
         }
-        Ok(())
+        Ok(output)
     }
 
     /// Run kubectl config
     pub fn config(kubeconfig: &Path, args: &[&str]) -> Result<()> {
         let mut final_args = vec!["config"];
         final_args.extend(args);
-        Self::execute(kubeconfig, &final_args)
+        Self::execute(kubeconfig, &final_args)?;
+        Ok(())
     }
 
     /// Run kubectl apply
     pub fn apply(kubeconfig: &Path, file: &Path) -> Result<()> {
         let file_arg = file.display().to_string();
         let args = &["apply", "-f", &file_arg];
-        Self::execute(kubeconfig, args)
+        Self::execute(kubeconfig, args)?;
+        Ok(())
     }
 }
 
@@ -44,6 +49,7 @@ mod tests {
     #[test]
     fn execute_success() -> Result<()> {
         let k = PathBuf::from("");
-        Kubectl::execute(&k, &[])
+        Kubectl::execute(&k, &[])?;
+        Ok(())
     }
 }
