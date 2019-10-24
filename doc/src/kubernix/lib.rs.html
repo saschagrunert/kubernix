@@ -649,7 +649,7 @@
     <span class="doccomment">/// Spawn a new interactive default system shell</span>
     <span class="kw">fn</span> <span class="ident">spawn_shell</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Spawning interactive shell&quot;</span>);
-        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Please be aware that the cluster gets destroyed if you exit the shell&quot;</span>);
+        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Please be aware that the cluster stops if you exit the shell&quot;</span>);
 
         <span class="ident">Command</span>::<span class="ident">new</span>(<span class="self">self</span>.<span class="ident">config</span>.<span class="ident">shell_ok</span>()<span class="question-mark">?</span>)
             .<span class="ident">current_dir</span>(<span class="self">self</span>.<span class="ident">config</span>.<span class="ident">root</span>())
