@@ -76,7 +76,7 @@ impl Crio {
                     log_dir = dir.join("log").display(),
                     network_dir = network_dir.display(),
                     plugin_dir = cni_plugin.display(),
-                    run_dir = dir.join("run").display(),
+                    exits_dir = dir.join("exits").display(),
                     runtime_path = System::find_executable("runc")?.display(),
                     runtime_root = dir.join("runc").display(),
                     signature_policy = Container::policy_json(config).display(),
