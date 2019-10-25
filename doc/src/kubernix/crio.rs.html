@@ -288,7 +288,7 @@
                     <span class="ident">log_dir</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;log&quot;</span>).<span class="ident">display</span>(),
                     <span class="ident">network_dir</span> <span class="op">=</span> <span class="ident">network_dir</span>.<span class="ident">display</span>(),
                     <span class="ident">plugin_dir</span> <span class="op">=</span> <span class="ident">cni_plugin</span>.<span class="ident">display</span>(),
-                    <span class="ident">run_dir</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;run&quot;</span>).<span class="ident">display</span>(),
+                    <span class="ident">exits_dir</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;exits&quot;</span>).<span class="ident">display</span>(),
                     <span class="ident">runtime_path</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;runc&quot;</span>)<span class="question-mark">?</span>.<span class="ident">display</span>(),
                     <span class="ident">runtime_root</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;runc&quot;</span>).<span class="ident">display</span>(),
                     <span class="ident">signature_policy</span> <span class="op">=</span> <span class="ident">Container</span>::<span class="ident">policy_json</span>(<span class="ident">config</span>).<span class="ident">display</span>(),
