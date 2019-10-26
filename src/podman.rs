@@ -54,6 +54,7 @@ impl Podman {
         ])
     }
 
+    /// Retrieve the internal CNI directory
     fn cni_dir(config: &Config) -> PathBuf {
         config.root().join("podman")
     }
