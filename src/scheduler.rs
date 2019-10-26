@@ -1,5 +1,6 @@
 use crate::{
     config::Config,
+    container::{Container, CONTROL_PLANE_NAME},
     kubeconfig::KubeConfig,
     process::{Process, ProcessState, Stoppable},
 };
@@ -28,10 +29,12 @@ impl Scheduler {
             fs::write(cfg, yml)?;
         }
 
-        let mut process = Process::start(
+        let mut process = Container::exec(
+            config,
             &dir,
             "Scheduler",
             "kube-scheduler",
+            CONTROL_PLANE_NAME,
             &[&format!("--config={}", cfg.display()), "--v=2"],
         )?;
 

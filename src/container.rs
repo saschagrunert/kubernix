@@ -1,4 +1,4 @@
-use crate::{nix::Nix, podman::Podman, process::Process, system::System, Config};
+use crate::{network::Network, nix::Nix, podman::Podman, process::Process, system::System, Config};
 use anyhow::{bail, Result};
 use log::{info, trace, LevelFilter};
 use std::{
@@ -10,22 +10,20 @@ use std::{
 const DEFAULT_IMAGE: &str = "kubernix:base";
 const DEFAULT_ROOT: &str = "kubernix";
 
+/// The default control plane name
+pub const CONTROL_PLANE_NAME: &str = "control-plane";
+
 pub struct Container;
 
 impl Container {
     /// Build the base image used for the nodes
-    pub fn build(config: &Config) -> Result<()> {
+    pub fn build(config: &Config, network: &Network) -> Result<()> {
         // Verify that the provided runtime exists
         System::find_executable(config.container_runtime())?;
 
         // Write the policy file
         let policy_json = Self::policy_json(config);
         fs::write(&policy_json, include_str!("assets/policy.json"))?;
-
-        // Nothing needs to be done on single node runs
-        if config.nodes() <= 1 {
-            return Ok(());
-        }
 
         // Build the base container image
         info!("Building base container image '{}'", DEFAULT_IMAGE);
@@ -45,7 +43,7 @@ impl Container {
 
         // Prepare the arguments
         let mut args = if Podman::is_configured(config) {
-            Podman::build_args(config, &policy_json)?
+            Podman::build_args(config, network, &policy_json)?
         } else {
             vec!["build".into()]
         };
@@ -91,7 +89,6 @@ impl Container {
         let mut args_vec = vec![
             "run",
             "--rm",
-            "--net=host",
             "--privileged",
             arg_hostname,
             arg_name,
@@ -100,8 +97,19 @@ impl Container {
 
         // Podman specific arguments
         let podman_args = Podman::default_args(config)?;
+        let container_network_arg = &format!(
+            "--net=container:{}",
+            Self::prefixed_container_name(CONTROL_PLANE_NAME)
+        );
         if Podman::is_configured(config) {
-            args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::<Vec<_>>())
+            args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::<Vec<_>>());
+
+            if container_name != CONTROL_PLANE_NAME {
+                args_vec.push(container_network_arg);
+            }
+        } else {
+            // Docker uses host network for now
+            args_vec.push("--net=host")
         }
 
         // Mount /dev/mapper if available

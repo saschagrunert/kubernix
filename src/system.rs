@@ -33,34 +33,30 @@ impl System {
             }
         }
 
-        let hosts = if config.nodes() > 1 {
-            // Try to write the hostnames, which does not work on every system
-            let hosts_file = Self::hosts();
-            let hosts = read_to_string(&hosts_file)?;
-            let local_hosts = (0..config.nodes())
-                .map(|x| format!("{} {}", Ipv4Addr::LOCALHOST, Node::raw(x)))
-                .collect::<Vec<_>>();
+        // Try to write the hostnames, which does not work on every system
+        let hosts_file = Self::hosts();
+        let hosts = read_to_string(&hosts_file)?;
+        let local_hosts = (0..config.nodes())
+            .map(|x| format!("{} {}", Ipv4Addr::LOCALHOST, Node::name(x)))
+            .collect::<Vec<_>>();
 
-            let mut new_hosts = hosts
-                .lines()
-                .filter(|x| !local_hosts.iter().any(|y| x == y))
-                .map(|x| x.into())
-                .collect::<Vec<_>>();
-            new_hosts.extend(local_hosts);
+        let mut new_hosts = hosts
+            .lines()
+            .filter(|x| !local_hosts.iter().any(|y| x == y))
+            .map(|x| x.into())
+            .collect::<Vec<_>>();
+        new_hosts.extend(local_hosts);
 
-            match fs::write(&hosts_file, new_hosts.join("\n")) {
-                Err(e) => {
-                    warn!(
-                        "Unable to write hosts file '{}'. The nodes may be not reachable: {}",
-                        hosts_file.display(),
-                        e
-                    );
-                    None
-                }
-                _ => Some(hosts),
+        let hosts = match fs::write(&hosts_file, new_hosts.join("\n")) {
+            Err(e) => {
+                warn!(
+                    "Unable to write hosts file '{}'. The nodes may be not reachable: {}",
+                    hosts_file.display(),
+                    e
+                );
+                None
             }
-        } else {
-            None
+            _ => Some(hosts),
         };
 
         Ok(Self { hosts })

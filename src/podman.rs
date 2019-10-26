@@ -1,6 +1,7 @@
-use crate::{system::System, Config};
-use anyhow::Result;
+use crate::{network::Network, system::System, Config};
+use anyhow::{Context, Result};
 use log::LevelFilter;
+use serde_json::{json, to_string_pretty};
 use std::{
     fs::{self, create_dir_all},
     path::{Path, PathBuf},
@@ -17,13 +18,40 @@ impl Podman {
     }
 
     /// Retrieve the podman build args
-    pub fn build_args(config: &Config, policy_json: &Path) -> Result<Vec<String>> {
+    pub fn build_args(
+        config: &Config,
+        network: &Network,
+        policy_json: &Path,
+    ) -> Result<Vec<String>> {
         // Prepare the CNI dir
         let dir = Self::cni_dir(config);
         create_dir_all(&dir)?;
         fs::write(
             &dir.join("87-podman-bridge.conflist"),
-            include_str!("assets/podman-bridge.json"),
+            to_string_pretty(&json!({
+                "cniVersion": "0.4.0",
+                "name": "podman",
+                "plugins": [{
+                    "type": "bridge",
+                    "bridge": "cni-podman0",
+                    "isGateway": true,
+                    "ipMasq": true,
+                    "ipam": {
+                        "type": "host-local",
+                        "routes": [{ "dst": "0.0.0.0/0" }],
+                        "ranges": [[{
+                            "subnet": network.podman_cidr(),
+                            "gateway": network
+                                .podman_cidr()
+                                .nth(1)
+                                .context("Unable to retrieve gateway IP from config CIDR")?,
+                        }]]
+                    }
+                },
+                    { "type": "portmap", "capabilities": { "portMappings": true } },
+                    { "type": "firewall", "backend": "iptables" }
+                ]
+            }))?,
         )?;
 
         let mut args = Self::default_args(config)?;
@@ -63,7 +91,10 @@ impl Podman {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::tests::{test_config, test_config_wrong_root};
+    use crate::{
+        config::tests::{test_config, test_config_wrong_root},
+        network::tests::test_network,
+    };
 
     #[test]
     fn is_configured_success() -> Result<()> {
@@ -76,7 +107,8 @@ mod tests {
     fn build_args_success() -> Result<()> {
         let c = test_config()?;
         let p = PathBuf::from("policy.json");
-        Podman::build_args(&c, &p)?;
+        let n = test_network()?;
+        Podman::build_args(&c, &n, &p)?;
         Ok(())
     }
 
@@ -84,7 +116,8 @@ mod tests {
     fn build_args_failure() -> Result<()> {
         let c = test_config_wrong_root()?;
         let p = PathBuf::from("policy.json");
-        assert!(Podman::build_args(&c, &p).is_err());
+        let n = test_network()?;
+        assert!(Podman::build_args(&c, &n, &p).is_err());
         Ok(())
     }
 

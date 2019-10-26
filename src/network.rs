@@ -1,7 +1,6 @@
 use crate::Config;
 use anyhow::{bail, Context, Result};
 use getset::Getters;
-use hostname::get_hostname;
 use ipnetwork::Ipv4Network;
 use log::{debug, warn};
 use std::{
@@ -11,6 +10,9 @@ use std::{
 
 #[derive(Getters)]
 pub struct Network {
+    #[get = "pub"]
+    podman_cidr: Ipv4Network,
+
     #[get = "pub"]
     cluster_cidr: Ipv4Network,
 
@@ -25,9 +27,6 @@ pub struct Network {
 
     #[get = "pub"]
     etcd_peer: SocketAddr,
-
-    #[get = "pub"]
-    hostname: String,
 }
 
 impl Network {
@@ -46,7 +45,16 @@ impl Network {
         Self::warn_overlapping_route(config.cidr())?;
 
         // Calculate the CIDRs
-        let cluster_cidr = Ipv4Network::new(config.cidr().ip(), 24)?;
+        let podman_cidr = Ipv4Network::new(config.cidr().ip(), 24)?;
+        debug!("Using podman CIDR {}", podman_cidr);
+
+        let cluster_cidr = Ipv4Network::new(
+            config
+                .cidr()
+                .nth(podman_cidr.size())
+                .context("Unable to retrieve cluster CIDR start IP")?,
+            24,
+        )?;
         debug!("Using cluster CIDR {}", cluster_cidr);
 
         let service_cidr = Ipv4Network::new(
@@ -76,15 +84,14 @@ impl Network {
         // Set the rest of the networking related adresses and paths
         let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2379);
         let etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2380);
-        let hostname = get_hostname().context("Unable to get hostname")?;
 
         Ok(Self {
+            podman_cidr,
             cluster_cidr,
             crio_cidrs,
             service_cidr,
             etcd_client,
             etcd_peer,
-            hostname,
         })
     }
 

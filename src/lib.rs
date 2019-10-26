@@ -156,10 +156,12 @@ impl Kubernix {
     fn bootstrap_cluster(config: Config) -> Result<()> {
         // Ensure that the system is prepared
         let system = System::setup(&config).context("Unable to setup system")?;
-        Container::build(&config)?;
 
         // Setup the network
         let network = Network::new(&config)?;
+
+        // Build the base image
+        Container::build(&config, &network)?;
 
         // Setup the public key infrastructure
         let pki = Pki::new(&config, &network)?;
@@ -186,8 +188,8 @@ impl Kubernix {
         info!("Starting processes");
         scope(|a| {
             // Control plane
+            etcd = Etcd::start(&config, &network, &pki);
             a.spawn(|b| {
-                etcd = Etcd::start(&config, &network, &pki);
                 b.spawn(|c| {
                     api_server =
                         ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubectl);
@@ -309,7 +311,7 @@ impl Kubernix {
             format!(
                 "export {}={}\nexport {}={}",
                 RUNTIME_ENV,
-                Crio::socket(&self.config, &self.network, 0)?.to_socket_string(),
+                Crio::socket(&self.config, 0)?.to_socket_string(),
                 "KUBECONFIG",
                 self.kubectl.kubeconfig().display(),
             ),

@@ -92,28 +92,16 @@ const SERVICE_ACCOUNT_NAME: &str = "service-account";
 impl Pki {
     pub fn new(config: &Config, network: &Network) -> Result<Pki> {
         let dir = &config.root().join("pki");
-        let nodes = (0..config.nodes())
-            .map(|n| Node::name(config, network, n))
-            .collect::<Vec<String>>();
+        let nodes = (0..config.nodes()).map(Node::name).collect::<Vec<String>>();
 
         // Create the CA only if necessary
         if dir.exists() {
             info!("PKI directory already exists, skipping generation");
 
-            let kubelets = if config.nodes() > 1 {
-                // Multiple nodes get identified via their node name
-                nodes
-                    .iter()
-                    .map(|n| Idendity::new(dir, n, &Self::node_user(n)))
-                    .collect()
-            } else {
-                // Single node gets identified via its hostname
-                vec![Idendity::new(
-                    dir,
-                    network.hostname(),
-                    &Self::node_user(network.hostname()),
-                )]
-            };
+            let kubelets = nodes
+                .iter()
+                .map(|n| Idendity::new(dir, n, &Self::node_user(n)))
+                .collect();
 
             Ok(Pki {
                 admin: Idendity::new(dir, ADMIN_NAME, ADMIN_NAME),
@@ -138,7 +126,6 @@ impl Pki {
             let mut hostnames = vec![
                 network.api()?.to_string(),
                 Ipv4Addr::LOCALHOST.to_string(),
-                network.hostname().into(),
                 "kubernetes".into(),
                 "kubernetes.default".into(),
                 "kubernetes.default.svc".into(),
@@ -154,16 +141,10 @@ impl Pki {
                 hostnames: &hostnames.join(","),
             };
 
-            let kubelets = if config.nodes() > 1 {
-                // Multiple nodes get identified via their node name
-                nodes
-                    .iter()
-                    .map(|n| Self::setup_kubelet(pki_config, n))
-                    .collect::<Result<Vec<_>, _>>()?
-            } else {
-                // Single node gets identified via its hostname
-                vec![Self::setup_kubelet(pki_config, network.hostname())?]
-            };
+            let kubelets = nodes
+                .iter()
+                .map(|n| Self::setup_kubelet(pki_config, n))
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Pki {
                 admin: Self::setup_admin(pki_config)?,

@@ -24,7 +24,7 @@ impl Kubelet {
         pki: &Pki,
         kubeconfig: &KubeConfig,
     ) -> ProcessState {
-        let node_name = Node::name(config, network, node);
+        let node_name = Node::name(node);
         info!("Starting Kubelet ({})", node_name);
         const KUBELET: &str = "kubelet";
 
@@ -66,10 +66,11 @@ impl Kubelet {
         let args = &[
             "--container-runtime=remote",
             &format!("--config={}", cfg.display()),
+            &format!("--hostname-override={}", node_name),
             &format!("--root-dir={}", root_dir.display()),
             &format!(
                 "--container-runtime-endpoint={}",
-                Crio::socket(config, network, node)?.to_socket_string(),
+                Crio::socket(config, node)?.to_socket_string(),
             ),
             &format!(
                 "--kubeconfig={}",
@@ -85,17 +86,9 @@ impl Kubelet {
             "--v=2",
         ];
 
-        let mut process = if config.nodes() > 1 {
-            // Run inside a container
-            let arg_hostname = &format!("--hostname-override={}", node_name);
-            let mut modargs: Vec<&str> = vec![arg_hostname];
-            modargs.extend(args);
-            let identifier = format!("Kubelet {}", node_name);
-            Container::exec(config, &dir, &identifier, KUBELET, &node_name, &modargs)?
-        } else {
-            // Run as usual process
-            Process::start(&dir, "Kubelet", KUBELET, args)?
-        };
+        // Run inside a container
+        let identifier = format!("Kubelet {}", node_name);
+        let mut process = Container::exec(config, &dir, &identifier, KUBELET, &node_name, args)?;
         process.wait_ready("Successfully registered node")?;
 
         info!("Kubelet is ready ({})", node_name);

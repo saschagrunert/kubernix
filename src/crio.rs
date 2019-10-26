@@ -48,17 +48,17 @@ const CRIO: &str = "crio";
 
 impl Crio {
     pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
-        let node_name = Node::name(config, network, node);
+        let node_name = Node::name(node);
         info!("Starting CRI-O ({})", node_name);
 
         let conmon = System::find_executable("conmon")?;
         let loopback = System::find_executable("loopback")?;
         let cni_plugin = loopback.parent().context("Unable to find CNI plugin dir")?;
 
-        let dir = Self::path(config, network, node);
+        let dir = Self::path(config, node);
         let config_file = dir.join("crio.conf");
         let network_dir = dir.join("cni");
-        let socket = Self::socket(config, network, node)?;
+        let socket = Self::socket(config, node)?;
 
         if !dir.exists() {
             create_dir_all(&dir)?;
@@ -80,11 +80,6 @@ impl Crio {
                     runtime_path = System::find_executable("runc")?.display(),
                     runtime_root = dir.join("runc").display(),
                     signature_policy = Container::policy_json(config).display(),
-                    storage_driver = if config.nodes() > 1 || System::in_container()? {
-                        "vfs"
-                    } else {
-                        "overlay"
-                    },
                     version_file = dir.join("version").display(),
                 ),
             )?;
@@ -113,14 +108,9 @@ impl Crio {
         }
         let args: &[&str] = &[&format!("--config={}", config_file.display())];
 
-        let mut process = if config.nodes() > 1 {
-            // Run inside a container
-            let identifier = format!("CRI-O {}", node_name);
-            Container::start(config, &dir, &identifier, CRIO, &node_name, args)?
-        } else {
-            // Run as usual process
-            Process::start(&dir, "CRI-O", CRIO, args)?
-        };
+        // Run inside a container
+        let identifier = format!("CRI-O {}", node_name);
+        let mut process = Container::start(config, &dir, &identifier, CRIO, &node_name, args)?;
         process.wait_ready("sandboxes:")?;
 
         info!("CRI-O is ready ({})", node_name);
@@ -132,16 +122,13 @@ impl Crio {
     }
 
     /// Retrieve the CRI socket
-    pub fn socket(config: &Config, network: &Network, node: u8) -> Result<CriSocket> {
-        CriSocket::new(Self::path(config, network, node).join("crio.sock"))
+    pub fn socket(config: &Config, node: u8) -> Result<CriSocket> {
+        CriSocket::new(Self::path(config, node).join("crio.sock"))
     }
 
     /// Retrieve the working path for the node
-    fn path(config: &Config, network: &Network, node: u8) -> PathBuf {
-        config
-            .root()
-            .join(CRIO)
-            .join(Node::name(config, network, node))
+    fn path(config: &Config, node: u8) -> PathBuf {
+        config.root().join(CRIO).join(Node::name(node))
     }
 
     /// Remove all containers via crictl invocations

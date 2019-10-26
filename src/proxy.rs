@@ -1,7 +1,9 @@
 use crate::{
     config::Config,
+    container::{Container, CONTROL_PLANE_NAME},
     kubeconfig::KubeConfig,
     network::Network,
+    node::Node,
     process::{Process, ProcessState, Stoppable},
 };
 use anyhow::Result;
@@ -30,11 +32,16 @@ impl Proxy {
             fs::write(&cfg, yml)?;
         }
 
-        let mut process = Process::start(
+        let mut process = Container::exec(
+            config,
             &dir,
             "Proxy",
             "kube-proxy",
-            &[&format!("--config={}", cfg.display())],
+            CONTROL_PLANE_NAME,
+            &[
+                &format!("--config={}", cfg.display()),
+                &format!("--hostname-override={}", Node::name(0)),
+            ],
         )?;
 
         process.wait_ready("Caches are synced")?;

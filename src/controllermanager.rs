@@ -1,5 +1,6 @@
 use crate::{
     config::Config,
+    container::{Container, CONTROL_PLANE_NAME},
     kubeconfig::KubeConfig,
     network::Network,
     pki::Pki,
@@ -25,10 +26,12 @@ impl ControllerManager {
         let dir = config.root().join("controllermanager");
         create_dir_all(&dir)?;
 
-        let mut process = Process::start(
+        let mut process = Container::exec(
+            config,
             &dir,
             "Controller Manager",
             "kube-controller-manager",
+            CONTROL_PLANE_NAME,
             &[
                 "--bind-address=0.0.0.0",
                 &format!("--cluster-cidr={}", network.cluster_cidr()),

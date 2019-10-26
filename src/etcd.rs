@@ -1,5 +1,6 @@
 use crate::{
     config::Config,
+    container::{Container, CONTROL_PLANE_NAME},
     network::Network,
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
@@ -21,10 +22,12 @@ impl Etcd {
         let dir = config.root().join(ETCD);
         create_dir_all(&dir)?;
 
-        let mut process = Process::start(
+        let mut process = Container::start(
+            config,
             &dir,
             ETCD,
             ETCD,
+            CONTROL_PLANE_NAME,
             &[
                 &format!("--advertise-client-urls=https://{}", network.etcd_client()),
                 "--client-cert-auth",

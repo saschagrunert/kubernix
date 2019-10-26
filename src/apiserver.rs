@@ -1,5 +1,6 @@
 use crate::{
     config::Config,
+    container::{Container, CONTROL_PLANE_NAME},
     encryptionconfig::EncryptionConfig,
     kubectl::Kubectl,
     network::Network,
@@ -30,10 +31,12 @@ impl ApiServer {
         let dir = config.root().join("apiserver");
         create_dir_all(&dir)?;
 
-        let mut process = Process::start(
+        let mut process = Container::exec(
+            config,
             &dir,
             "API Server",
             "kube-apiserver",
+            CONTROL_PLANE_NAME,
             &[
                 "--allow-privileged=true",
                 "--audit-log-maxage=30",
