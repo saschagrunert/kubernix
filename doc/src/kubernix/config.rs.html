@@ -279,6 +279,11 @@
 <span id="279">279</span>
 <span id="280">280</span>
 <span id="281">281</span>
+<span id="282">282</span>
+<span id="283">283</span>
+<span id="284">284</span>
+<span id="285">285</span>
+<span id="286">286</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
 <span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">podman</span>::<span class="ident">Podman</span>, <span class="ident">system</span>::<span class="ident">System</span>};
@@ -469,6 +474,11 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">shell_ok</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">shell</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">shell</span>().<span class="ident">as_ref</span>().<span class="ident">context</span>(<span class="string">&quot;No shell set&quot;</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="ident">shell</span>.<span class="ident">into</span>())
+    }
+
+    <span class="doccomment">/// Returns true if multi node support is enabled</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">multi_node</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+        <span class="self">self</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span>
     }
 
     <span class="kw">fn</span> <span class="ident">create_root_dir</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {

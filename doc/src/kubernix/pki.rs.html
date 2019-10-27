@@ -478,7 +478,7 @@
         <span class="kw">if</span> <span class="ident">dir</span>.<span class="ident">exists</span>() {
             <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;PKI directory already exists, skipping generation&quot;</span>);
 
-            <span class="kw">let</span> <span class="ident">kubelets</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> {
+            <span class="kw">let</span> <span class="ident">kubelets</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">multi_node</span>() {
                 <span class="comment">// Multiple nodes get identified via their node name</span>
                 <span class="ident">nodes</span>
                     .<span class="ident">iter</span>()
@@ -532,7 +532,7 @@
                 <span class="ident">hostnames</span>: <span class="kw-2">&amp;</span><span class="ident">hostnames</span>.<span class="ident">join</span>(<span class="string">&quot;,&quot;</span>),
             };
 
-            <span class="kw">let</span> <span class="ident">kubelets</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span> {
+            <span class="kw">let</span> <span class="ident">kubelets</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">multi_node</span>() {
                 <span class="comment">// Multiple nodes get identified via their node name</span>
                 <span class="ident">nodes</span>
                     .<span class="ident">iter</span>()
