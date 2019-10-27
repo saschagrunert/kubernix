@@ -256,6 +256,8 @@
 <span id="256">256</span>
 <span id="257">257</span>
 <span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">system</span>::<span class="ident">System</span>;
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">bail</span>, <span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
@@ -317,6 +319,7 @@
         <span class="kw">if</span> <span class="ident">command</span>.<span class="ident">is_empty</span>() {
             <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;No valid command provided&quot;</span>)
         }
+        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Starting {}&quot;</span>, <span class="ident">identifier</span>);
 
         <span class="comment">// Write the executed command into the dir</span>
         <span class="ident">create_dir_all</span>(<span class="ident">dir</span>)<span class="question-mark">?</span>;
@@ -367,10 +370,10 @@
 
             <span class="comment">// No kill send, we assume that the process died</span>
             <span class="kw">if</span> <span class="ident">killed</span>.<span class="ident">try_recv</span>().<span class="ident">is_err</span>() {
-                <span class="macro">error</span><span class="macro">!</span>(<span class="string">&quot;Process &#39;{}&#39; ({}) died unexpectedly&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>);
+                <span class="macro">error</span><span class="macro">!</span>(<span class="string">&quot;{} ({}) died unexpectedly&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>);
                 <span class="ident">dead</span>.<span class="ident">send</span>(())<span class="question-mark">?</span>;
             } <span class="kw">else</span> {
-                <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Process &#39;{}&#39; ({}) stopped&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>);
+                <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;{} stopped&quot;</span>, <span class="ident">n</span>);
             }
             <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;{} ({}) {}&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>, <span class="ident">status</span>);
             <span class="prelude-val">Ok</span>(())
@@ -404,12 +407,13 @@
             <span class="ident">reader</span>.<span class="ident">read_line</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">line</span>)<span class="question-mark">?</span>;
 
             <span class="kw">if</span> <span class="ident">line</span>.<span class="ident">contains</span>(<span class="ident">pattern</span>) {
+                <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;{} is ready&quot;</span>, <span class="self">self</span>.<span class="ident">name</span>);
                 <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Found pattern &#39;{}&#39; in line &#39;{}&#39;&quot;</span>, <span class="ident">pattern</span>, <span class="ident">line</span>.<span class="ident">trim</span>());
                 <span class="kw">return</span> <span class="prelude-val">Ok</span>(());
             }
 
             <span class="kw">if</span> <span class="self">self</span>.<span class="ident">died</span>.<span class="ident">try_recv</span>().<span class="ident">is_ok</span>() {
-                <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Process &#39;{}&#39; ({}) died&quot;</span>, <span class="self">self</span>.<span class="ident">command</span>, <span class="self">self</span>.<span class="ident">name</span>)
+                <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;{} ({}) died&quot;</span>, <span class="self">self</span>.<span class="ident">command</span>, <span class="self">self</span>.<span class="ident">name</span>)
             }
         }
 

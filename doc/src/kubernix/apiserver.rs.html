@@ -99,9 +99,6 @@
 <span id="99"> 99</span>
 <span id="100">100</span>
 <span id="101">101</span>
-<span id="102">102</span>
-<span id="103">103</span>
-<span id="104">104</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{
     <span class="ident">config</span>::<span class="ident">Config</span>,
@@ -112,7 +109,7 @@
     <span class="ident">process</span>::{<span class="ident">Process</span>, <span class="ident">ProcessState</span>, <span class="ident">Stoppable</span>},
 };
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
-<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">info</span>};
+<span class="kw">use</span> <span class="ident">log</span>::<span class="ident">debug</span>;
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">create_dir_all</span>},
     <span class="ident">path</span>::<span class="ident">Path</span>,
@@ -130,8 +127,6 @@
         <span class="ident">encryptionconfig</span>: <span class="kw-2">&amp;</span><span class="ident">EncryptionConfig</span>,
         <span class="ident">kubectl</span>: <span class="kw-2">&amp;</span><span class="ident">Kubectl</span>,
     ) <span class="op">-&gt;</span> <span class="ident">ProcessState</span> {
-        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Starting API Server&quot;</span>);
-
         <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="string">&quot;apiserver&quot;</span>);
         <span class="ident">create_dir_all</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>)<span class="question-mark">?</span>;
 
@@ -181,7 +176,6 @@
 
         <span class="ident">process</span>.<span class="ident">wait_ready</span>(<span class="string">&quot;etcd ok&quot;</span>)<span class="question-mark">?</span>;
         <span class="self">Self</span>::<span class="ident">setup_rbac</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="ident">kubectl</span>)<span class="question-mark">?</span>;
-        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;API Server is ready&quot;</span>);
         <span class="prelude-val">Ok</span>(<span class="ident">Box</span>::<span class="ident">new</span>(<span class="self">Self</span> { <span class="ident">process</span> }))
     }
 

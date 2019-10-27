@@ -207,8 +207,6 @@
 <span id="207">207</span>
 <span id="208">208</span>
 <span id="209">209</span>
-<span id="210">210</span>
-<span id="211">211</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{
     <span class="ident">container</span>::<span class="ident">Container</span>,
@@ -219,7 +217,7 @@
     <span class="ident">Config</span>, <span class="ident">RUNTIME_ENV</span>,
 };
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">bail</span>, <span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
-<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">info</span>};
+<span class="kw">use</span> <span class="ident">log</span>::<span class="ident">debug</span>;
 <span class="kw">use</span> <span class="ident">serde_json</span>::{<span class="ident">json</span>, <span class="ident">to_string_pretty</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">fmt</span>::{<span class="self">self</span>, <span class="ident">Display</span>, <span class="ident">Formatter</span>},
@@ -261,7 +259,6 @@
 <span class="kw">impl</span> <span class="ident">Crio</span> {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">node</span>: <span class="ident">u8</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>) <span class="op">-&gt;</span> <span class="ident">ProcessState</span> {
         <span class="kw">let</span> <span class="ident">node_name</span> <span class="op">=</span> <span class="ident">Node</span>::<span class="ident">name</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>);
-        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Starting CRI-O ({})&quot;</span>, <span class="ident">node_name</span>);
 
         <span class="kw">let</span> <span class="ident">conmon</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;conmon&quot;</span>)<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">loopback</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;loopback&quot;</span>)<span class="question-mark">?</span>;
@@ -335,7 +332,6 @@
         };
         <span class="ident">process</span>.<span class="ident">wait_ready</span>(<span class="string">&quot;sandboxes:&quot;</span>)<span class="question-mark">?</span>;
 
-        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;CRI-O is ready ({})&quot;</span>, <span class="ident">node_name</span>);
         <span class="prelude-val">Ok</span>(<span class="ident">Box</span>::<span class="ident">new</span>(<span class="self">Self</span> {
             <span class="ident">process</span>,
             <span class="ident">socket</span>,
