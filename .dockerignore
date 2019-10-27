@@ -1,7 +1,6 @@
-**/*.rs.bk
+*.rs.bk
 .git
 .kube
-/kubernix
-/kubernix-run
+/kubernix*
 /target
 /test-*
