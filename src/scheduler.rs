@@ -4,7 +4,6 @@ use crate::{
     process::{Process, ProcessState, Stoppable},
 };
 use anyhow::Result;
-use log::info;
 use std::fs::{self, create_dir_all};
 
 pub struct Scheduler {
@@ -13,8 +12,6 @@ pub struct Scheduler {
 
 impl Scheduler {
     pub fn start(config: &Config, kubeconfig: &KubeConfig) -> ProcessState {
-        info!("Starting Scheduler");
-
         let dir = config.root().join("scheduler");
         create_dir_all(&dir)?;
 
@@ -36,7 +33,6 @@ impl Scheduler {
         )?;
 
         process.wait_ready("Serving securely")?;
-        info!("Scheduler is ready");
         Ok(Box::new(Self { process }))
     }
 }

@@ -170,6 +170,7 @@ impl Kubernix {
         let encryptionconfig = EncryptionConfig::new(&config)?;
 
         // All processes
+        info!("Starting processes");
         let mut api_server = Process::stopped();
         let mut controller_manager = Process::stopped();
         let mut etcd = Process::stopped();
@@ -183,7 +184,6 @@ impl Kubernix {
             .collect::<Vec<_>>();
 
         // Spawn the processes
-        info!("Starting processes");
         scope(|a| {
             // Control plane
             a.spawn(|b| {

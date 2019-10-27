@@ -5,7 +5,6 @@ use crate::{
     process::{Process, ProcessState, Stoppable},
 };
 use anyhow::Result;
-use log::info;
 use std::fs::create_dir_all;
 
 pub struct Etcd {
@@ -14,10 +13,7 @@ pub struct Etcd {
 
 impl Etcd {
     pub fn start(config: &Config, network: &Network, pki: &Pki) -> ProcessState {
-        info!("Starting etcd");
         const ETCD: &str = "etcd";
-
-        // Remove the etcd data dir if already exists (configuration re-use)
         let dir = config.root().join(ETCD);
         create_dir_all(&dir)?;
 
@@ -26,22 +22,22 @@ impl Etcd {
             ETCD,
             ETCD,
             &[
-                &format!("--advertise-client-urls=https://{}", network.etcd_client()),
                 "--client-cert-auth",
-                &format!("--data-dir={}", dir.join("run").display()),
+                "--initial-cluster-state=new",
+                "--initial-cluster-token=etcd-cluster",
+                "--peer-client-cert-auth",
                 &format!(
                     "--initial-advertise-peer-urls=https://{}",
                     network.etcd_peer()
                 ),
-                "--initial-cluster-state=new",
-                "--initial-cluster-token=etcd-cluster",
+                &format!("--advertise-client-urls=https://{}", network.etcd_client()),
+                &format!("--cert-file={}", pki.apiserver().cert().display()),
+                &format!("--data-dir={}", dir.join("run").display()),
                 &format!("--initial-cluster=etcd=https://{}", network.etcd_peer()),
+                &format!("--key-file={}", pki.apiserver().key().display()),
                 &format!("--listen-client-urls=https://{}", network.etcd_client()),
                 &format!("--listen-peer-urls=https://{}", network.etcd_peer()),
-                "--name=etcd",
-                "--peer-client-cert-auth",
-                &format!("--cert-file={}", pki.apiserver().cert().display()),
-                &format!("--key-file={}", pki.apiserver().key().display()),
+                &format!("--name={}", ETCD),
                 &format!("--peer-cert-file={}", pki.apiserver().cert().display()),
                 &format!("--peer-key-file={}", pki.apiserver().key().display()),
                 &format!("--peer-trusted-ca-file={}", pki.ca().cert().display()),
@@ -50,7 +46,6 @@ impl Etcd {
         )?;
 
         process.wait_ready("ready to serve client requests")?;
-        info!("etcd is ready");
         Ok(Box::new(Self { process }))
     }
 }

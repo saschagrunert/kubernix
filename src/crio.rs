@@ -7,7 +7,7 @@ use crate::{
     Config, RUNTIME_ENV,
 };
 use anyhow::{bail, Context, Result};
-use log::{debug, info};
+use log::debug;
 use serde_json::{json, to_string_pretty};
 use std::{
     fmt::{self, Display, Formatter},
@@ -49,7 +49,6 @@ const CRIO: &str = "crio";
 impl Crio {
     pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
         let node_name = Node::name(config, network, node);
-        info!("Starting CRI-O ({})", node_name);
 
         let conmon = System::find_executable("conmon")?;
         let loopback = System::find_executable("loopback")?;
@@ -123,7 +122,6 @@ impl Crio {
         };
         process.wait_ready("sandboxes:")?;
 
-        info!("CRI-O is ready ({})", node_name);
         Ok(Box::new(Self {
             process,
             socket,

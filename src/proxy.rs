@@ -5,7 +5,6 @@ use crate::{
     process::{Process, ProcessState, Stoppable},
 };
 use anyhow::Result;
-use log::info;
 use std::fs::{self, create_dir_all};
 
 pub struct Proxy {
@@ -14,8 +13,6 @@ pub struct Proxy {
 
 impl Proxy {
     pub fn start(config: &Config, network: &Network, kubeconfig: &KubeConfig) -> ProcessState {
-        info!("Starting Proxy");
-
         let dir = config.root().join("proxy");
         create_dir_all(&dir)?;
 
@@ -38,7 +35,6 @@ impl Proxy {
         )?;
 
         process.wait_ready("Caches are synced")?;
-        info!("Proxy is ready");
         Ok(Box::new(Proxy { process }))
     }
 }

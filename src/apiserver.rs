@@ -7,7 +7,7 @@ use crate::{
     process::{Process, ProcessState, Stoppable},
 };
 use anyhow::{Context, Result};
-use log::{debug, info};
+use log::debug;
 use std::{
     fs::{self, create_dir_all},
     path::Path,
@@ -25,8 +25,6 @@ impl ApiServer {
         encryptionconfig: &EncryptionConfig,
         kubectl: &Kubectl,
     ) -> ProcessState {
-        info!("Starting API Server");
-
         let dir = config.root().join("apiserver");
         create_dir_all(&dir)?;
 
@@ -76,7 +74,6 @@ impl ApiServer {
 
         process.wait_ready("etcd ok")?;
         Self::setup_rbac(&dir, kubectl)?;
-        info!("API Server is ready");
         Ok(Box::new(Self { process }))
     }
 

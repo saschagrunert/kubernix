@@ -9,7 +9,6 @@ use crate::{
     process::{Process, ProcessState, Stoppable},
 };
 use anyhow::{bail, Context, Result};
-use log::info;
 use std::fs::{self, create_dir_all};
 
 pub struct Kubelet {
@@ -25,7 +24,6 @@ impl Kubelet {
         kubeconfig: &KubeConfig,
     ) -> ProcessState {
         let node_name = Node::name(config, network, node);
-        info!("Starting Kubelet ({})", node_name);
         const KUBELET: &str = "kubelet";
 
         let dir = config.root().join(KUBELET).join(&node_name);
@@ -103,8 +101,6 @@ impl Kubelet {
             Process::start(&dir, "Kubelet", KUBELET, args)?
         };
         process.wait_ready("Successfully registered node")?;
-
-        info!("Kubelet is ready ({})", node_name);
         Ok(Box::new(Self { process }))
     }
 }

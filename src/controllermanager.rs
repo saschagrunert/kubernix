@@ -6,7 +6,6 @@ use crate::{
     process::{Process, ProcessState, Stoppable},
 };
 use anyhow::Result;
-use log::info;
 use std::fs::create_dir_all;
 
 pub struct ControllerManager {
@@ -20,8 +19,6 @@ impl ControllerManager {
         pki: &Pki,
         kubeconfig: &KubeConfig,
     ) -> ProcessState {
-        info!("Starting Controller Manager");
-
         let dir = config.root().join("controllermanager");
         create_dir_all(&dir)?;
 
@@ -49,7 +46,6 @@ impl ControllerManager {
         )?;
 
         process.wait_ready("Serving securely")?;
-        info!("Controller Manager is ready");
         Ok(Box::new(Self { process }))
     }
 }

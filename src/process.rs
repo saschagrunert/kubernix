@@ -58,6 +58,7 @@ impl Process {
         if command.is_empty() {
             bail!("No valid command provided")
         }
+        info!("Starting {}", identifier);
 
         // Write the executed command into the dir
         create_dir_all(dir)?;
@@ -108,10 +109,10 @@ impl Process {
 
             // No kill send, we assume that the process died
             if killed.try_recv().is_err() {
-                error!("Process '{}' ({}) died unexpectedly", n, c);
+                error!("{} ({}) died unexpectedly", n, c);
                 dead.send(())?;
             } else {
-                info!("Process '{}' ({}) stopped", n, c);
+                info!("{} stopped", n);
             }
             debug!("{} ({}) {}", n, c, status);
             Ok(())
@@ -145,12 +146,13 @@ impl Process {
             reader.read_line(&mut line)?;
 
             if line.contains(pattern) {
+                info!("{} is ready", self.name);
                 debug!("Found pattern '{}' in line '{}'", pattern, line.trim());
                 return Ok(());
             }
 
             if self.died.try_recv().is_ok() {
-                bail!("Process '{}' ({}) died", self.command, self.name)
+                bail!("{} ({}) died", self.command, self.name)
             }
         }
 
