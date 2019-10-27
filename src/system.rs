@@ -33,7 +33,7 @@ impl System {
             }
         }
 
-        let hosts = if config.nodes() > 1 {
+        let hosts = if config.multi_node() {
             // Try to write the hostnames, which does not work on every system
             let hosts_file = Self::hosts();
             let hosts = read_to_string(&hosts_file)?;

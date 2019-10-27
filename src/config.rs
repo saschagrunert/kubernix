@@ -189,6 +189,11 @@ impl Config {
         Ok(shell.into())
     }
 
+    /// Returns true if multi node support is enabled
+    pub fn multi_node(&self) -> bool {
+        self.nodes() > 1
+    }
+
     fn create_root_dir(&self) -> Result<()> {
         create_dir_all(self.root()).context("Unable to create root directory")
     }

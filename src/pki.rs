@@ -100,7 +100,7 @@ impl Pki {
         if dir.exists() {
             info!("PKI directory already exists, skipping generation");
 
-            let kubelets = if config.nodes() > 1 {
+            let kubelets = if config.multi_node() {
                 // Multiple nodes get identified via their node name
                 nodes
                     .iter()
@@ -154,7 +154,7 @@ impl Pki {
                 hostnames: &hostnames.join(","),
             };
 
-            let kubelets = if config.nodes() > 1 {
+            let kubelets = if config.multi_node() {
                 // Multiple nodes get identified via their node name
                 nodes
                     .iter()

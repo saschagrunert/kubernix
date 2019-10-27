@@ -80,7 +80,7 @@ impl Crio {
                     runtime_path = System::find_executable("runc")?.display(),
                     runtime_root = dir.join("runc").display(),
                     signature_policy = Container::policy_json(config).display(),
-                    storage_driver = if config.nodes() > 1 || System::in_container()? {
+                    storage_driver = if config.multi_node() || System::in_container()? {
                         "vfs"
                     } else {
                         "overlay"
@@ -113,7 +113,7 @@ impl Crio {
         }
         let args: &[&str] = &[&format!("--config={}", config_file.display())];
 
-        let mut process = if config.nodes() > 1 {
+        let mut process = if config.multi_node() {
             // Run inside a container
             let identifier = format!("CRI-O {}", node_name);
             Container::start(config, &dir, &identifier, CRIO, &node_name, args)?

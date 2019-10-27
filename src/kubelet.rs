@@ -85,13 +85,19 @@ impl Kubelet {
             "--v=2",
         ];
 
-        let mut process = if config.nodes() > 1 {
+        let mut process = if config.multi_node() {
             // Run inside a container
             let arg_hostname = &format!("--hostname-override={}", node_name);
             let mut modargs: Vec<&str> = vec![arg_hostname];
             modargs.extend(args);
-            let identifier = format!("Kubelet {}", node_name);
-            Container::exec(config, &dir, &identifier, KUBELET, &node_name, &modargs)?
+            Container::exec(
+                config,
+                &dir,
+                &format!("Kubelet {}", node_name),
+                KUBELET,
+                &node_name,
+                &modargs,
+            )?
         } else {
             // Run as usual process
             Process::start(&dir, "Kubelet", KUBELET, args)?
