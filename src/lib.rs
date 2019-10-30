@@ -152,7 +152,7 @@ impl Kubernix {
 
     /// The amount of processes to be run
     fn processes(config: &Config) -> u64 {
-        5 + 2 * config.nodes() as u64
+        5 + 2 * u64::from(config.nodes())
     }
 
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
@@ -160,7 +160,7 @@ impl Kubernix {
         // Setup the progress bar
         const BASE_STEPS: u64 = 15;
         let steps = if config.multi_node() {
-            config.nodes() as u64 * 2 + BASE_STEPS
+            u64::from(config.nodes()) * 2 + BASE_STEPS
         } else {
             BASE_STEPS
         } + Self::processes(&config);
