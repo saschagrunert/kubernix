@@ -16,6 +16,7 @@ impl Nix {
     /// Bootstrap the nix environment
     pub fn bootstrap(config: Config) -> Result<()> {
         // Prepare the nix dir
+        debug!("Nix environment not found, bootstrapping one");
         let dir = config.root().join(Self::DIR);
 
         // Write the configuration if not existing
