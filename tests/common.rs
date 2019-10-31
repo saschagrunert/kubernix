@@ -94,7 +94,7 @@ where
         .arg("-F")
         .arg(&pid_file)
         .status()?;
-    let cleanup_success = check_file_for_output(test, "Cleanup done", "died unexpectedly")?;
+    let cleanup_success = check_file_for_output(test, "All done", "died unexpectedly")?;
 
     // Results evaluation
     if !success || !cleanup_success {
