@@ -397,5 +397,6 @@ impl Drop for Kubernix {
         if let Some(pb) = p {
             pb.finish_with_message("Cleanup done");
         }
+        debug!("All done");
     }
 }
