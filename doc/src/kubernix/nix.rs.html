@@ -81,6 +81,7 @@
 <span id="81">81</span>
 <span id="82">82</span>
 <span id="83">83</span>
+<span id="84">84</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">system</span>::<span class="ident">System</span>, <span class="ident">Config</span>};
 <span class="kw">use</span> <span class="ident">anyhow</span>::<span class="prelude-ty">Result</span>;
@@ -100,6 +101,7 @@
     <span class="doccomment">/// Bootstrap the nix environment</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">bootstrap</span>(<span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">// Prepare the nix dir</span>
+        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Nix environment not found, bootstrapping one&quot;</span>);
         <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">DIR</span>);
 
         <span class="comment">// Write the configuration if not existing</span>

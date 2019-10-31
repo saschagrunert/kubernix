@@ -362,6 +362,44 @@
 <span id="362">362</span>
 <span id="363">363</span>
 <span id="364">364</span>
+<span id="365">365</span>
+<span id="366">366</span>
+<span id="367">367</span>
+<span id="368">368</span>
+<span id="369">369</span>
+<span id="370">370</span>
+<span id="371">371</span>
+<span id="372">372</span>
+<span id="373">373</span>
+<span id="374">374</span>
+<span id="375">375</span>
+<span id="376">376</span>
+<span id="377">377</span>
+<span id="378">378</span>
+<span id="379">379</span>
+<span id="380">380</span>
+<span id="381">381</span>
+<span id="382">382</span>
+<span id="383">383</span>
+<span id="384">384</span>
+<span id="385">385</span>
+<span id="386">386</span>
+<span id="387">387</span>
+<span id="388">388</span>
+<span id="389">389</span>
+<span id="390">390</span>
+<span id="391">391</span>
+<span id="392">392</span>
+<span id="393">393</span>
+<span id="394">394</span>
+<span id="395">395</span>
+<span id="396">396</span>
+<span id="397">397</span>
+<span id="398">398</span>
+<span id="399">399</span>
+<span id="400">400</span>
+<span id="401">401</span>
+<span id="402">402</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! # kubernix</span>
 <span class="attribute">#![<span class="ident">deny</span>(<span class="ident">missing_docs</span>)]</span>
@@ -377,6 +415,7 @@
 <span class="kw">mod</span> <span class="ident">kubeconfig</span>;
 <span class="kw">mod</span> <span class="ident">kubectl</span>;
 <span class="kw">mod</span> <span class="ident">kubelet</span>;
+<span class="kw">mod</span> <span class="ident">logger</span>;
 <span class="kw">mod</span> <span class="ident">network</span>;
 <span class="kw">mod</span> <span class="ident">nix</span>;
 <span class="kw">mod</span> <span class="ident">node</span>;
@@ -400,6 +439,7 @@
 <span class="kw">use</span> <span class="ident">kubeconfig</span>::<span class="ident">KubeConfig</span>;
 <span class="kw">use</span> <span class="ident">kubectl</span>::<span class="ident">Kubectl</span>;
 <span class="kw">use</span> <span class="ident">kubelet</span>::<span class="ident">Kubelet</span>;
+<span class="kw">use</span> <span class="ident">logger</span>::{<span class="ident">reset_progress_bar</span>, <span class="ident">set_max_level</span>, <span class="ident">set_progress_bar</span>, <span class="ident">LOGGER</span>};
 <span class="kw">use</span> <span class="ident">network</span>::<span class="ident">Network</span>;
 <span class="kw">use</span> <span class="ident">pki</span>::<span class="ident">Pki</span>;
 <span class="kw">use</span> <span class="ident">process</span>::{<span class="ident">Process</span>, <span class="ident">Stoppables</span>};
@@ -412,7 +452,8 @@
     <span class="ident">unistd</span>::<span class="ident">getuid</span>,
 };
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">bail</span>, <span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
-<span class="kw">use</span> <span class="ident">env_logger</span>::<span class="ident">Builder</span>;
+<span class="kw">use</span> <span class="ident">console</span>::<span class="ident">style</span>;
+<span class="kw">use</span> <span class="ident">indicatif</span>::{<span class="ident">ProgressBar</span>, <span class="ident">ProgressStyle</span>};
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">error</span>, <span class="ident">info</span>, <span class="ident">LevelFilter</span>};
 <span class="kw">use</span> <span class="ident">proc_mounts</span>::<span class="ident">MountIter</span>;
 <span class="kw">use</span> <span class="ident">rayon</span>::{<span class="ident">prelude</span>::<span class="kw-2">*</span>, <span class="ident">scope</span>};
@@ -448,10 +489,8 @@
 
         <span class="comment">// Bootstrap if we&#39;re not inside a nix shell</span>
         <span class="kw">if</span> <span class="ident">Nix</span>::<span class="ident">is_active</span>() {
-            <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Bootstrapping cluster inside nix environment&quot;</span>);
             <span class="self">Self</span>::<span class="ident">bootstrap_cluster</span>(<span class="ident">config</span>)
         } <span class="kw">else</span> {
-            <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Nix environment not found, bootstrapping one&quot;</span>);
             <span class="ident">Nix</span>::<span class="ident">bootstrap</span>(<span class="ident">config</span>)
         }
     }
@@ -498,12 +537,9 @@
         <span class="ident">config</span>.<span class="ident">canonicalize_root</span>()<span class="question-mark">?</span>;
 
         <span class="comment">// Setup the logger</span>
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">builder</span> <span class="op">=</span> <span class="ident">Builder</span>::<span class="ident">new</span>();
-        <span class="ident">builder</span>
-            .<span class="ident">format_timestamp</span>(<span class="prelude-val">None</span>)
-            .<span class="ident">format_module_path</span>(<span class="ident">config</span>.<span class="ident">log_level</span>() <span class="op">&gt;</span> <span class="ident">LevelFilter</span>::<span class="ident">Info</span>)
-            .<span class="ident">filter</span>(<span class="prelude-val">None</span>, <span class="ident">config</span>.<span class="ident">log_level</span>())
-            .<span class="ident">try_init</span>()<span class="question-mark">?</span>;
+        <span class="ident">set_max_level</span>(<span class="ident">config</span>.<span class="ident">log_level</span>());
+        <span class="ident">log</span>::<span class="ident">set_max_level</span>(<span class="ident">LevelFilter</span>::<span class="ident">Trace</span>);
+        <span class="ident">log</span>::<span class="ident">set_logger</span>(<span class="kw-2">&amp;</span><span class="ident">LOGGER</span>).<span class="ident">unwrap</span>();
 
         <span class="prelude-val">Ok</span>(())
     }
@@ -517,8 +553,23 @@
         }
     }
 
+    <span class="doccomment">/// The amount of processes to be run</span>
+    <span class="kw">fn</span> <span class="ident">processes</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">u64</span> {
+        <span class="number">5</span> <span class="op">+</span> <span class="number">2</span> <span class="op">*</span> <span class="ident">u64</span>::<span class="ident">from</span>(<span class="ident">config</span>.<span class="ident">nodes</span>())
+    }
+
     <span class="doccomment">/// Bootstrap the whole cluster, which assumes to be inside a nix shell</span>
     <span class="kw">fn</span> <span class="ident">bootstrap_cluster</span>(<span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="comment">// Setup the progress bar</span>
+        <span class="kw">const</span> <span class="ident">BASE_STEPS</span>: <span class="ident">u64</span> <span class="op">=</span> <span class="number">15</span>;
+        <span class="kw">let</span> <span class="ident">steps</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">multi_node</span>() {
+            <span class="ident">u64</span>::<span class="ident">from</span>(<span class="ident">config</span>.<span class="ident">nodes</span>()) <span class="op">*</span> <span class="number">2</span> <span class="op">+</span> <span class="ident">BASE_STEPS</span>
+        } <span class="kw">else</span> {
+            <span class="ident">BASE_STEPS</span>
+        } <span class="op">+</span> <span class="self">Self</span>::<span class="ident">processes</span>(<span class="kw-2">&amp;</span><span class="ident">config</span>);
+        <span class="kw">let</span> <span class="ident">p</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">new_progress_bar</span>(<span class="ident">steps</span>, <span class="ident">config</span>.<span class="ident">log_level</span>());
+        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Bootstrapping cluster&quot;</span>);
+
         <span class="comment">// Ensure that the system is prepared</span>
         <span class="kw">let</span> <span class="ident">system</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">setup</span>(<span class="kw-2">&amp;</span><span class="ident">config</span>).<span class="ident">context</span>(<span class="string">&quot;Unable to setup system&quot;</span>)<span class="question-mark">?</span>;
         <span class="ident">Container</span>::<span class="ident">build</span>(<span class="kw-2">&amp;</span><span class="ident">config</span>)<span class="question-mark">?</span>;
@@ -609,9 +660,9 @@
         <span class="kw">if</span> <span class="ident">all_ok</span> {
             <span class="comment">// Apply all cluster addons</span>
             <span class="ident">kubernix</span>.<span class="ident">apply_addons</span>()<span class="question-mark">?</span>;
-
-            <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Everything is up and running&quot;</span>);
             <span class="ident">kubernix</span>.<span class="ident">write_env_file</span>()<span class="question-mark">?</span>;
+            <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Everything is up and running&quot;</span>);
+            <span class="ident">reset_progress_bar</span>(<span class="ident">p</span>);
 
             <span class="kw">if</span> <span class="ident">spawn_shell</span> {
                 <span class="ident">kubernix</span>.<span class="ident">spawn_shell</span>()<span class="question-mark">?</span>;
@@ -623,6 +674,24 @@
         }
 
         <span class="prelude-val">Ok</span>(())
+    }
+
+    <span class="comment">// Creat a new progress bar</span>
+    <span class="kw">fn</span> <span class="ident">new_progress_bar</span>(<span class="ident">items</span>: <span class="ident">u64</span>, <span class="ident">level</span>: <span class="ident">LevelFilter</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;&gt;</span> {
+        <span class="kw">if</span> <span class="ident">level</span> <span class="op">&lt;</span> <span class="ident">LevelFilter</span>::<span class="ident">Info</span> {
+            <span class="kw">return</span> <span class="prelude-val">None</span>;
+        }
+        <span class="kw">let</span> <span class="ident">p</span> <span class="op">=</span> <span class="ident">Arc</span>::<span class="ident">new</span>(<span class="ident">ProgressBar</span>::<span class="ident">new</span>(<span class="ident">items</span>));
+        <span class="ident">p</span>.<span class="ident">set_style</span>(<span class="ident">ProgressStyle</span>::<span class="ident">default_bar</span>().<span class="ident">template</span>(<span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
+            <span class="string">&quot;{}{}{} {}&quot;</span>,
+            <span class="ident">style</span>(<span class="string">&quot;[&quot;</span>).<span class="ident">white</span>().<span class="ident">dim</span>(),
+            <span class="string">&quot;{spinner:.green} {elapsed:&gt;3}&quot;</span>,
+            <span class="ident">style</span>(<span class="string">&quot;]&quot;</span>).<span class="ident">white</span>().<span class="ident">dim</span>(),
+            <span class="string">&quot;{bar:25.green/blue} {pos:&gt;2}/{len} {msg}&quot;</span>,
+        )));
+        <span class="ident">p</span>.<span class="ident">enable_steady_tick</span>(<span class="number">100</span>);
+        <span class="ident">set_progress_bar</span>(<span class="kw-2">&amp;</span><span class="ident">p</span>);
+        <span class="prelude-val">Some</span>(<span class="ident">p</span>)
     }
 
     <span class="doccomment">/// Apply needed workloads to the running cluster. This method stops the cluster on any error.</span>
@@ -669,6 +738,7 @@
 
     <span class="doccomment">/// Lay out the env file</span>
     <span class="kw">fn</span> <span class="ident">write_env_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Writing environment file&quot;</span>);
         <span class="ident">fs</span>::<span class="ident">write</span>(
             <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">env_file</span>(),
             <span class="macro">format</span><span class="macro">!</span>(
@@ -720,11 +790,17 @@
 
 <span class="kw">impl</span> <span class="ident">Drop</span> <span class="kw">for</span> <span class="ident">Kubernix</span> {
     <span class="kw">fn</span> <span class="ident">drop</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) {
+        <span class="kw">let</span> <span class="ident">p</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">new_progress_bar</span>(<span class="self">Self</span>::<span class="ident">processes</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>), <span class="self">self</span>.<span class="ident">config</span>.<span class="ident">log_level</span>());
+
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Cleaning up&quot;</span>);
         <span class="self">self</span>.<span class="ident">stop</span>();
         <span class="self">self</span>.<span class="ident">umount</span>();
         <span class="self">self</span>.<span class="ident">system</span>.<span class="ident">cleanup</span>();
-        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Cleanup done&quot;</span>)
+
+        <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">pb</span>) <span class="op">=</span> <span class="ident">p</span> {
+            <span class="ident">pb</span>.<span class="ident">finish_with_message</span>(<span class="string">&quot;Cleanup done&quot;</span>);
+        }
+        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;All done&quot;</span>);
     }
 }
 </pre></div>
