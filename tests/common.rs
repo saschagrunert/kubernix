@@ -94,7 +94,7 @@ where
         .arg("-F")
         .arg(&pid_file)
         .status()?;
-    let cleanup_success = check_file_for_output(test, "Cleanup done", "died unexpectedly")?;
+    let cleanup_success = check_file_for_output(test, "All done", "died unexpectedly")?;
 
     // Results evaluation
     if !success || !cleanup_success {
@@ -143,7 +143,7 @@ where
     println!("Waiting for process to be ready");
     let success_ready = check_file_for_output(
         test,
-        "Everything is up and running",
+        "Waiting for interrupt",
         "Unable to start all processes",
     )?;
     println!("Process ready: {}", success_ready);

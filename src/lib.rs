@@ -12,6 +12,7 @@ mod etcd;
 mod kubeconfig;
 mod kubectl;
 mod kubelet;
+mod logger;
 mod network;
 mod nix;
 mod node;
@@ -35,6 +36,7 @@ use etcd::Etcd;
 use kubeconfig::KubeConfig;
 use kubectl::Kubectl;
 use kubelet::Kubelet;
+use logger::{reset_progress_bar, set_max_level, set_progress_bar, LOGGER};
 use network::Network;
 use pki::Pki;
 use process::{Process, Stoppables};
@@ -47,7 +49,8 @@ use ::nix::{
     unistd::getuid,
 };
 use anyhow::{bail, Context, Result};
-use env_logger::Builder;
+use console::style;
+use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, error, info, LevelFilter};
 use proc_mounts::MountIter;
 use rayon::{prelude::*, scope};
@@ -83,10 +86,8 @@ impl Kubernix {
 
         // Bootstrap if we're not inside a nix shell
         if Nix::is_active() {
-            info!("Bootstrapping cluster inside nix environment");
             Self::bootstrap_cluster(config)
         } else {
-            info!("Nix environment not found, bootstrapping one");
             Nix::bootstrap(config)
         }
     }
@@ -133,12 +134,9 @@ impl Kubernix {
         config.canonicalize_root()?;
 
         // Setup the logger
-        let mut builder = Builder::new();
-        builder
-            .format_timestamp(None)
-            .format_module_path(config.log_level() > LevelFilter::Info)
-            .filter(None, config.log_level())
-            .try_init()?;
+        set_max_level(config.log_level());
+        log::set_max_level(LevelFilter::Trace);
+        log::set_logger(&LOGGER).unwrap();
 
         Ok(())
     }
@@ -152,8 +150,23 @@ impl Kubernix {
         }
     }
 
+    /// The amount of processes to be run
+    fn processes(config: &Config) -> u64 {
+        5 + 2 * u64::from(config.nodes())
+    }
+
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config) -> Result<()> {
+        // Setup the progress bar
+        const BASE_STEPS: u64 = 15;
+        let steps = if config.multi_node() {
+            u64::from(config.nodes()) * 2 + BASE_STEPS
+        } else {
+            BASE_STEPS
+        } + Self::processes(&config);
+        let p = Self::new_progress_bar(steps, config.log_level());
+        info!("Bootstrapping cluster");
+
         // Ensure that the system is prepared
         let system = System::setup(&config).context("Unable to setup system")?;
         Container::build(&config)?;
@@ -244,9 +257,9 @@ impl Kubernix {
         if all_ok {
             // Apply all cluster addons
             kubernix.apply_addons()?;
-
-            info!("Everything is up and running");
             kubernix.write_env_file()?;
+            info!("Everything is up and running");
+            reset_progress_bar(p);
 
             if spawn_shell {
                 kubernix.spawn_shell()?;
@@ -258,6 +271,24 @@ impl Kubernix {
         }
 
         Ok(())
+    }
+
+    // Creat a new progress bar
+    fn new_progress_bar(items: u64, level: LevelFilter) -> Option<Arc<ProgressBar>> {
+        if level < LevelFilter::Info {
+            return None;
+        }
+        let p = Arc::new(ProgressBar::new(items));
+        p.set_style(ProgressStyle::default_bar().template(&format!(
+            "{}{}{} {}",
+            style("[").white().dim(),
+            "{spinner:.green} {elapsed:>3}",
+            style("]").white().dim(),
+            "{bar:25.green/blue} {pos:>2}/{len} {msg}",
+        )));
+        p.enable_steady_tick(100);
+        set_progress_bar(&p);
+        Some(p)
     }
 
     /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
@@ -304,6 +335,7 @@ impl Kubernix {
 
     /// Lay out the env file
     fn write_env_file(&self) -> Result<()> {
+        info!("Writing environment file");
         fs::write(
             &self.env_file(),
             format!(
@@ -355,10 +387,16 @@ impl Kubernix {
 
 impl Drop for Kubernix {
     fn drop(&mut self) {
+        let p = Self::new_progress_bar(Self::processes(&self.config), self.config.log_level());
+
         info!("Cleaning up");
         self.stop();
         self.umount();
         self.system.cleanup();
-        debug!("Cleanup done")
+
+        if let Some(pb) = p {
+            pb.finish_with_message("Cleanup done");
+        }
+        debug!("All done");
     }
 }
