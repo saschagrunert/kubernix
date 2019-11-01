@@ -1,18 +1,8 @@
+use crate::progress::Progress;
 use console::{style, Color};
-use indicatif::ProgressBar;
-use lazy_static::lazy_static;
 use log::{Level, LevelFilter, Log, Metadata, Record};
-use parking_lot::RwLock;
-use std::{
-    io::{stderr, Write},
-    sync::{Arc, Weak},
-};
+use std::io::{stderr, Write};
 
-lazy_static! {
-    static ref PROGRESS_BAR: RwLock<Option<Weak<ProgressBar>>> = RwLock::new(None);
-}
-
-/// The basic logger
 pub struct Logger {
     level: LevelFilter,
 }
@@ -49,7 +39,7 @@ impl Log for Logger {
             style(record.args()),
         );
 
-        if let Some(pb) = get_progress_bar() {
+        if let Some(pb) = Progress::get() {
             if level != Level::Info {
                 pb.println(msg);
             } else {
@@ -62,19 +52,4 @@ impl Log for Logger {
     }
 
     fn flush(&self) {}
-}
-
-pub fn set_progress_bar(pb: &Arc<ProgressBar>) {
-    *PROGRESS_BAR.write() = Some(Arc::downgrade(pb));
-}
-
-pub fn reset_progress_bar(pb: Option<Arc<ProgressBar>>) {
-    if let Some(p) = pb {
-        p.finish()
-    }
-    *PROGRESS_BAR.write() = None;
-}
-
-fn get_progress_bar() -> Option<Arc<ProgressBar>> {
-    PROGRESS_BAR.read().as_ref()?.upgrade()
 }

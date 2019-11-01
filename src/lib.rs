@@ -19,6 +19,7 @@ mod node;
 mod pki;
 mod podman;
 mod process;
+mod progress;
 mod proxy;
 mod scheduler;
 mod system;
@@ -36,10 +37,11 @@ use etcd::Etcd;
 use kubeconfig::KubeConfig;
 use kubectl::Kubectl;
 use kubelet::Kubelet;
-use logger::{reset_progress_bar, set_progress_bar, Logger};
+use logger::Logger;
 use network::Network;
 use pki::Pki;
 use process::{Process, Stoppables};
+use progress::Progress;
 use proxy::Proxy;
 use scheduler::Scheduler;
 use system::System;
@@ -49,8 +51,6 @@ use ::nix::{
     unistd::getuid,
 };
 use anyhow::{bail, Context, Result};
-use console::style;
-use indicatif::{ProgressBar, ProgressStyle};
 use log::{debug, error, info, LevelFilter};
 use proc_mounts::MountIter;
 use rayon::{prelude::*, scope};
@@ -163,7 +163,7 @@ impl Kubernix {
         } else {
             BASE_STEPS
         } + Self::processes(&config);
-        let p = Self::new_progress_bar(steps, config.log_level());
+        let p = Progress::new(steps, config.log_level());
         info!("Bootstrapping cluster");
 
         // Ensure that the system is prepared
@@ -258,7 +258,7 @@ impl Kubernix {
             kubernix.apply_addons()?;
             kubernix.write_env_file()?;
             info!("Everything is up and running");
-            reset_progress_bar(p);
+            p.reset();
 
             if spawn_shell {
                 kubernix.spawn_shell()?;
@@ -270,24 +270,6 @@ impl Kubernix {
         }
 
         Ok(())
-    }
-
-    // Creat a new progress bar
-    fn new_progress_bar(items: u64, level: LevelFilter) -> Option<Arc<ProgressBar>> {
-        if level < LevelFilter::Info {
-            return None;
-        }
-        let p = Arc::new(ProgressBar::new(items));
-        p.set_style(ProgressStyle::default_bar().template(&format!(
-            "{}{}{} {}",
-            style("[").white().dim(),
-            "{spinner:.green} {elapsed:>3}",
-            style("]").white().dim(),
-            "{bar:25.green/blue} {pos:>2}/{len} {msg}",
-        )));
-        p.enable_steady_tick(100);
-        set_progress_bar(&p);
-        Some(p)
     }
 
     /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
@@ -386,16 +368,15 @@ impl Kubernix {
 
 impl Drop for Kubernix {
     fn drop(&mut self) {
-        let p = Self::new_progress_bar(Self::processes(&self.config), self.config.log_level());
+        let p = Progress::new(Self::processes(&self.config), self.config.log_level());
 
         info!("Cleaning up");
         self.stop();
         self.umount();
         self.system.cleanup();
+        info!("Cleanup done");
 
-        if let Some(pb) = p {
-            pb.finish_with_message("Cleanup done");
-        }
+        p.reset();
         debug!("All done");
     }
 }
