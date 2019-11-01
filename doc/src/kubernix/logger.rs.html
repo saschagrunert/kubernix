@@ -78,14 +78,6 @@
 <span id="78">78</span>
 <span id="79">79</span>
 <span id="80">80</span>
-<span id="81">81</span>
-<span id="82">82</span>
-<span id="83">83</span>
-<span id="84">84</span>
-<span id="85">85</span>
-<span id="86">86</span>
-<span id="87">87</span>
-<span id="88">88</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="ident">console</span>::{<span class="ident">style</span>, <span class="ident">Color</span>};
 <span class="kw">use</span> <span class="ident">indicatif</span>::<span class="ident">ProgressBar</span>;
@@ -94,22 +86,27 @@
 <span class="kw">use</span> <span class="ident">parking_lot</span>::<span class="ident">RwLock</span>;
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">io</span>::{<span class="ident">stderr</span>, <span class="ident">Write</span>},
-    <span class="ident">mem</span>::<span class="ident">transmute</span>,
-    <span class="ident">sync</span>::{
-        <span class="ident">atomic</span>::{<span class="ident">AtomicUsize</span>, <span class="ident">Ordering</span>},
-        <span class="ident">Arc</span>, <span class="ident">Weak</span>,
-    },
+    <span class="ident">sync</span>::{<span class="ident">Arc</span>, <span class="ident">Weak</span>},
 };
 
-<span class="doccomment">/// Global instance of the logger</span>
-<span class="kw">pub</span> <span class="kw">static</span> <span class="ident">LOGGER</span>: <span class="ident">Logger</span> <span class="op">=</span> <span class="ident">Logger</span>;
+<span class="macro">lazy_static</span><span class="macro">!</span> {
+    <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">PROGRESS_BAR</span>: <span class="ident">RwLock</span><span class="op">&lt;</span><span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Weak</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">RwLock</span>::<span class="ident">new</span>(<span class="prelude-val">None</span>);
+}
 
 <span class="doccomment">/// The basic logger</span>
-<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Logger</span>;
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Logger</span> {
+    <span class="ident">level</span>: <span class="ident">LevelFilter</span>,
+}
+
+<span class="kw">impl</span> <span class="ident">Logger</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">level</span>: <span class="ident">LevelFilter</span>) <span class="op">-&gt;</span> <span class="ident">Box</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="ident">Logger</span> { <span class="ident">level</span> }.<span class="ident">into</span>()
+    }
+}
 
 <span class="kw">impl</span> <span class="ident">Log</span> <span class="kw">for</span> <span class="ident">Logger</span> {
     <span class="kw">fn</span> <span class="ident">enabled</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">metadata</span>: <span class="kw-2">&amp;</span><span class="ident">Metadata</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
-        <span class="ident">metadata</span>.<span class="ident">level</span>() <span class="op">&lt;=</span> <span class="ident">max_level</span>()
+        <span class="ident">metadata</span>.<span class="ident">level</span>() <span class="op">&lt;=</span> <span class="self">self</span>.<span class="ident">level</span>
     }
 
     <span class="kw">fn</span> <span class="ident">log</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">record</span>: <span class="kw-2">&amp;</span><span class="ident">Record</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) {
@@ -148,11 +145,6 @@
     <span class="kw">fn</span> <span class="ident">flush</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) {}
 }
 
-<span class="macro">lazy_static</span><span class="macro">!</span> {
-    <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">PROGRESS_BAR</span>: <span class="ident">RwLock</span><span class="op">&lt;</span><span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Weak</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">RwLock</span>::<span class="ident">new</span>(<span class="prelude-val">None</span>);
-    <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">MAX_LEVEL</span>: <span class="ident">AtomicUsize</span> <span class="op">=</span> <span class="ident">AtomicUsize</span>::<span class="ident">new</span>(<span class="kw">unsafe</span> { <span class="ident">transmute</span>(<span class="ident">LevelFilter</span>::<span class="ident">Warn</span>) });
-}
-
 <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">set_progress_bar</span>(<span class="ident">pb</span>: <span class="kw-2">&amp;</span><span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;</span>) {
     <span class="kw-2">*</span><span class="ident">PROGRESS_BAR</span>.<span class="ident">write</span>() <span class="op">=</span> <span class="prelude-val">Some</span>(<span class="ident">Arc</span>::<span class="ident">downgrade</span>(<span class="ident">pb</span>));
 }
@@ -166,14 +158,6 @@
 
 <span class="kw">fn</span> <span class="ident">get_progress_bar</span>() <span class="op">-&gt;</span> <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;&gt;</span> {
     <span class="ident">PROGRESS_BAR</span>.<span class="ident">read</span>().<span class="ident">as_ref</span>()<span class="question-mark">?</span>.<span class="ident">upgrade</span>()
-}
-
-<span class="kw">fn</span> <span class="ident">max_level</span>() <span class="op">-&gt;</span> <span class="ident">LevelFilter</span> {
-    <span class="kw">unsafe</span> { <span class="ident">transmute</span>(<span class="ident">MAX_LEVEL</span>.<span class="ident">load</span>(<span class="ident">Ordering</span>::<span class="ident">Relaxed</span>)) }
-}
-
-<span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">set_max_level</span>(<span class="ident">level</span>: <span class="ident">LevelFilter</span>) {
-    <span class="ident">MAX_LEVEL</span>.<span class="ident">store</span>(<span class="kw">unsafe</span> { <span class="ident">transmute</span>(<span class="ident">level</span>) }, <span class="ident">Ordering</span>::<span class="ident">Relaxed</span>);
 }
 </pre></div>
 </section><section id="search" class="content hidden"></section><section class="footer"></section><aside id="help" class="hidden"><div><h1 class="hidden">Help</h1><div class="shortcuts"><h2>Keyboard Shortcuts</h2><dl><dt><kbd>?</kbd></dt><dd>Show this help dialog</dd><dt><kbd>S</kbd></dt><dd>Focus the search field</dd><dt><kbd>↑</kbd></dt><dd>Move up in search results</dd><dt><kbd>↓</kbd></dt><dd>Move down in search results</dd><dt><kbd>↹</kbd></dt><dd>Switch tab</dd><dt><kbd>&#9166;</kbd></dt><dd>Go to active search result</dd><dt><kbd>+</kbd></dt><dd>Expand all sections</dd><dt><kbd>-</kbd></dt><dd>Collapse all sections</dd></dl></div><div class="infos"><h2>Search Tricks</h2><p>Prefix searches with a type followed by a colon (e.g., <code>fn:</code>) to restrict the search to a given type.</p><p>Accepted types are: <code>fn</code>, <code>mod</code>, <code>struct</code>, <code>enum</code>, <code>trait</code>, <code>type</code>, <code>macro</code>, and <code>const</code>.</p><p>Search functions by type signature (e.g., <code>vec -> usize</code> or <code>* -> vec</code>)</p><p>Search multiple things at once by splitting your query with comma (e.g., <code>str,u8</code> or <code>String,struct:Vec,test</code>)</p></div></div></aside><script>window.rootPath = "../../";window.currentCrate = "kubernix";</script><script src="../../aliases.js"></script><script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>
