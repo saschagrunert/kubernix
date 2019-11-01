@@ -5,22 +5,27 @@ use log::{Level, LevelFilter, Log, Metadata, Record};
 use parking_lot::RwLock;
 use std::{
     io::{stderr, Write},
-    mem::transmute,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc, Weak,
-    },
+    sync::{Arc, Weak},
 };
 
-/// Global instance of the logger
-pub static LOGGER: Logger = Logger;
+lazy_static! {
+    static ref PROGRESS_BAR: RwLock<Option<Weak<ProgressBar>>> = RwLock::new(None);
+}
 
 /// The basic logger
-pub struct Logger;
+pub struct Logger {
+    level: LevelFilter,
+}
+
+impl Logger {
+    pub fn new(level: LevelFilter) -> Box<Self> {
+        Logger { level }.into()
+    }
+}
 
 impl Log for Logger {
     fn enabled(&self, metadata: &Metadata<'_>) -> bool {
-        metadata.level() <= max_level()
+        metadata.level() <= self.level
     }
 
     fn log(&self, record: &Record<'_>) {
@@ -59,11 +64,6 @@ impl Log for Logger {
     fn flush(&self) {}
 }
 
-lazy_static! {
-    static ref PROGRESS_BAR: RwLock<Option<Weak<ProgressBar>>> = RwLock::new(None);
-    static ref MAX_LEVEL: AtomicUsize = AtomicUsize::new(unsafe { transmute(LevelFilter::Warn) });
-}
-
 pub fn set_progress_bar(pb: &Arc<ProgressBar>) {
     *PROGRESS_BAR.write() = Some(Arc::downgrade(pb));
 }
@@ -77,12 +77,4 @@ pub fn reset_progress_bar(pb: Option<Arc<ProgressBar>>) {
 
 fn get_progress_bar() -> Option<Arc<ProgressBar>> {
     PROGRESS_BAR.read().as_ref()?.upgrade()
-}
-
-fn max_level() -> LevelFilter {
-    unsafe { transmute(MAX_LEVEL.load(Ordering::Relaxed)) }
-}
-
-pub fn set_max_level(level: LevelFilter) {
-    MAX_LEVEL.store(unsafe { transmute(level) }, Ordering::Relaxed);
 }

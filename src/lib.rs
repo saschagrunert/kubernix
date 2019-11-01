@@ -36,7 +36,7 @@ use etcd::Etcd;
 use kubeconfig::KubeConfig;
 use kubectl::Kubectl;
 use kubelet::Kubelet;
-use logger::{reset_progress_bar, set_max_level, set_progress_bar, LOGGER};
+use logger::{reset_progress_bar, set_progress_bar, Logger};
 use network::Network;
 use pki::Pki;
 use process::{Process, Stoppables};
@@ -134,9 +134,8 @@ impl Kubernix {
         config.canonicalize_root()?;
 
         // Setup the logger
-        set_max_level(config.log_level());
         log::set_max_level(LevelFilter::Trace);
-        log::set_logger(&LOGGER).unwrap();
+        log::set_boxed_logger(Logger::new(config.log_level()))?;
 
         Ok(())
     }
