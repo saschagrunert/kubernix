@@ -53,3 +53,24 @@ impl Log for Logger {
 
     fn flush(&self) {}
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use log::{MetadataBuilder, Record};
+
+    #[test]
+    fn logger_success() {
+        let l = Logger::new(LevelFilter::Info);
+        let record = Record::builder()
+            .args(format_args!("Error!"))
+            .level(Level::Error)
+            .build();
+        l.log(&record);
+        let err_metadata = MetadataBuilder::new().level(Level::Error).build();
+        assert!(l.enabled(&err_metadata));
+        let dbg_metadata = MetadataBuilder::new().level(Level::Debug).build();
+        assert!(!l.enabled(&dbg_metadata));
+        l.flush();
+    }
+}
