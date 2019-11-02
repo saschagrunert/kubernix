@@ -50,3 +50,16 @@ impl Progress {
         *PROGRESS_BAR.write() = None;
     }
 }
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn progress_success() {
+        let p = Progress::new(10, LevelFilter::Info);
+        assert!(Progress::get().is_some());
+        p.reset();
+        assert!(Progress::get().is_none());
+    }
+}
