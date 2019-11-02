@@ -1,16 +1,18 @@
-use ansi_term::Colour::Red;
 use anyhow::Result;
+use console::style;
 use kubernix::{Config, Kubernix};
 use std::process::exit;
 
 pub fn main() {
     if let Err(e) = run() {
         println!(
-            "{} {}",
-            Red.paint("[ERROR]"),
+            "{}{}{} {}",
+            style("[").white().dim(),
+            style("ERROR").red(),
+            style("]").white().dim(),
             e.chain()
                 .map(|x| x.to_string())
-                .collect::<Vec<String>>()
+                .collect::<Vec<_>>()
                 .join(": ")
         );
         exit(1);
