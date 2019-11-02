@@ -15,7 +15,7 @@ for local testing, experimenting and development purposes.
 
 [1]: https://kubernetes.io
 
-Moving pictures are worth more than a thousand words, so here is a short demo:
+Moving pictures are worth more than thousand words, so here is a short demo:
 
 ![demo](.github/kubernix.svg)
 
