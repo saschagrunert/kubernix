@@ -74,10 +74,11 @@
 <span id="74">74</span>
 <span id="75">75</span>
 <span id="76">76</span>
+<span id="77">77</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">progress</span>::<span class="ident">Progress</span>;
 <span class="kw">use</span> <span class="ident">console</span>::{<span class="ident">style</span>, <span class="ident">Color</span>};
-<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">Level</span>, <span class="ident">LevelFilter</span>, <span class="ident">Log</span>, <span class="ident">Metadata</span>, <span class="ident">Record</span>};
+<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">set_max_level</span>, <span class="ident">Level</span>, <span class="ident">LevelFilter</span>, <span class="ident">Log</span>, <span class="ident">Metadata</span>, <span class="ident">Record</span>};
 <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">io</span>::{<span class="ident">stderr</span>, <span class="ident">Write</span>};
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Logger</span> {
@@ -86,6 +87,7 @@
 
 <span class="kw">impl</span> <span class="ident">Logger</span> {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">level</span>: <span class="ident">LevelFilter</span>) <span class="op">-&gt;</span> <span class="ident">Box</span><span class="op">&lt;</span><span class="self">Self</span><span class="op">&gt;</span> {
+        <span class="ident">set_max_level</span>(<span class="ident">LevelFilter</span>::<span class="ident">Trace</span>);
         <span class="ident">Logger</span> { <span class="ident">level</span> }.<span class="ident">into</span>()
     }
 }

@@ -379,7 +379,6 @@
 <span id="379">379</span>
 <span id="380">380</span>
 <span id="381">381</span>
-<span id="382">382</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! # kubernix</span>
 <span class="attribute">#![<span class="ident">deny</span>(<span class="ident">missing_docs</span>)]</span>
@@ -434,7 +433,7 @@
     <span class="ident">unistd</span>::<span class="ident">getuid</span>,
 };
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">bail</span>, <span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
-<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">error</span>, <span class="ident">info</span>, <span class="ident">LevelFilter</span>};
+<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">error</span>, <span class="ident">info</span>, <span class="ident">set_boxed_logger</span>};
 <span class="kw">use</span> <span class="ident">proc_mounts</span>::<span class="ident">MountIter</span>;
 <span class="kw">use</span> <span class="ident">rayon</span>::{<span class="ident">prelude</span>::<span class="kw-2">*</span>, <span class="ident">scope</span>};
 <span class="kw">use</span> <span class="ident">signal_hook</span>::{<span class="ident">flag</span>, <span class="ident">SIGHUP</span>, <span class="ident">SIGINT</span>, <span class="ident">SIGTERM</span>};
@@ -517,8 +516,7 @@
         <span class="ident">config</span>.<span class="ident">canonicalize_root</span>()<span class="question-mark">?</span>;
 
         <span class="comment">// Setup the logger</span>
-        <span class="ident">log</span>::<span class="ident">set_max_level</span>(<span class="ident">LevelFilter</span>::<span class="ident">Trace</span>);
-        <span class="ident">log</span>::<span class="ident">set_boxed_logger</span>(<span class="ident">Logger</span>::<span class="ident">new</span>(<span class="ident">config</span>.<span class="ident">log_level</span>()))<span class="question-mark">?</span>;
+        <span class="ident">set_boxed_logger</span>(<span class="ident">Logger</span>::<span class="ident">new</span>(<span class="ident">config</span>.<span class="ident">log_level</span>()))<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(())
     }
