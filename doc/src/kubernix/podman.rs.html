@@ -95,6 +95,8 @@
 <span id="95">95</span>
 <span id="96">96</span>
 <span id="97">97</span>
+<span id="98">98</span>
+<span id="99">99</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">system</span>::<span class="ident">System</span>, <span class="ident">Config</span>};
 <span class="kw">use</span> <span class="ident">anyhow</span>::<span class="prelude-ty">Result</span>;
@@ -140,16 +142,18 @@
         } <span class="kw">else</span> {
             <span class="ident">config</span>.<span class="ident">log_level</span>().<span class="ident">to_string</span>()
         };
-        <span class="prelude-val">Ok</span>(<span class="macro">vec</span><span class="macro">!</span>[
-            <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--log-level={}&quot;</span>, <span class="ident">log_level</span>),
-            <span class="macro">format</span><span class="macro">!</span>(
-                <span class="string">&quot;--storage-driver={}&quot;</span>,
-                <span class="kw">if</span> <span class="ident">System</span>::<span class="ident">in_container</span>()<span class="question-mark">?</span> { <span class="string">&quot;vfs&quot;</span> } <span class="kw">else</span> { <span class="string">&quot;&quot;</span> }
-            ),
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">args</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[
             <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--cni-config-dir={}&quot;</span>, <span class="self">Self</span>::<span class="ident">cni_dir</span>(<span class="ident">config</span>).<span class="ident">display</span>()),
-            <span class="string">&quot;--events-backend=none&quot;</span>.<span class="ident">into</span>(),
+            <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--conmon={}&quot;</span>, <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;conmon&quot;</span>)<span class="question-mark">?</span>.<span class="ident">display</span>()),
+            <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--log-level={}&quot;</span>, <span class="ident">log_level</span>),
+            <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--runtime={}&quot;</span>, <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;runc&quot;</span>)<span class="question-mark">?</span>.<span class="ident">display</span>()),
             <span class="string">&quot;--cgroup-manager=cgroupfs&quot;</span>.<span class="ident">into</span>(),
-        ])
+            <span class="string">&quot;--events-backend=none&quot;</span>.<span class="ident">into</span>(),
+        ];
+        <span class="kw">if</span> <span class="ident">System</span>::<span class="ident">in_container</span>()<span class="question-mark">?</span> {
+            <span class="ident">args</span>.<span class="ident">push</span>(<span class="string">&quot;--storage-driver=vfs&quot;</span>.<span class="ident">into</span>());
+        }
+        <span class="prelude-val">Ok</span>(<span class="ident">args</span>)
     }
 
     <span class="doccomment">/// Retrieve the internal CNI directory</span>
