@@ -42,16 +42,18 @@ impl Podman {
         } else {
             config.log_level().to_string()
         };
-        Ok(vec![
-            format!("--log-level={}", log_level),
-            format!(
-                "--storage-driver={}",
-                if System::in_container()? { "vfs" } else { "" }
-            ),
+        let mut args = vec![
             format!("--cni-config-dir={}", Self::cni_dir(config).display()),
-            "--events-backend=none".into(),
+            format!("--conmon={}", System::find_executable("conmon")?.display()),
+            format!("--log-level={}", log_level),
+            format!("--runtime={}", System::find_executable("runc")?.display()),
             "--cgroup-manager=cgroupfs".into(),
-        ])
+            "--events-backend=none".into(),
+        ];
+        if System::in_container()? {
+            args.push("--storage-driver=vfs".into());
+        }
+        Ok(args)
     }
 
     /// Retrieve the internal CNI directory
