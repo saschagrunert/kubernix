@@ -134,9 +134,7 @@ impl Kubernix {
         config.canonicalize_root()?;
 
         // Setup the logger
-        set_boxed_logger(Logger::new(config.log_level()))?;
-
-        Ok(())
+        set_boxed_logger(Logger::new(config.log_level())).context("Unable to set logger")
     }
 
     /// Stop kubernix by cleaning up all running processes
