@@ -407,6 +407,7 @@
 <span class="kw">mod</span> <span class="ident">system</span>;
 
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">config</span>::<span class="ident">Config</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">logger</span>::<span class="ident">Logger</span>;
 
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">nix</span>::<span class="ident">Nix</span>;
 <span class="kw">use</span> <span class="ident">apiserver</span>::<span class="ident">ApiServer</span>;
@@ -419,7 +420,6 @@
 <span class="kw">use</span> <span class="ident">kubeconfig</span>::<span class="ident">KubeConfig</span>;
 <span class="kw">use</span> <span class="ident">kubectl</span>::<span class="ident">Kubectl</span>;
 <span class="kw">use</span> <span class="ident">kubelet</span>::<span class="ident">Kubelet</span>;
-<span class="kw">use</span> <span class="ident">logger</span>::<span class="ident">Logger</span>;
 <span class="kw">use</span> <span class="ident">network</span>::<span class="ident">Network</span>;
 <span class="kw">use</span> <span class="ident">pki</span>::<span class="ident">Pki</span>;
 <span class="kw">use</span> <span class="ident">process</span>::{<span class="ident">Process</span>, <span class="ident">Stoppables</span>};
