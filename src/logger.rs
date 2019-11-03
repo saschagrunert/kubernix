@@ -3,14 +3,29 @@ use console::{style, Color};
 use log::{set_max_level, Level, LevelFilter, Log, Metadata, Record};
 use std::io::{stderr, Write};
 
+/// The main logging faccade
 pub struct Logger {
     level: LevelFilter,
 }
 
 impl Logger {
+    /// Create a new logger
     pub fn new(level: LevelFilter) -> Box<Self> {
         set_max_level(LevelFilter::Trace);
-        Logger { level }.into()
+        Self { level }.into()
+    }
+
+    /// Log an error message
+    pub fn error(msg: &str) {
+        Self {
+            level: LevelFilter::Error,
+        }
+        .log(
+            &Record::builder()
+                .args(format_args!("{}", msg))
+                .level(Level::Error)
+                .build(),
+        );
     }
 }
 

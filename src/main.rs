@@ -1,19 +1,14 @@
 use anyhow::Result;
-use console::style;
-use kubernix::{Config, Kubernix};
+use kubernix::{Config, Kubernix, Logger};
 use std::process::exit;
 
 pub fn main() {
     if let Err(e) = run() {
-        println!(
-            "{}{}{} {}",
-            style("[").white().dim(),
-            style("ERROR").red(),
-            style("]").white().dim(),
-            e.chain()
+        Logger::error(
+            &e.chain()
                 .map(|x| x.to_string())
                 .collect::<Vec<_>>()
-                .join(": ")
+                .join(": "),
         );
         exit(1);
     }

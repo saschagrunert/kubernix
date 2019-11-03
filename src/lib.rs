@@ -25,6 +25,7 @@ mod scheduler;
 mod system;
 
 pub use config::Config;
+pub use logger::Logger;
 
 use crate::nix::Nix;
 use apiserver::ApiServer;
@@ -37,7 +38,6 @@ use etcd::Etcd;
 use kubeconfig::KubeConfig;
 use kubectl::Kubectl;
 use kubelet::Kubelet;
-use logger::Logger;
 use network::Network;
 use pki::Pki;
 use process::{Process, Stoppables};
