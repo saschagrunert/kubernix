@@ -181,11 +181,18 @@
 <span id="181">181</span>
 <span id="182">182</span>
 <span id="183">183</span>
+<span id="184">184</span>
+<span id="185">185</span>
+<span id="186">186</span>
+<span id="187">187</span>
+<span id="188">188</span>
+<span id="189">189</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">nix</span>::<span class="ident">Nix</span>, <span class="ident">podman</span>::<span class="ident">Podman</span>, <span class="ident">process</span>::<span class="ident">Process</span>, <span class="ident">system</span>::<span class="ident">System</span>, <span class="ident">Config</span>};
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">bail</span>, <span class="prelude-ty">Result</span>};
-<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">info</span>, <span class="ident">trace</span>, <span class="ident">LevelFilter</span>};
+<span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">info</span>, <span class="ident">trace</span>, <span class="ident">LevelFilter</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
+    <span class="ident">fmt</span>::<span class="ident">Display</span>,
     <span class="ident">fs</span>,
     <span class="ident">path</span>::{<span class="ident">Path</span>, <span class="ident">PathBuf</span>},
     <span class="ident">process</span>::{<span class="ident">Command</span>, <span class="ident">Stdio</span>},
@@ -206,8 +213,8 @@
         <span class="kw">let</span> <span class="ident">policy_json</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">policy_json</span>(<span class="ident">config</span>);
         <span class="ident">fs</span>::<span class="ident">write</span>(<span class="kw-2">&amp;</span><span class="ident">policy_json</span>, <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;assets/policy.json&quot;</span>))<span class="question-mark">?</span>;
 
-        <span class="comment">// Nothing needs to be done on single node runs</span>
-        <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">nodes</span>() <span class="op">&lt;=</span> <span class="number">1</span> {
+        <span class="comment">// Nothing needs to be done on single node runs or root users</span>
+        <span class="kw">if</span> <span class="op">!</span><span class="ident">config</span>.<span class="ident">multi_node</span>() {
             <span class="kw">return</span> <span class="prelude-val">Ok</span>(());
         }
 
@@ -237,6 +244,7 @@
         <span class="macro">trace</span><span class="macro">!</span>(<span class="string">&quot;Container runtime build args: {:?}&quot;</span>, <span class="ident">args</span>);
 
         <span class="comment">// Run the build</span>
+        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Running container runtime with args: {}&quot;</span>, <span class="ident">args</span>.<span class="ident">join</span>(<span class="string">&quot; &quot;</span>));
         <span class="kw">let</span> <span class="ident">status</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="ident">config</span>.<span class="ident">container_runtime</span>())
             .<span class="ident">current_dir</span>(<span class="ident">config</span>.<span class="ident">root</span>())
             .<span class="ident">args</span>(<span class="ident">args</span>)
@@ -271,12 +279,12 @@
         <span class="comment">// Prepare the arguments</span>
         <span class="kw">let</span> <span class="ident">arg_hostname</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--hostname={}&quot;</span>, <span class="ident">container_name</span>);
         <span class="kw">let</span> <span class="ident">arg_name</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--name={}&quot;</span>, <span class="self">Self</span>::<span class="ident">prefixed_container_name</span>(<span class="ident">container_name</span>));
-        <span class="kw">let</span> <span class="ident">arg_volume_root</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--volume={v}:{v}&quot;</span>, <span class="ident">v</span> <span class="op">=</span> <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">display</span>());
+        <span class="kw">let</span> <span class="ident">arg_volume_root</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="self">Self</span>::<span class="ident">volume_arg</span>(<span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">display</span>());
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">args_vec</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[
             <span class="string">&quot;run&quot;</span>,
-            <span class="string">&quot;--rm&quot;</span>,
             <span class="string">&quot;--net=host&quot;</span>,
             <span class="string">&quot;--privileged&quot;</span>,
+            <span class="string">&quot;--rm&quot;</span>,
             <span class="ident">arg_hostname</span>,
             <span class="ident">arg_name</span>,
             <span class="ident">arg_volume_root</span>,
@@ -290,7 +298,7 @@
 
         <span class="comment">// Mount /dev/mapper if available</span>
         <span class="kw">let</span> <span class="ident">dev_mapper</span> <span class="op">=</span> <span class="ident">PathBuf</span>::<span class="ident">from</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;dev&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;mapper&quot;</span>);
-        <span class="kw">let</span> <span class="ident">arg_volume_dev_mapper</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--volume={v}:{v}&quot;</span>, <span class="ident">v</span> <span class="op">=</span> <span class="ident">dev_mapper</span>.<span class="ident">display</span>());
+        <span class="kw">let</span> <span class="ident">arg_volume_dev_mapper</span> <span class="op">=</span> <span class="kw-2">&amp;</span><span class="self">Self</span>::<span class="ident">volume_arg</span>(<span class="ident">dev_mapper</span>.<span class="ident">display</span>());
         <span class="kw">if</span> <span class="ident">dev_mapper</span>.<span class="ident">exists</span>() {
             <span class="ident">args_vec</span>.<span class="ident">push</span>(<span class="ident">arg_volume_dev_mapper</span>);
         }
@@ -302,6 +310,10 @@
         <span class="comment">// Start the process</span>
         <span class="macro">trace</span><span class="macro">!</span>(<span class="string">&quot;Container runtime start args: {:?}&quot;</span>, <span class="ident">args_vec</span>);
         <span class="ident">Process</span>::<span class="ident">start</span>(<span class="ident">dir</span>, <span class="ident">identifier</span>, <span class="ident">config</span>.<span class="ident">container_runtime</span>(), <span class="kw-2">&amp;</span><span class="ident">args_vec</span>)
+    }
+
+    <span class="kw">fn</span> <span class="ident">volume_arg</span><span class="op">&lt;</span><span class="ident">T</span>: <span class="ident">Display</span><span class="op">&gt;</span>(<span class="ident">volume</span>: <span class="ident">T</span>) <span class="op">-&gt;</span> <span class="ident">String</span> {
+        <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--volume={v}:{v}&quot;</span>, <span class="ident">v</span> <span class="op">=</span> <span class="ident">volume</span>)
     }
 
     <span class="doccomment">/// Exec a command on a container instance</span>
