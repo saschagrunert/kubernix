@@ -51,7 +51,7 @@ use ::nix::{
     unistd::getuid,
 };
 use anyhow::{bail, Context, Result};
-use log::{debug, error, info, LevelFilter};
+use log::{debug, error, info, set_boxed_logger};
 use proc_mounts::MountIter;
 use rayon::{prelude::*, scope};
 use signal_hook::{flag, SIGHUP, SIGINT, SIGTERM};
@@ -134,8 +134,7 @@ impl Kubernix {
         config.canonicalize_root()?;
 
         // Setup the logger
-        log::set_max_level(LevelFilter::Trace);
-        log::set_boxed_logger(Logger::new(config.log_level()))?;
+        set_boxed_logger(Logger::new(config.log_level()))?;
 
         Ok(())
     }

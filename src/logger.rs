@@ -1,6 +1,6 @@
 use crate::progress::Progress;
 use console::{style, Color};
-use log::{Level, LevelFilter, Log, Metadata, Record};
+use log::{set_max_level, Level, LevelFilter, Log, Metadata, Record};
 use std::io::{stderr, Write};
 
 pub struct Logger {
@@ -9,6 +9,7 @@ pub struct Logger {
 
 impl Logger {
     pub fn new(level: LevelFilter) -> Box<Self> {
+        set_max_level(LevelFilter::Trace);
         Logger { level }.into()
     }
 }
