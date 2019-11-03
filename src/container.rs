@@ -1,7 +1,8 @@
 use crate::{nix::Nix, podman::Podman, process::Process, system::System, Config};
 use anyhow::{bail, Result};
-use log::{info, trace, LevelFilter};
+use log::{debug, info, trace, LevelFilter};
 use std::{
+    fmt::Display,
     fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -22,8 +23,8 @@ impl Container {
         let policy_json = Self::policy_json(config);
         fs::write(&policy_json, include_str!("assets/policy.json"))?;
 
-        // Nothing needs to be done on single node runs
-        if config.nodes() <= 1 {
+        // Nothing needs to be done on single node runs or root users
+        if !config.multi_node() {
             return Ok(());
         }
 
@@ -53,6 +54,7 @@ impl Container {
         trace!("Container runtime build args: {:?}", args);
 
         // Run the build
+        debug!("Running container runtime with args: {}", args.join(" "));
         let status = Command::new(config.container_runtime())
             .current_dir(config.root())
             .args(args)
@@ -87,12 +89,12 @@ impl Container {
         // Prepare the arguments
         let arg_hostname = &format!("--hostname={}", container_name);
         let arg_name = &format!("--name={}", Self::prefixed_container_name(container_name));
-        let arg_volume_root = &format!("--volume={v}:{v}", v = config.root().display());
+        let arg_volume_root = &Self::volume_arg(config.root().display());
         let mut args_vec = vec![
             "run",
-            "--rm",
             "--net=host",
             "--privileged",
+            "--rm",
             arg_hostname,
             arg_name,
             arg_volume_root,
@@ -106,7 +108,7 @@ impl Container {
 
         // Mount /dev/mapper if available
         let dev_mapper = PathBuf::from("/").join("dev").join("mapper");
-        let arg_volume_dev_mapper = &format!("--volume={v}:{v}", v = dev_mapper.display());
+        let arg_volume_dev_mapper = &Self::volume_arg(dev_mapper.display());
         if dev_mapper.exists() {
             args_vec.push(arg_volume_dev_mapper);
         }
@@ -118,6 +120,10 @@ impl Container {
         // Start the process
         trace!("Container runtime start args: {:?}", args_vec);
         Process::start(dir, identifier, config.container_runtime(), &args_vec)
+    }
+
+    fn volume_arg<T: Display>(volume: T) -> String {
+        format!("--volume={v}:{v}", v = volume)
     }
 
     /// Exec a command on a container instance

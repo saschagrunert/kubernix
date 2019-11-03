@@ -30,7 +30,7 @@ impl Nix {
             fs::write(dir.join("nixpkgs.nix"), include_str!("../nix/nixpkgs.nix"))?;
 
             let packages = &config.packages().join(" ");
-            debug!("Adding additional packages: {}", packages);
+            debug!("Adding additional packages: {:?}", config.packages());
             fs::write(
                 dir.join("default.nix"),
                 include_str!("../nix/default.nix").replace("/* PACKAGES */", packages),
