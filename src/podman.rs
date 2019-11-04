@@ -9,6 +9,7 @@ use std::{
 pub struct Podman;
 
 impl Podman {
+    /// The executable name
     pub const EXECUTABLE: &'static str = "podman";
 
     /// Returns true if podman is configured as container runtime
