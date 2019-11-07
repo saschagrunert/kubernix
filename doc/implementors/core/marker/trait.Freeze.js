@@ -6,5 +6,4 @@ implementors["kubernix"] = [{text:"impl Freeze for <a class=\"struct\" href=\"ku
             } else {
                 window.pending_implementors = implementors;
             }
-        
-})()
+        })()

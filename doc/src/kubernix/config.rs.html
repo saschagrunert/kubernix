@@ -424,7 +424,7 @@
 }
 
 <span class="kw">impl</span> <span class="ident">Default</span> <span class="kw">for</span> <span class="ident">Config</span> {
-    <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-&gt;</span> <span class="self">Self</span> {
+    <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">config</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">parse</span>();
         <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">shell</span>.<span class="ident">is_none</span>() {
             <span class="ident">config</span>.<span class="ident">shell</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">shell</span>().<span class="ident">ok</span>();
@@ -437,7 +437,7 @@
     <span class="kw">const</span> <span class="ident">FILENAME</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernix.toml&quot;</span>;
 
     <span class="doccomment">/// Make the configs root path absolute</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">canonicalize_root</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">canonicalize_root</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="self">self</span>.<span class="ident">create_root_dir</span>()<span class="question-mark">?</span>;
         <span class="self">self</span>.<span class="ident">root</span> <span class="op">=</span>
             <span class="ident">canonicalize</span>(<span class="self">self</span>.<span class="ident">root</span>()).<span class="ident">context</span>(<span class="string">&quot;Unable to canonicalize config root directory&quot;</span>)<span class="question-mark">?</span>;
@@ -445,7 +445,7 @@
     }
 
     <span class="doccomment">/// Write the current configuration to the internal set root path</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">to_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">to_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="self">self</span>.<span class="ident">create_root_dir</span>()<span class="question-mark">?</span>;
         <span class="ident">fs</span>::<span class="ident">write</span>(<span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">FILENAME</span>), <span class="ident">toml</span>::<span class="ident">to_string</span>(<span class="kw-2">&amp;</span><span class="self">self</span>)<span class="question-mark">?</span>)
             .<span class="ident">context</span>(<span class="string">&quot;Unable to write configuration to file&quot;</span>)<span class="question-mark">?</span>;
@@ -454,16 +454,16 @@
 
     <span class="doccomment">/// Read the configuration from the internal set root path</span>
     <span class="doccomment">/// If not existing, write the current configuration to the path.</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">try_load_file</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">try_load_file</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">file</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">FILENAME</span>);
         <span class="kw">if</span> <span class="ident">file</span>.<span class="ident">exists</span>() {
-            <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="ident">toml</span>::<span class="ident">from_str</span>(<span class="kw-2">&amp;</span><span class="ident">read_to_string</span>(<span class="kw-2">&amp;</span><span class="ident">file</span>).<span class="ident">with_context</span>(<span class="op">||</span> {
+            <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="ident">toml</span>::<span class="ident">from_str</span>(<span class="kw-2">&amp;</span><span class="ident">read_to_string</span>(<span class="kw-2">&amp;</span><span class="ident">file</span>).<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> {
                 <span class="macro">format</span><span class="macro">!</span>(
                     <span class="string">&quot;Unable to read expected configuration file &#39;{}&#39;&quot;</span>,
                     <span class="ident">file</span>.<span class="ident">display</span>(),
                 )
             })<span class="question-mark">?</span>)
-            .<span class="ident">with_context</span>(<span class="op">||</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;Unable to load config file &#39;{}&#39;&quot;</span>, <span class="ident">file</span>.<span class="ident">display</span>()))<span class="question-mark">?</span>;
+            .<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;Unable to load config file &#39;{}&#39;&quot;</span>, <span class="ident">file</span>.<span class="ident">display</span>()))<span class="question-mark">?</span>;
         } <span class="kw">else</span> {
             <span class="self">self</span>.<span class="ident">to_file</span>()<span class="question-mark">?</span>;
         }
@@ -471,17 +471,17 @@
     }
 
     <span class="doccomment">/// Return the set shell as result type</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">shell_ok</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">shell_ok</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">shell</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">shell</span>().<span class="ident">as_ref</span>().<span class="ident">context</span>(<span class="string">&quot;No shell set&quot;</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="ident">shell</span>.<span class="ident">into</span>())
     }
 
     <span class="doccomment">/// Returns true if multi node support is enabled</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">multi_node</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">bool</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">multi_node</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
         <span class="self">self</span>.<span class="ident">nodes</span>() <span class="op">&gt;</span> <span class="number">1</span>
     }
 
-    <span class="kw">fn</span> <span class="ident">create_root_dir</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">create_root_dir</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="ident">create_dir_all</span>(<span class="self">self</span>.<span class="ident">root</span>()).<span class="ident">context</span>(<span class="string">&quot;Unable to create root directory&quot;</span>)
     }
 }
@@ -492,27 +492,27 @@
     <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">path</span>::<span class="ident">Path</span>;
     <span class="kw">use</span> <span class="ident">tempfile</span>::<span class="ident">tempdir</span>;
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config</span>() <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">c</span>.<span class="ident">canonicalize_root</span>()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="ident">c</span>)
     }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config_wrong_root</span>() <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config_wrong_root</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">test_config</span>()<span class="question-mark">?</span>;
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">Path</span>::<span class="ident">new</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;proc&quot;</span>);
         <span class="prelude-val">Ok</span>(<span class="ident">c</span>)
     }
 
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config_wrong_cidr</span>() <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config_wrong_cidr</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">test_config</span>()<span class="question-mark">?</span>;
         <span class="ident">c</span>.<span class="ident">cidr</span> <span class="op">=</span> <span class="string">&quot;10.0.0.1/25&quot;</span>.<span class="ident">parse</span>()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="ident">c</span>)
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
-    <span class="kw">fn</span> <span class="ident">canonicalize_root_success</span>() <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">canonicalize_root_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">c</span>.<span class="ident">canonicalize_root</span>()
@@ -526,7 +526,7 @@
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
-    <span class="kw">fn</span> <span class="ident">to_file_success</span>() <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">to_file_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">c</span>.<span class="ident">to_file</span>()
@@ -540,7 +540,7 @@
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
-    <span class="kw">fn</span> <span class="ident">try_load_file_success</span>() <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">try_load_file_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">fs</span>::<span class="ident">write</span>(
@@ -563,7 +563,7 @@ root = &quot;root&quot;
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
-    <span class="kw">fn</span> <span class="ident">try_load_file_failure</span>() <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">try_load_file_failure</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">c</span>.<span class="ident">root</span>.<span class="ident">join</span>(<span class="ident">Config</span>::<span class="ident">FILENAME</span>), <span class="string">&quot;invalid&quot;</span>)<span class="question-mark">?</span>;

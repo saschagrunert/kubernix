@@ -461,7 +461,7 @@
 
 <span class="kw">impl</span> <span class="ident">Kubernix</span> {
     <span class="doccomment">/// Start kubernix by consuming the provided configuration</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="kw-2">mut</span> <span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="kw-2">mut</span> <span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="self">Self</span>::<span class="ident">prepare_env</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">config</span>)<span class="question-mark">?</span>;
 
         <span class="comment">// Bootstrap if we&#39;re not inside a nix shell</span>
@@ -473,7 +473,7 @@
     }
 
     <span class="doccomment">/// Spawn a new shell into the provided configuration environment</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new_shell</span>(<span class="kw-2">mut</span> <span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new_shell</span>(<span class="kw-2">mut</span> <span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="self">Self</span>::<span class="ident">prepare_env</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">config</span>)<span class="question-mark">?</span>;
 
         <span class="macro">info</span><span class="macro">!</span>(
@@ -499,7 +499,7 @@
     }
 
     <span class="doccomment">/// Prepare the environment based on the provided config</span>
-    <span class="kw">fn</span> <span class="ident">prepare_env</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">prepare_env</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">Config</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">// Rootless is currently not supported</span>
         <span class="kw">if</span> <span class="op">!</span><span class="ident">getuid</span>().<span class="ident">is_root</span>() {
             <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Please run kubernix as root&quot;</span>)
@@ -527,12 +527,12 @@
     }
 
     <span class="doccomment">/// The amount of processes to be run</span>
-    <span class="kw">fn</span> <span class="ident">processes</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="ident">u64</span> {
+    <span class="kw">fn</span> <span class="ident">processes</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">u64</span> {
         <span class="number">5</span> <span class="op">+</span> <span class="number">2</span> <span class="op">*</span> <span class="ident">u64</span>::<span class="ident">from</span>(<span class="ident">config</span>.<span class="ident">nodes</span>())
     }
 
     <span class="doccomment">/// Bootstrap the whole cluster, which assumes to be inside a nix shell</span>
-    <span class="kw">fn</span> <span class="ident">bootstrap_cluster</span>(<span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">bootstrap_cluster</span>(<span class="ident">config</span>: <span class="ident">Config</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">// Setup the progress bar</span>
         <span class="kw">const</span> <span class="ident">BASE_STEPS</span>: <span class="ident">u64</span> <span class="op">=</span> <span class="number">15</span>;
         <span class="kw">let</span> <span class="ident">steps</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">multi_node</span>() {
@@ -567,10 +567,10 @@
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">proxy</span> <span class="op">=</span> <span class="ident">Process</span>::<span class="ident">stopped</span>();
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">crios</span> <span class="op">=</span> (<span class="number">0</span>..<span class="ident">config</span>.<span class="ident">nodes</span>())
             .<span class="ident">map</span>(<span class="op">|</span><span class="kw">_</span><span class="op">|</span> <span class="ident">Process</span>::<span class="ident">stopped</span>())
-            .<span class="ident">collect</span>::<span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;&gt;</span>();
+            .<span class="ident">collect</span>::<span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;</span><span class="op">&gt;</span>();
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">kubelets</span> <span class="op">=</span> (<span class="number">0</span>..<span class="ident">config</span>.<span class="ident">nodes</span>())
             .<span class="ident">map</span>(<span class="op">|</span><span class="kw">_</span><span class="op">|</span> <span class="ident">Process</span>::<span class="ident">stopped</span>())
-            .<span class="ident">collect</span>::<span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;&gt;</span>();
+            .<span class="ident">collect</span>::<span class="op">&lt;</span><span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;</span><span class="op">&gt;</span>();
 
         <span class="comment">// Spawn the processes</span>
         <span class="ident">scope</span>(<span class="op">|</span><span class="ident">a</span><span class="op">|</span> {
@@ -614,8 +614,8 @@
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">processes</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[];
         <span class="kw">for</span> <span class="ident">process</span> <span class="kw">in</span> <span class="ident">results</span> {
             <span class="kw">match</span> <span class="ident">process</span> {
-                <span class="prelude-val">Ok</span>(<span class="ident">p</span>) <span class="op">=&gt;</span> <span class="ident">processes</span>.<span class="ident">push</span>(<span class="ident">p</span>),
-                <span class="prelude-val">Err</span>(<span class="ident">e</span>) <span class="op">=&gt;</span> <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;{}&quot;</span>, <span class="ident">e</span>),
+                <span class="prelude-val">Ok</span>(<span class="ident">p</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">processes</span>.<span class="ident">push</span>(<span class="ident">p</span>),
+                <span class="prelude-val">Err</span>(<span class="ident">e</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;{}&quot;</span>, <span class="ident">e</span>),
             }
         }
 
@@ -650,13 +650,13 @@
     }
 
     <span class="doccomment">/// Apply needed workloads to the running cluster. This method stops the cluster on any error.</span>
-    <span class="kw">fn</span> <span class="ident">apply_addons</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">apply_addons</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Applying cluster addons&quot;</span>);
         <span class="ident">CoreDNS</span>::<span class="ident">apply</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">network</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">kubectl</span>)
     }
 
     <span class="doccomment">/// Wait until a termination signal occurs</span>
-    <span class="kw">fn</span> <span class="ident">wait</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">wait</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">// Setup the signal handlers</span>
         <span class="kw">let</span> <span class="ident">term</span> <span class="op">=</span> <span class="ident">Arc</span>::<span class="ident">new</span>(<span class="ident">AtomicBool</span>::<span class="ident">new</span>(<span class="bool-val">false</span>));
         <span class="ident">flag</span>::<span class="ident">register</span>(<span class="ident">SIGTERM</span>, <span class="ident">Arc</span>::<span class="ident">clone</span>(<span class="kw-2">&amp;</span><span class="ident">term</span>))<span class="question-mark">?</span>;
@@ -675,7 +675,7 @@
     }
 
     <span class="doccomment">/// Spawn a new interactive default system shell</span>
-    <span class="kw">fn</span> <span class="ident">spawn_shell</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">spawn_shell</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Spawning interactive shell&quot;</span>);
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Please be aware that the cluster stops if you exit the shell&quot;</span>);
 
@@ -692,7 +692,7 @@
     }
 
     <span class="doccomment">/// Lay out the env file</span>
-    <span class="kw">fn</span> <span class="ident">write_env_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
+    <span class="kw">fn</span> <span class="ident">write_env_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Writing environment file&quot;</span>);
         <span class="ident">fs</span>::<span class="ident">write</span>(
             <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">env_file</span>(),
@@ -708,7 +708,7 @@
     }
 
     <span class="doccomment">/// Retrieve the path to the env file</span>
-    <span class="kw">fn</span> <span class="ident">env_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-&gt;</span> <span class="ident">PathBuf</span> {
+    <span class="kw">fn</span> <span class="ident">env_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">PathBuf</span> {
         <span class="self">self</span>.<span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="ident">KUBERNIX_ENV</span>)
     }
 
@@ -718,11 +718,11 @@
         <span class="kw">let</span> <span class="ident">now</span> <span class="op">=</span> <span class="ident">Instant</span>::<span class="ident">now</span>();
         <span class="kw">while</span> <span class="ident">now</span>.<span class="ident">elapsed</span>().<span class="ident">as_secs</span>() <span class="op">&lt;</span> <span class="number">5</span> {
             <span class="kw">match</span> <span class="ident">MountIter</span>::<span class="ident">new</span>() {
-                <span class="prelude-val">Err</span>(<span class="ident">e</span>) <span class="op">=&gt;</span> {
+                <span class="prelude-val">Err</span>(<span class="ident">e</span>) <span class="op">=</span><span class="op">&gt;</span> {
                     <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Unable to retrieve mounts: {}&quot;</span>, <span class="ident">e</span>);
                     <span class="ident">sleep</span>(<span class="ident">Duration</span>::<span class="ident">from_secs</span>(<span class="number">1</span>));
                 }
-                <span class="prelude-val">Ok</span>(<span class="ident">mounts</span>) <span class="op">=&gt;</span> {
+                <span class="prelude-val">Ok</span>(<span class="ident">mounts</span>) <span class="op">=</span><span class="op">&gt;</span> {
                     <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">found_mount</span> <span class="op">=</span> <span class="bool-val">false</span>;
                     <span class="ident">mounts</span>
                         .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">ok</span>())

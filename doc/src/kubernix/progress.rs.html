@@ -72,16 +72,16 @@
 <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">sync</span>::{<span class="ident">Arc</span>, <span class="ident">Weak</span>};
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Progress</span> {
-    <span class="ident">inner</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;&gt;</span>,
+    <span class="ident">inner</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;</span><span class="op">&gt;</span>,
 }
 
 <span class="macro">lazy_static</span><span class="macro">!</span> {
-    <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">PROGRESS_BAR</span>: <span class="ident">RwLock</span><span class="op">&lt;</span><span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Weak</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;&gt;</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">RwLock</span>::<span class="ident">new</span>(<span class="prelude-val">None</span>);
+    <span class="kw">static</span> <span class="kw-2">ref</span> <span class="ident">PROGRESS_BAR</span>: <span class="ident">RwLock</span><span class="op">&lt;</span><span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Weak</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;</span><span class="op">&gt;</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">RwLock</span>::<span class="ident">new</span>(<span class="prelude-val">None</span>);
 }
 
 <span class="kw">impl</span> <span class="ident">Progress</span> {
     <span class="comment">// Create a new global progress bar</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">items</span>: <span class="ident">u64</span>, <span class="ident">level</span>: <span class="ident">LevelFilter</span>) <span class="op">-&gt;</span> <span class="ident">Progress</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">items</span>: <span class="ident">u64</span>, <span class="ident">level</span>: <span class="ident">LevelFilter</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Progress</span> {
         <span class="kw">if</span> <span class="ident">level</span> <span class="op">&lt;</span> <span class="ident">LevelFilter</span>::<span class="ident">Info</span> {
             <span class="kw">return</span> <span class="ident">Progress</span> { <span class="ident">inner</span>: <span class="prelude-val">None</span> };
         }
@@ -104,7 +104,7 @@
     }
 
     <span class="comment">// Get the progress bar</span>
-    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">get</span>() <span class="op">-&gt;</span> <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;&gt;</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">get</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">Arc</span><span class="op">&lt;</span><span class="ident">ProgressBar</span><span class="op">&gt;</span><span class="op">&gt;</span> {
         <span class="ident">PROGRESS_BAR</span>.<span class="ident">read</span>().<span class="ident">as_ref</span>()<span class="question-mark">?</span>.<span class="ident">upgrade</span>()
     }
 

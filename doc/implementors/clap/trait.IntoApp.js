@@ -6,5 +6,4 @@ implementors["kubernix"] = [{text:"impl <a class=\"trait\" href=\"https://docs.r
             } else {
                 window.pending_implementors = implementors;
             }
-        
-})()
+        })()
