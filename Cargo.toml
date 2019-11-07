@@ -21,7 +21,7 @@ anyhow = "1.0.18"
 base64 = "0.11.0"
 clap = { git = "https://github.com/clap-rs/clap", features = ["wrap_help"] }
 console = "0.9.1"
-crossbeam-channel = "0.3.9"
+crossbeam-channel = "0.4.0"
 getset = "0.0.9"
 hostname = "0.1.5"
 indicatif = "0.13.0"
