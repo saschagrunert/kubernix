@@ -147,7 +147,7 @@ dependencies = [
  "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-utils 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "memoffset 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "memoffset 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "scopeguard 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -351,7 +351,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "memoffset"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "rustc_version 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -862,7 +862,7 @@ dependencies = [
 "checksum lock_api 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "f8912e782533a93a167888781b836336a6ca5da6175c05944c86cf28c31104dc"
 "checksum log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)" = "14b6052be84e6b71ab17edffc2eeabf5c2c3ae1fdb464aae35ac50c67a44e1f7"
 "checksum maybe-uninit 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
-"checksum memoffset 0.5.2 (registry+https://github.com/rust-lang/crates.io-index)" = "4a85c1a8c329f11437034d7313dca647c79096523533a1c79e86f1d0f657c7cc"
+"checksum memoffset 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "75189eb85871ea5c2e2c15abbdd541185f63b408415e5051f5cac122d8c774b9"
 "checksum nix 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3b2e0b4f3320ed72aaedb9a5ac838690a8047c7b275da22711fddff4f8a14229"
 "checksum num_cpus 1.11.0 (registry+https://github.com/rust-lang/crates.io-index)" = "155394f924cdddf08149da25bfb932d226b4a593ca7468b08191ff6335941af5"
 "checksum number_prefix 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "17b02fc0ff9a9e4b35b3342880f48e896ebf69f2967921fe8646bf5b7125956a"
