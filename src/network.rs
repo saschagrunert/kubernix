@@ -1,7 +1,7 @@
 use crate::Config;
 use anyhow::{bail, Context, Result};
 use getset::Getters;
-use hostname::get_hostname;
+use hostname::get;
 use ipnetwork::Ipv4Network;
 use log::{debug, warn};
 use std::{
@@ -76,7 +76,11 @@ impl Network {
         // Set the rest of the networking related adresses and paths
         let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2379);
         let etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2380);
-        let hostname = get_hostname().context("Unable to get hostname")?;
+        let hostname = get()
+            .context("Unable to get hostname")?
+            .to_str()
+            .context("Unable to convert hostname into string")?
+            .into();
 
         Ok(Self {
             cluster_cidr,
