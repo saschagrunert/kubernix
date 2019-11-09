@@ -162,11 +162,15 @@
 <span id="162">162</span>
 <span id="163">163</span>
 <span id="164">164</span>
+<span id="165">165</span>
+<span id="166">166</span>
+<span id="167">167</span>
+<span id="168">168</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">Config</span>;
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">bail</span>, <span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
 <span class="kw">use</span> <span class="ident">getset</span>::<span class="ident">Getters</span>;
-<span class="kw">use</span> <span class="ident">hostname</span>::<span class="ident">get_hostname</span>;
+<span class="kw">use</span> <span class="ident">hostname</span>::<span class="ident">get</span>;
 <span class="kw">use</span> <span class="ident">ipnetwork</span>::<span class="ident">Ipv4Network</span>;
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">warn</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
@@ -241,7 +245,11 @@
         <span class="comment">// Set the rest of the networking related adresses and paths</span>
         <span class="kw">let</span> <span class="ident">etcd_client</span> <span class="op">=</span> <span class="ident">SocketAddr</span>::<span class="ident">new</span>(<span class="ident">Ipv4Addr</span>::<span class="ident">LOCALHOST</span>.<span class="ident">into</span>(), <span class="number">2379</span>);
         <span class="kw">let</span> <span class="ident">etcd_peer</span> <span class="op">=</span> <span class="ident">SocketAddr</span>::<span class="ident">new</span>(<span class="ident">Ipv4Addr</span>::<span class="ident">LOCALHOST</span>.<span class="ident">into</span>(), <span class="number">2380</span>);
-        <span class="kw">let</span> <span class="ident">hostname</span> <span class="op">=</span> <span class="ident">get_hostname</span>().<span class="ident">context</span>(<span class="string">&quot;Unable to get hostname&quot;</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">hostname</span> <span class="op">=</span> <span class="ident">get</span>()
+            .<span class="ident">context</span>(<span class="string">&quot;Unable to get hostname&quot;</span>)<span class="question-mark">?</span>
+            .<span class="ident">to_str</span>()
+            .<span class="ident">context</span>(<span class="string">&quot;Unable to convert hostname into string&quot;</span>)<span class="question-mark">?</span>
+            .<span class="ident">into</span>();
 
         <span class="prelude-val">Ok</span>(<span class="self">Self</span> {
             <span class="ident">cluster_cidr</span>,
