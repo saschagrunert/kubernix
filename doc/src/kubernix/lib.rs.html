@@ -377,6 +377,9 @@
 <span id="377">377</span>
 <span id="378">378</span>
 <span id="379">379</span>
+<span id="380">380</span>
+<span id="381">381</span>
+<span id="382">382</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! # kubernix</span>
 <span class="attribute">#![<span class="ident">deny</span>(<span class="ident">missing_docs</span>)]</span>
@@ -447,7 +450,6 @@
     <span class="ident">time</span>::{<span class="ident">Duration</span>, <span class="ident">Instant</span>},
 };
 
-<span class="kw">const</span> <span class="ident">KUBERNIX_ENV</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernix.env&quot;</span>;
 <span class="kw">const</span> <span class="ident">RUNTIME_ENV</span>: <span class="kw-2">&amp;</span><span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;CONTAINER_RUNTIME_ENDPOINT&quot;</span>;
 
 <span class="doccomment">/// The main entry point for the application</span>
@@ -477,20 +479,24 @@
         <span class="self">Self</span>::<span class="ident">prepare_env</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">config</span>)<span class="question-mark">?</span>;
 
         <span class="macro">info</span><span class="macro">!</span>(
-            <span class="string">&quot;Spawning new kubernix shell in &#39;{}&#39;&quot;</span>,
+            <span class="string">&quot;Spawning new kubernix shell in: &#39;{}&#39;&quot;</span>,
             <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">display</span>()
         );
+
+        <span class="kw">let</span> <span class="ident">env_file</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">env_file</span>(<span class="kw-2">&amp;</span><span class="ident">config</span>);
+        <span class="kw">if</span> <span class="op">!</span><span class="ident">env_file</span>.<span class="ident">exists</span>() {
+            <span class="macro">bail</span><span class="macro">!</span>(
+                <span class="string">&quot;Necessary environment file &#39;{}&#39; does not exist&quot;</span>,
+                <span class="ident">env_file</span>.<span class="ident">display</span>()
+            )
+        }
 
         <span class="ident">Nix</span>::<span class="ident">run</span>(
             <span class="kw-2">&amp;</span><span class="ident">config</span>,
             <span class="kw-2">&amp;</span>[
                 <span class="kw-2">&amp;</span><span class="ident">config</span>.<span class="ident">shell_ok</span>()<span class="question-mark">?</span>,
                 <span class="string">&quot;-c&quot;</span>,
-                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(
-                    <span class="string">&quot;. {} &amp;&amp; {}&quot;</span>,
-                    <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="ident">KUBERNIX_ENV</span>).<span class="ident">display</span>(),
-                    <span class="ident">config</span>.<span class="ident">shell_ok</span>()<span class="question-mark">?</span>,
-                ),
+                <span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;. {} &amp;&amp; {}&quot;</span>, <span class="ident">env_file</span>.<span class="ident">display</span>(), <span class="ident">config</span>.<span class="ident">shell_ok</span>()<span class="question-mark">?</span>,),
             ],
         )<span class="question-mark">?</span>;
 
@@ -684,7 +690,7 @@
             .<span class="ident">arg</span>(<span class="string">&quot;-c&quot;</span>)
             .<span class="ident">arg</span>(<span class="macro">format</span><span class="macro">!</span>(
                 <span class="string">&quot;. {} &amp;&amp; {}&quot;</span>,
-                <span class="self">self</span>.<span class="ident">env_file</span>().<span class="ident">display</span>(),
+                <span class="self">Self</span>::<span class="ident">env_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>).<span class="ident">display</span>(),
                 <span class="self">self</span>.<span class="ident">config</span>.<span class="ident">shell_ok</span>()<span class="question-mark">?</span>,
             ))
             .<span class="ident">status</span>()<span class="question-mark">?</span>;
@@ -695,7 +701,7 @@
     <span class="kw">fn</span> <span class="ident">write_env_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Writing environment file&quot;</span>);
         <span class="ident">fs</span>::<span class="ident">write</span>(
-            <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">env_file</span>(),
+            <span class="self">Self</span>::<span class="ident">env_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>),
             <span class="macro">format</span><span class="macro">!</span>(
                 <span class="string">&quot;export {}={}\nexport {}={}&quot;</span>,
                 <span class="ident">RUNTIME_ENV</span>,
@@ -708,8 +714,8 @@
     }
 
     <span class="doccomment">/// Retrieve the path to the env file</span>
-    <span class="kw">fn</span> <span class="ident">env_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">PathBuf</span> {
-        <span class="self">self</span>.<span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="ident">KUBERNIX_ENV</span>)
+    <span class="kw">fn</span> <span class="ident">env_file</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">PathBuf</span> {
+        <span class="ident">config</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="string">&quot;kubernix.env&quot;</span>)
     }
 
     <span class="doccomment">/// Remove all stale mounts</span>
