@@ -63,7 +63,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "clap"
 version = "3.0.0-beta.1"
-source = "git+https://github.com/clap-rs/clap#92c2b5df3f3da1b74eea9612e7357bdb2c16be95"
+source = "git+https://github.com/clap-rs/clap#335f34bee26ceb31c63c17206bd56bb5847e697a"
 dependencies = [
  "ansi_term 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "atty 0.2.13 (registry+https://github.com/rust-lang/crates.io-index)",
