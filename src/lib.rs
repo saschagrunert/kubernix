@@ -67,7 +67,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-const KUBERNIX_ENV: &str = "kubernix.env";
 const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
 /// The main entry point for the application
@@ -97,20 +96,24 @@ impl Kubernix {
         Self::prepare_env(&mut config)?;
 
         info!(
-            "Spawning new kubernix shell in '{}'",
+            "Spawning new kubernix shell in: '{}'",
             config.root().display()
         );
+
+        let env_file = Self::env_file(&config);
+        if !env_file.exists() {
+            bail!(
+                "Necessary environment file '{}' does not exist",
+                env_file.display()
+            )
+        }
 
         Nix::run(
             &config,
             &[
                 &config.shell_ok()?,
                 "-c",
-                &format!(
-                    ". {} && {}",
-                    config.root().join(KUBERNIX_ENV).display(),
-                    config.shell_ok()?,
-                ),
+                &format!(". {} && {}", env_file.display(), config.shell_ok()?,),
             ],
         )?;
 
@@ -304,7 +307,7 @@ impl Kubernix {
             .arg("-c")
             .arg(format!(
                 ". {} && {}",
-                self.env_file().display(),
+                Self::env_file(&self.config).display(),
                 self.config.shell_ok()?,
             ))
             .status()?;
@@ -315,7 +318,7 @@ impl Kubernix {
     fn write_env_file(&self) -> Result<()> {
         info!("Writing environment file");
         fs::write(
-            &self.env_file(),
+            Self::env_file(&self.config),
             format!(
                 "export {}={}\nexport {}={}",
                 RUNTIME_ENV,
@@ -328,8 +331,8 @@ impl Kubernix {
     }
 
     /// Retrieve the path to the env file
-    fn env_file(&self) -> PathBuf {
-        self.config.root().join(KUBERNIX_ENV)
+    fn env_file(config: &Config) -> PathBuf {
+        config.root().join("kubernix.env")
     }
 
     /// Remove all stale mounts
