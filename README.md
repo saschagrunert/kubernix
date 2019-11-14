@@ -45,7 +45,7 @@ The following technology stack is currently being used:
 | [cri-tools][13]   | CRI Manipulation Tool  | v1.15.0    |
 | [CNI Plugins][14] | Container Networking   | v0.8.2     |
 | [etcd][15]        | Database Backend       | v3.3.13    |
-| [CoreDNS][16]     | Kubernetes DNS Support | v1.6.4     |
+| [CoreDNS][16]     | Kubernetes DNS Support | v1.6.5     |
 
 [10]: https://github.com/kubernetes/kubernetes
 [11]: https://github.com/cri-o/cri-o
