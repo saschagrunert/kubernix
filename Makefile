@@ -67,8 +67,10 @@ nix:
 
 .PHONY: nixdeps
 nixdeps:
+	@echo '| Application | Version |'
+	@echo '| - | - |'
 	@nix-instantiate nix 2> /dev/null \
-		| sed -n 's;/nix/store/[[:alnum:]]\{32\}-\(.*\)-\(.*\).drv\(!bin\)\{0,1\};\1 (\2);p' \
+		| sed -n 's;/nix/store/[[:alnum:]]\{32\}-\(.*\)-\(.*\).drv\(!bin\)\{0,1\};| \1 | v\2 |;p' \
 		| sort
 
 .PHONY: nixpkgs

@@ -37,28 +37,28 @@ keeping track of the running processes.
 
 The following technology stack is currently being used:
 
-| Application       |  Purpose               | Version    |
-| ----------------- | ---------------------- | ---------- |
-| [Kubernetes][10]  | Cluster Orchestration  | v1.15.4    |
-| [CRI-O][11]       | Container Runtime      | v1.16.0    |
-| [runc][12]        | Container Runtime      | v1.0.0-rc9 |
-| [cri-tools][13]   | CRI Manipulation Tool  | v1.15.0    |
-| [CNI Plugins][14] | Container Networking   | v0.8.2     |
-| [etcd][15]        | Database Backend       | v3.3.13    |
-| [CoreDNS][16]     | Kubernetes DNS Support | v1.6.5     |
+| Application     | Version      |
+| --------------- | ------------ |
+| cfssl           | v1.3.2       |
+| cni-plugins     | v0.8.3       |
+| conmon          | v2.0.2       |
+| conntrack-tools | v1.4.5       |
+| cri-o           | v1.16.0      |
+| cri-tools       | v1.15.0      |
+| etcd            | v3.3.13      |
+| iproute2        | v5.3.0       |
+| iptables        | v1.8.3       |
+| kmod            | v26          |
+| kubernetes      | v1.15.4      |
+| nss-cacert      | v3.46.1      |
+| podman          | v1.6.3       |
+| runc            | v1.0.0-rc9   |
+| socat           | v1.7.3.3     |
+| sysctl          | v1003.1-2008 |
+| util-linux      | v2.33.2      |
 
-[10]: https://github.com/kubernetes/kubernetes
-[11]: https://github.com/cri-o/cri-o
-[12]: https://github.com/opencontainers/runc
-[13]: https://github.com/kubernetes-sigs/cri-tools
-[14]: https://github.com/containernetworking/plugins
-[15]: https://github.com/etcd-io/etcd
-[16]: https://github.com/coredns/coredns
-
-Some other tools are not explicitly mentioned here, like [CFSSL][17] for the
-certificate generation.
-
-[17]: https://github.com/cloudflare/cfssl
+Some other tools are not explicitly mentioned here, because they are no
+first-level dependencies.
 
 ### Single Dependency
 
