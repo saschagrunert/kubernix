@@ -2,6 +2,7 @@ use crate::{
     config::Config,
     kubeconfig::KubeConfig,
     network::Network,
+    node::Node,
     process::{Process, ProcessState, Stoppable},
 };
 use anyhow::Result;
@@ -31,7 +32,17 @@ impl Proxy {
             &dir,
             "Proxy",
             "kube-proxy",
-            &[&format!("--config={}", cfg.display())],
+            &[
+                &format!("--config={}", cfg.display()),
+                &format!(
+                    "--hostname-override={}",
+                    if config.multi_node() {
+                        Node::name(config, network, 0)
+                    } else {
+                        network.hostname().into()
+                    }
+                ),
+            ],
         )?;
 
         process.wait_ready("Caches are synced")?;
