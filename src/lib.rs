@@ -203,7 +203,6 @@ impl Kubernix {
                 b.spawn(|c| {
                     api_server =
                         ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubectl);
-                    c.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
                     c.spawn(|_| {
                         controller_manager =
                             ControllerManager::start(&config, &network, &pki, &kubeconfig)
@@ -213,7 +212,7 @@ impl Kubernix {
             });
 
             // Node processes
-            a.spawn(|_| {
+            a.spawn(|c| {
                 crios
                     .par_iter_mut()
                     .zip(kubelets.par_iter_mut())
@@ -224,6 +223,7 @@ impl Kubernix {
                             *k = Kubelet::start(&config, i as u8, &network, &pki, &kubeconfig);
                         }
                     });
+                c.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
             });
         });
 
