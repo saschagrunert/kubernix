@@ -22,7 +22,7 @@ fn run() -> Result<()> {
         // Spawn only a new shell
         Kubernix::new_shell(config)
     } else {
-        // Run kubernix
+        // Bootstrap the cluster
         Kubernix::start(config)
     }
 }
