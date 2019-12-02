@@ -28,7 +28,7 @@ indicatif = "0.13.0"
 ipnetwork = "0.15.1"
 lazy_static = "1.4.0"
 log = { version = "0.4.8", features = ["serde", "std"] }
-nix = "0.15.0"
+nix = "0.16.0"
 parking_lot = "0.10.0"
 proc-mounts = "0.2.3"
 rand = "0.7.2"
