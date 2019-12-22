@@ -73,7 +73,7 @@ impl Process {
             // Write the run file
             let f = Run {
                 command: System::find_executable(command)?,
-                args: args.iter().map(|x| x.to_string()).collect(),
+                args: args.iter().map(|x| (*x).to_string()).collect(),
             };
             fs::write(run_file, serde_yaml::to_string(&f)?)?;
             f
