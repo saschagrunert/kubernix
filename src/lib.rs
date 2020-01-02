@@ -350,6 +350,7 @@ impl Kubernix {
                     mounts
                         .filter_map(|x| x.ok())
                         .filter(|x| x.dest.starts_with(self.config.root()))
+                        .filter(|x| !x.dest.eq(self.config.root()))
                         .for_each(|m| {
                             found_mount = true;
                             debug!("Removing mount: {}", m.dest.display());
