@@ -380,6 +380,7 @@
 <span id="380">380</span>
 <span id="381">381</span>
 <span id="382">382</span>
+<span id="383">383</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! # kubernix</span>
 <span class="attribute">#![<span class="ident">deny</span>(<span class="ident">missing_docs</span>)]</span>
@@ -733,6 +734,7 @@
                     <span class="ident">mounts</span>
                         .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">ok</span>())
                         .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">dest</span>.<span class="ident">starts_with</span>(<span class="self">self</span>.<span class="ident">config</span>.<span class="ident">root</span>()))
+                        .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="op">!</span><span class="ident">x</span>.<span class="ident">dest</span>.<span class="ident">eq</span>(<span class="self">self</span>.<span class="ident">config</span>.<span class="ident">root</span>()))
                         .<span class="ident">for_each</span>(<span class="op">|</span><span class="ident">m</span><span class="op">|</span> {
                             <span class="ident">found_mount</span> <span class="op">=</span> <span class="bool-val">true</span>;
                             <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Removing mount: {}&quot;</span>, <span class="ident">m</span>.<span class="ident">dest</span>.<span class="ident">display</span>());
