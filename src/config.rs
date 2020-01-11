@@ -173,11 +173,6 @@ impl Config {
         &self.container_runtime
     }
 
-    /// Getter for shell
-    pub fn shell(&self) -> &Option<String> {
-        &self.shell
-    }
-
     /// Getter for no_shell
     pub fn no_shell(&self) -> bool {
         self.no_shell
@@ -219,7 +214,7 @@ impl Config {
 
     /// Return the set shell as result type
     pub fn shell_ok(&self) -> Result<String> {
-        let shell = self.shell().as_ref().context("No shell set")?;
+        let shell = self.shell.as_ref().context("No shell set")?;
         Ok(shell.into())
     }
 
