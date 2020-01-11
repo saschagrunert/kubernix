@@ -284,132 +284,145 @@
 <span id="284">284</span>
 <span id="285">285</span>
 <span id="286">286</span>
+<span id="287">287</span>
+<span id="288">288</span>
+<span id="289">289</span>
+<span id="290">290</span>
+<span id="291">291</span>
+<span id="292">292</span>
+<span id="293">293</span>
+<span id="294">294</span>
+<span id="295">295</span>
+<span id="296">296</span>
+<span id="297">297</span>
+<span id="298">298</span>
+<span id="299">299</span>
+<span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
 <span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">podman</span>::<span class="ident">Podman</span>, <span class="ident">system</span>::<span class="ident">System</span>};
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
 <span class="kw">use</span> <span class="ident">clap</span>::{<span class="ident">crate_version</span>, <span class="ident">AppSettings</span>, <span class="ident">Clap</span>};
-<span class="kw">use</span> <span class="ident">getset</span>::{<span class="ident">CopyGetters</span>, <span class="ident">Getters</span>};
 <span class="kw">use</span> <span class="ident">ipnetwork</span>::<span class="ident">Ipv4Network</span>;
 <span class="kw">use</span> <span class="ident">log</span>::<span class="ident">LevelFilter</span>;
 <span class="kw">use</span> <span class="ident">serde</span>::{<span class="ident">Deserialize</span>, <span class="ident">Serialize</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">canonicalize</span>, <span class="ident">create_dir_all</span>, <span class="ident">read_to_string</span>},
-    <span class="ident">path</span>::<span class="ident">PathBuf</span>,
+    <span class="ident">path</span>::{<span class="ident">Path</span>, <span class="ident">PathBuf</span>},
 };
 <span class="kw">use</span> <span class="ident">toml</span>;
 
-<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clap</span>, <span class="ident">Deserialize</span>, <span class="ident">Getters</span>, <span class="ident">CopyGetters</span>, <span class="ident">Serialize</span>)]</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clap</span>, <span class="ident">Deserialize</span>, <span class="ident">Serialize</span>)]</span>
 <span class="attribute">#[<span class="ident">serde</span>(<span class="ident">rename_all</span> <span class="op">=</span> <span class="string">&quot;kebab-case&quot;</span>)]</span>
 <span class="attribute">#[<span class="ident">clap</span>(
-    <span class="ident">after_help</span> <span class="op">=</span> <span class="string">&quot;More info at: https://github.com/saschagrunert/kubernix&quot;</span>,
-    <span class="ident">author</span> <span class="op">=</span> <span class="string">&quot;Sascha Grunert &lt;mail@saschagrunert.de&gt;&quot;</span>,
-    <span class="ident">raw</span>(<span class="ident">global_setting</span> <span class="op">=</span> <span class="string">&quot;AppSettings::ColoredHelp&quot;</span>),
-    <span class="ident">raw</span>(<span class="ident">version</span> <span class="op">=</span> <span class="string">&quot;crate_version!()&quot;</span>)
+    <span class="ident">after_help</span>(<span class="string">&quot;More info at: https://github.com/saschagrunert/kubernix&quot;</span>),
+    <span class="ident">author</span>(<span class="string">&quot;Sascha Grunert &lt;mail@saschagrunert.de&gt;&quot;</span>),
+    <span class="ident">global_setting</span>(<span class="ident">AppSettings</span>::<span class="ident">ColoredHelp</span>),
+    <span class="ident">version</span>(<span class="macro">crate_version</span><span class="macro">!</span>())
 )]</span>
 <span class="doccomment">/// The global configuration</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Config</span> {
-    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(<span class="ident">subcommand</span>)]</span>
     <span class="doccomment">/// All available subcommands</span>
     <span class="ident">subcommand</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">SubCommand</span><span class="op">&gt;</span>,
 
-    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">default_value</span> <span class="op">=</span> <span class="string">&quot;kubernix-run&quot;</span>,
-        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_RUN&quot;</span>,
-        <span class="ident">global</span> <span class="op">=</span> <span class="bool-val">true</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;root&quot;</span>,
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;r&quot;</span>,
-        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;PATH&quot;</span>
+        <span class="ident">default_value</span>(<span class="string">&quot;kubernix-run&quot;</span>),
+        <span class="ident">env</span>(<span class="string">&quot;KUBERNIX_RUN&quot;</span>),
+        <span class="ident">global</span>(<span class="bool-val">true</span>),
+        <span class="ident">long</span>(<span class="string">&quot;root&quot;</span>),
+        <span class="ident">short</span>(<span class="string">&quot;r&quot;</span>),
+        <span class="ident">value_name</span>(<span class="string">&quot;PATH&quot;</span>)
     )]</span>
     <span class="doccomment">/// Path where all the runtime data is stored</span>
     <span class="ident">root</span>: <span class="ident">PathBuf</span>,
 
-    <span class="attribute">#[<span class="ident">get_copy</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">default_value</span> <span class="op">=</span> <span class="string">&quot;info&quot;</span>,
-        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_LOG_LEVEL&quot;</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;log-level&quot;</span>,
-        <span class="ident">raw</span>(<span class="ident">possible_values</span> <span class="op">=</span> <span class="string">r#&quot;&amp;[&quot;trace&quot;, &quot;debug&quot;, &quot;info&quot;, &quot;warn&quot;, &quot;error&quot;, &quot;off&quot;]&quot;#</span>),
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;l&quot;</span>,
-        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;LEVEL&quot;</span>
-    )]</span>
+        <span class="ident">default_value</span>(<span class="string">&quot;info&quot;</span>),
+        <span class="ident">env</span>(<span class="string">&quot;KUBERNIX_LOG_LEVEL&quot;</span>),
+        <span class="ident">long</span>(<span class="string">&quot;log-level&quot;</span>),
+        <span class="ident">possible_values</span>(<span class="kw-2">&amp;</span>[<span class="string">&quot;trace&quot;</span>, <span class="string">&quot;debug&quot;</span>, <span class="string">&quot;info&quot;</span>, <span class="string">&quot;warn&quot;</span>, <span class="string">&quot;error&quot;</span>, <span class="string">&quot;off&quot;</span>]</span>),
+        <span class="ident">short</span>(<span class="string">&quot;l&quot;</span>),
+        <span class="ident">value_name</span>(<span class="string">&quot;LEVEL&quot;</span>)
+    )]
     <span class="doccomment">/// The logging level of the application</span>
     <span class="ident">log_level</span>: <span class="ident">LevelFilter</span>,
 
-    <span class="attribute">#[<span class="ident">get_copy</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">default_value</span> <span class="op">=</span> <span class="string">&quot;10.10.0.0/16&quot;</span>,
-        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_CIDR&quot;</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;cidr&quot;</span>,
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;c&quot;</span>,
-        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;CIDR&quot;</span>
+        <span class="ident">default_value</span>(<span class="string">&quot;10.10.0.0/16&quot;</span>),
+        <span class="ident">env</span>(<span class="string">&quot;KUBERNIX_CIDR&quot;</span>),
+        <span class="ident">long</span>(<span class="string">&quot;cidr&quot;</span>),
+        <span class="ident">short</span>(<span class="string">&quot;c&quot;</span>),
+        <span class="ident">value_name</span>(<span class="string">&quot;CIDR&quot;</span>)
     )]</span>
     <span class="doccomment">/// The CIDR used for the cluster</span>
     <span class="ident">cidr</span>: <span class="ident">Ipv4Network</span>,
 
-    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_OVERLAY&quot;</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;overlay&quot;</span>,
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;o&quot;</span>,
-        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;PATH&quot;</span>
+        <span class="ident">env</span>(<span class="string">&quot;KUBERNIX_OVERLAY&quot;</span>),
+        <span class="ident">long</span>(<span class="string">&quot;overlay&quot;</span>),
+        <span class="ident">short</span>(<span class="string">&quot;o&quot;</span>),
+        <span class="ident">value_name</span>(<span class="string">&quot;PATH&quot;</span>)
     )]</span>
     <span class="doccomment">/// The Nix package overlay to be used</span>
     <span class="ident">overlay</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">PathBuf</span><span class="op">&gt;</span>,
 
-    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_PACKAGES&quot;</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;packages&quot;</span>,
-        <span class="ident">multiple</span> <span class="op">=</span> <span class="bool-val">true</span>,
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;p&quot;</span>,
-        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;PACKAGE&quot;</span>
+        <span class="ident">env</span>(<span class="string">&quot;KUBERNIX_PACKAGES&quot;</span>),
+        <span class="ident">long</span>(<span class="string">&quot;packages&quot;</span>),
+        <span class="ident">multiple</span>(<span class="bool-val">true</span>),
+        <span class="ident">short</span>(<span class="string">&quot;p&quot;</span>),
+        <span class="ident">value_name</span>(<span class="string">&quot;PACKAGE&quot;</span>)
     )]</span>
     <span class="doccomment">/// Additional dependencies to be added to the environment</span>
     <span class="ident">packages</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>,
 
-    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
-    <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_SHELL&quot;</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;shell&quot;</span>,
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;s&quot;</span>,
-        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;SHELL&quot;</span>
-    )]</span>
+    <span class="attribute">#[<span class="ident">clap</span>(<span class="ident">env</span>(<span class="string">&quot;KUBERNIX_SHELL&quot;</span>), <span class="ident">long</span>(<span class="string">&quot;shell&quot;</span>), <span class="ident">short</span>(<span class="string">&quot;s&quot;</span>), <span class="ident">value_name</span>(<span class="string">&quot;SHELL&quot;</span>))]</span>
     <span class="doccomment">/// The shell executable to be used, defaults to $SHELL, fallback is `sh`</span>
     <span class="ident">shell</span>: <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>,
 
-    <span class="attribute">#[<span class="ident">get_copy</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">default_value</span> <span class="op">=</span> <span class="string">&quot;1&quot;</span>,
-        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_NODES&quot;</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;nodes&quot;</span>,
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;n&quot;</span>,
-        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;NODES&quot;</span>
+        <span class="ident">default_value</span>(<span class="string">&quot;1&quot;</span>),
+        <span class="ident">env</span>(<span class="string">&quot;KUBERNIX_NODES&quot;</span>),
+        <span class="ident">long</span>(<span class="string">&quot;nodes&quot;</span>),
+        <span class="ident">short</span>(<span class="string">&quot;n&quot;</span>),
+        <span class="ident">value_name</span>(<span class="string">&quot;NODES&quot;</span>)
     )]</span>
     <span class="doccomment">/// The number of nodes to be registered</span>
     <span class="ident">nodes</span>: <span class="ident">u8</span>,
 
-    <span class="attribute">#[<span class="ident">get</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_CONTAINER_RUNTIME&quot;</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;container-runtime&quot;</span>,
-        <span class="ident">raw</span>(<span class="ident">default_value</span> <span class="op">=</span> <span class="string">&quot;Podman::EXECUTABLE&quot;</span>),
-        <span class="ident">requires</span> <span class="op">=</span> <span class="string">&quot;nodes&quot;</span>,
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;u&quot;</span>,
-        <span class="ident">value_name</span> <span class="op">=</span> <span class="string">&quot;RUNTIME&quot;</span>
+        <span class="ident">env</span>(<span class="string">&quot;KUBERNIX_CONTAINER_RUNTIME&quot;</span>),
+        <span class="ident">long</span>(<span class="string">&quot;container-runtime&quot;</span>),
+        <span class="ident">default_value</span>(<span class="ident">Podman</span>::<span class="ident">EXECUTABLE</span>),
+        <span class="ident">requires</span>(<span class="string">&quot;nodes&quot;</span>),
+        <span class="ident">short</span>(<span class="string">&quot;u&quot;</span>),
+        <span class="ident">value_name</span>(<span class="string">&quot;RUNTIME&quot;</span>)
     )]</span>
     <span class="doccomment">/// The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1`</span>
     <span class="ident">container_runtime</span>: <span class="ident">String</span>,
 
-    <span class="attribute">#[<span class="ident">get_copy</span> <span class="op">=</span> <span class="string">&quot;pub&quot;</span>]</span>
     <span class="attribute">#[<span class="ident">clap</span>(
-        <span class="ident">conflicts_with</span> <span class="op">=</span> <span class="string">&quot;shell&quot;</span>,
-        <span class="ident">env</span> <span class="op">=</span> <span class="string">&quot;KUBERNIX_NO_SHELL&quot;</span>,
-        <span class="ident">long</span> <span class="op">=</span> <span class="string">&quot;no-shell&quot;</span>,
-        <span class="ident">short</span> <span class="op">=</span> <span class="string">&quot;e&quot;</span>,
-        <span class="ident">takes_value</span> <span class="op">=</span> <span class="bool-val">false</span>
+        <span class="ident">conflicts_with</span>(<span class="string">&quot;shell&quot;</span>),
+        <span class="ident">env</span>(<span class="string">&quot;KUBERNIX_NO_SHELL&quot;</span>),
+        <span class="ident">long</span>(<span class="string">&quot;no-shell&quot;</span>),
+        <span class="ident">short</span>(<span class="string">&quot;e&quot;</span>),
+        <span class="ident">takes_value</span>(<span class="bool-val">false</span>)
     )]</span>
     <span class="doccomment">/// Do not spawn an interactive shell after bootstrap</span>
     <span class="ident">no_shell</span>: <span class="ident">bool</span>,
@@ -419,7 +432,7 @@
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clap</span>, <span class="ident">Deserialize</span>, <span class="ident">Serialize</span>)]</span>
 <span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">SubCommand</span> {
     <span class="doccomment">/// Spawn an additional shell session</span>
-    <span class="attribute">#[<span class="ident">clap</span>(<span class="ident">name</span> <span class="op">=</span> <span class="string">&quot;shell&quot;</span>)]</span>
+    <span class="attribute">#[<span class="ident">clap</span>(<span class="ident">name</span>(<span class="string">&quot;shell&quot;</span>))]</span>
     <span class="ident">Shell</span>,
 }
 
@@ -435,6 +448,51 @@
 
 <span class="kw">impl</span> <span class="ident">Config</span> {
     <span class="kw">const</span> <span class="ident">FILENAME</span>: <span class="kw-2">&amp;</span><span class="lifetime">&#39;static</span> <span class="ident">str</span> <span class="op">=</span> <span class="string">&quot;kubernix.toml&quot;</span>;
+
+    <span class="doccomment">/// Getter for root</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">root</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="kw-2">&amp;</span><span class="ident">Path</span> {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">root</span>
+    }
+
+    <span class="doccomment">/// Getter for subcommand</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">subcommand</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="kw-2">&amp;</span><span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">SubCommand</span><span class="op">&gt;</span> {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">subcommand</span>
+    }
+
+    <span class="doccomment">/// Getter for log_level</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">log_level</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">LevelFilter</span> {
+        <span class="self">self</span>.<span class="ident">log_level</span>
+    }
+
+    <span class="doccomment">/// Getter for nodes</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">nodes</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">u8</span> {
+        <span class="self">self</span>.<span class="ident">nodes</span>
+    }
+
+    <span class="doccomment">/// Getter for overlay</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">overlay</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="kw-2">&amp;</span><span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">PathBuf</span><span class="op">&gt;</span> {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">overlay</span>
+    }
+
+    <span class="doccomment">/// Getter for packages</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">packages</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="kw-2">&amp;</span>[<span class="ident">String</span>] {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">packages</span>
+    }
+
+    <span class="doccomment">/// Getter for cidr</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">cidr</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">Ipv4Network</span> {
+        <span class="self">self</span>.<span class="ident">cidr</span>
+    }
+
+    <span class="doccomment">/// Getter for container_runtime</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">container_runtime</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="kw-2">&amp;</span><span class="ident">str</span> {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">container_runtime</span>
+    }
+
+    <span class="doccomment">/// Getter for no_shell</span>
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">no_shell</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">bool</span> {
+        <span class="self">self</span>.<span class="ident">no_shell</span>
+    }
 
     <span class="doccomment">/// Make the configs root path absolute</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">canonicalize_root</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
@@ -472,7 +530,7 @@
 
     <span class="doccomment">/// Return the set shell as result type</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">shell_ok</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">shell</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">shell</span>().<span class="ident">as_ref</span>().<span class="ident">context</span>(<span class="string">&quot;No shell set&quot;</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">shell</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">shell</span>.<span class="ident">as_ref</span>().<span class="ident">context</span>(<span class="string">&quot;No shell set&quot;</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="ident">shell</span>.<span class="ident">into</span>())
     }
 
