@@ -1,7 +1,7 @@
 //! Configuration related structures
 use crate::{podman::Podman, system::System};
 use anyhow::{Context, Result};
-use clap::{crate_version, AppSettings, Clap};
+use clap::{AppSettings, Clap};
 use ipnetwork::Ipv4Network;
 use log::LevelFilter;
 use serde::{Deserialize, Serialize};
@@ -16,8 +16,7 @@ use toml;
 #[clap(
     after_help("More info at: https://github.com/saschagrunert/kubernix"),
     author("Sascha Grunert <mail@saschagrunert.de>"),
-    global_setting(AppSettings::ColoredHelp),
-    version(crate_version!())
+    global_setting(AppSettings::ColoredHelp)
 )]
 /// The global configuration
 pub struct Config {
