@@ -69,7 +69,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "clap"
 version = "3.0.0-beta.1"
-source = "git+https://github.com/clap-rs/clap#bbb14f8bd47ef201b315d367922343577ee60718"
+source = "git+https://github.com/clap-rs/clap#cc79c432a4e1cb2c662e9343c2c6dc3d8ed9d873"
 dependencies = [
  "ansi_term 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "atty 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -87,7 +87,7 @@ dependencies = [
 [[package]]
 name = "clap_derive"
 version = "3.0.0-beta.1"
-source = "git+https://github.com/clap-rs/clap#bbb14f8bd47ef201b315d367922343577ee60718"
+source = "git+https://github.com/clap-rs/clap#cc79c432a4e1cb2c662e9343c2c6dc3d8ed9d873"
 dependencies = [
  "heck 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro-error 0.4.9 (registry+https://github.com/rust-lang/crates.io-index)",
