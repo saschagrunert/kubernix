@@ -55,13 +55,15 @@ impl Crio {
         let cni_plugin = loopback.parent().context("Unable to find CNI plugin dir")?;
 
         let dir = Self::path(config, network, node);
-        let config_file = dir.join("crio.conf");
+        let config_dir = dir.join("crio.conf.d");
+        let config_file = config_dir.join("crio.conf");
         let network_dir = dir.join("cni");
         let socket = Self::socket(config, network, node)?;
 
         if !dir.exists() {
             create_dir_all(&dir)?;
             create_dir_all(&network_dir)?;
+            create_dir_all(&config_dir)?;
 
             let containers_dir = dir.join("containers");
             fs::write(
@@ -110,7 +112,7 @@ impl Crio {
                 }))?,
             )?;
         }
-        let args: &[&str] = &[&format!("--config={}", config_file.display())];
+        let args: &[&str] = &[&format!("--config-dir={}", config_file.display())];
 
         let mut process = if config.multi_node() {
             // Run inside a container
