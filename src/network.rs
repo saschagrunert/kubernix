@@ -101,7 +101,7 @@ impl Network {
         String::from_utf8(cmd.stdout)?
             .lines()
             .filter(|x| !x.contains(Self::INTERFACE_PREFIX))
-            .filter_map(|x| x.split_whitespace().nth(0))
+            .filter_map(|x| x.split_whitespace().next())
             .filter_map(|x| x.parse::<Ipv4Network>().ok())
             .filter(|x| x.is_supernet_of(cidr))
             .for_each(|x| {
