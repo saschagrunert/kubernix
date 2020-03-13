@@ -9,7 +9,7 @@ use std::{
     time::Instant,
 };
 
-const TIMEOUT: u64 = 600;
+const TIMEOUT: u64 = 2000;
 pub const SUDO: &str = "sudo";
 
 pub fn run_podman_test(test: &str, args: Option<&[&str]>) -> Result<()> {
