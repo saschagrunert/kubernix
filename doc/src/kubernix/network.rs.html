@@ -270,7 +270,7 @@
         <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">cmd</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>
             .<span class="ident">lines</span>()
             .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="op">!</span><span class="ident">x</span>.<span class="ident">contains</span>(<span class="self">Self</span>::<span class="ident">INTERFACE_PREFIX</span>))
-            .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">split_whitespace</span>().<span class="ident">nth</span>(<span class="number">0</span>))
+            .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">split_whitespace</span>().<span class="ident">next</span>())
             .<span class="ident">filter_map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">parse</span>::<span class="op">&lt;</span><span class="ident">Ipv4Network</span><span class="op">&gt;</span>().<span class="ident">ok</span>())
             .<span class="ident">filter</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> <span class="ident">x</span>.<span class="ident">is_supernet_of</span>(<span class="ident">cidr</span>))
             .<span class="ident">for_each</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> {
