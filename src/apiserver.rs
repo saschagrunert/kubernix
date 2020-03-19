@@ -60,7 +60,7 @@ impl ApiServer {
                 ),
                 &format!("--kubelet-client-key={}", pki.apiserver().key().display()),
                 "--kubelet-https=true",
-                "--runtime-config=api/all",
+                "--runtime-config=api/all=true",
                 &format!(
                     "--service-account-key-file={}",
                     pki.service_account().cert().display()
