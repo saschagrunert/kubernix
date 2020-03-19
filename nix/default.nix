@@ -13,6 +13,7 @@ let
     iptables
     kmod
     kubernetes
+    kubectl
     podman
     runc
     socat
