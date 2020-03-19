@@ -3,12 +3,14 @@ use crate::{
     pki::{Idendity, Pki},
     Config,
 };
-use anyhow::Result;
+use anyhow::{format_err, Context, Result};
 use getset::Getters;
 use log::{debug, info};
+use nix::sys::stat::{fchmod, Mode};
 use std::{
-    fs::create_dir_all,
+    fs::{create_dir_all, File},
     net::Ipv4Addr,
+    os::unix::io::AsRawFd,
     path::{Path, PathBuf},
 };
 
@@ -107,6 +109,15 @@ impl KubeConfig {
         ])?;
 
         kubectl.config(&["use-context", context])?;
+
+        // Adapt file permissions
+        fchmod(
+            File::open(&kubeconfig)
+                .context("unable to open kubeconfig")?
+                .as_raw_fd(),
+            Mode::from_bits(0o644).ok_or_else(|| format_err!("unable to get mode bits"))?,
+        )
+        .context("unable to set kubeconfig permissions")?;
 
         debug!("Kubeconfig created for {}", idendity.name());
         Ok(kubeconfig)
