@@ -27,7 +27,7 @@ hostname = "0.3.1"
 indicatif = "0.14.0"
 ipnetwork = "0.16.0"
 lazy_static = "1.4.0"
-log = { version = "0.4.10", features = ["serde", "std"] }
+log = { version = "0.4.8", features = ["serde", "std"] }
 nix = "0.17.0"
 parking_lot = "0.10.0"
 proc-mounts = "0.2.3"
