@@ -17,7 +17,7 @@ name = "kubernix"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.27"
+anyhow = "1.0.28"
 base64 = "0.12.0"
 clap = { git = "https://github.com/clap-rs/clap", features = ["wrap_help"] }
 console = "0.10.0"
