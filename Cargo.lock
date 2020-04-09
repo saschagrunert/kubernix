@@ -186,10 +186,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "err-derive"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "proc-macro-error 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
+ "proc-macro-error 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro2 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustversion 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -416,7 +416,7 @@ name = "partition-identity"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "err-derive 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "err-derive 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -437,8 +437,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "proc-macro-error"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "proc-macro-error-attr 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "proc-macro2 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quote 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "version_check 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "proc-macro-error-attr"
 version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "proc-macro2 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quote 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn 1.0.17 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn-mid 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "version_check 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "proc-macro-error-attr"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -829,7 +853,7 @@ dependencies = [
 "checksum dtoa 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)" = "4358a9e11b9a09cf52383b451b49a169e8d797b68aa02301ff586d70d9661ea3"
 "checksum either 1.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "bb1f6b1ce1c140482ea30ddd3335fc0024ac7ee112895426e0a629a6c20adfe3"
 "checksum encode_unicode 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
-"checksum err-derive 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "82f46c91bbed409ee74495549acbfcc7fae856e712e1df15afe75d0775eedc6c"
+"checksum err-derive 0.2.4 (registry+https://github.com/rust-lang/crates.io-index)" = "22deed3a8124cff5fa835713fa105621e43bbdc46690c3a6b68328a012d350d4"
 "checksum getrandom 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)" = "7abc8dd8451921606d809ba32e95b6111925cd2906060d2dcc29c070220503eb"
 "checksum getset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f62a139c59ae846c3964c392f12aac68f1997d1a40e9d3b40a89a4ab553e04a0"
 "checksum heck 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "20564e78d53d2bb135c343b3f47714a56af2061f1c928fdb541dc7b9fdd94205"
@@ -856,7 +880,9 @@ dependencies = [
 "checksum partition-identity 0.2.7 (registry+https://github.com/rust-lang/crates.io-index)" = "6143f9ed7322db043c509e3148232dc8be9587d1625be4f87e27cdffc0e68b77"
 "checksum ppv-lite86 0.2.6 (registry+https://github.com/rust-lang/crates.io-index)" = "74490b50b9fbe561ac330df47c08f3f33073d2d00c150f719147d7c54522fa1b"
 "checksum proc-macro-error 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)" = "18f33027081eba0a6d8aba6d1b1c3a3be58cbb12106341c2d5759fcd9b5277e7"
+"checksum proc-macro-error 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "8931031034aa65c73f3f1a05c3ec0fa51287fcd06557ecf4e88b2768bdca375e"
 "checksum proc-macro-error-attr 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)" = "8a5b4b77fdb63c1eca72173d68d24501c54ab1269409f6b672c85deb18af69de"
+"checksum proc-macro-error-attr 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "2147536f412ee7ae5529364ed50172ca0220fd64591e236296f45f36b38b2f98"
 "checksum proc-macro2 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)" = "df246d292ff63439fea9bc8c0a270bed0e390d5ebd4db4ba15aba81111b5abe3"
 "checksum proc-mounts 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "eaa1472134431dd27fcb4477d702d14cf5571a32ad92f2902522d354de42adda"
 "checksum quote 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2bdc6c187c65bca4260c9011c9e3132efe4909da44726bad24cf7572ae338d7f"
