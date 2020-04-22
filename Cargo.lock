@@ -37,7 +37,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "cc"
-version = "1.0.51"
+version = "1.0.52"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -361,7 +361,7 @@ version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "cc 1.0.51 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cc 1.0.52 (registry+https://github.com/rust-lang/crates.io-index)",
  "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "void 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -845,7 +845,7 @@ dependencies = [
 "checksum autocfg 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f8aac770f1885fd7e387acedd76065302551364496e46b3dd00860b2f8359b9d"
 "checksum base64 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7d5ca2cd0adc3f48f9e9ea5a6bbdf9ccc0bfade884847e484d452414c7ccffb3"
 "checksum bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
-"checksum cc 1.0.51 (registry+https://github.com/rust-lang/crates.io-index)" = "9c9384ca4b90c0ea47e19a5c996d6643a3e73dedf9b89c65efb67587e34da1bb"
+"checksum cc 1.0.52 (registry+https://github.com/rust-lang/crates.io-index)" = "c3d87b23d6a92cd03af510a5ade527033f6aa6fa92161e2d5863a907d4c5e31d"
 "checksum cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)" = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 "checksum clap 3.0.0-beta.1 (git+https://github.com/clap-rs/clap)" = "<none>"
 "checksum clap_derive 3.0.0-beta.1 (git+https://github.com/clap-rs/clap)" = "<none>"
