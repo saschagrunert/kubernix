@@ -10,7 +10,6 @@ use std::{
     fs::{self, canonicalize, create_dir_all, read_to_string},
     path::PathBuf,
 };
-use toml;
 
 #[derive(Clap, CopyGetters, Getters, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
