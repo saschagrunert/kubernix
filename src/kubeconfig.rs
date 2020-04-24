@@ -100,7 +100,7 @@ impl KubeConfig {
             embed_certs,
         ])?;
 
-        let context = "default";
+        let context = "kubernix";
         kubectl.config(&[
             "set-context",
             context,
