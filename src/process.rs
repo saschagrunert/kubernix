@@ -7,7 +7,6 @@ use nix::{
     unistd::Pid,
 };
 use serde::{Deserialize, Serialize};
-use serde_yaml;
 use std::{
     fs::{self, create_dir_all, File},
     io::{BufRead, BufReader},
