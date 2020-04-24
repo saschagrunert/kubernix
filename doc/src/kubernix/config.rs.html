@@ -277,7 +277,6 @@
 <span id="277">277</span>
 <span id="278">278</span>
 <span id="279">279</span>
-<span id="280">280</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
 <span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">podman</span>::<span class="ident">Podman</span>, <span class="ident">system</span>::<span class="ident">System</span>};
@@ -291,7 +290,6 @@
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">canonicalize</span>, <span class="ident">create_dir_all</span>, <span class="ident">read_to_string</span>},
     <span class="ident">path</span>::<span class="ident">PathBuf</span>,
 };
-<span class="kw">use</span> <span class="ident">toml</span>;
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clap</span>, <span class="ident">CopyGetters</span>, <span class="ident">Getters</span>, <span class="ident">Deserialize</span>, <span class="ident">Serialize</span>)]</span>
 <span class="attribute">#[<span class="ident">serde</span>(<span class="ident">rename_all</span> <span class="op">=</span> <span class="string">&quot;kebab-case&quot;</span>)]</span>
