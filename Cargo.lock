@@ -77,17 +77,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clicolors-control"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "atty 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
- "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "libc 0.2.69 (registry+https://github.com/rust-lang/crates.io-index)",
- "winapi 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "cloudabi"
 version = "0.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -97,10 +86,9 @@ dependencies = [
 
 [[package]]
 name = "console"
-version = "0.10.1"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "clicolors-control 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "encode_unicode 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.69 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -109,6 +97,7 @@ dependencies = [
  "termios 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winapi-util 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -251,7 +240,7 @@ name = "indicatif"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "console 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "console 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "number_prefix 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -286,7 +275,7 @@ dependencies = [
  "anyhow 1.0.28 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 3.0.0-beta.1 (git+https://github.com/clap-rs/clap)",
- "console 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "console 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-channel 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "getset 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "hostname 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -865,9 +854,8 @@ dependencies = [
 "checksum cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)" = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 "checksum clap 3.0.0-beta.1 (git+https://github.com/clap-rs/clap)" = "<none>"
 "checksum clap_derive 3.0.0-beta.1 (git+https://github.com/clap-rs/clap)" = "<none>"
-"checksum clicolors-control 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "90082ee5dcdd64dc4e9e0d37fbf3ee325419e39c0092191e0393df65518f741e"
 "checksum cloudabi 0.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "ddfc5b9aa5d4507acaf872de71051dfd0e309860e88966e1051e462a077aac4f"
-"checksum console 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)" = "703dd7516d1a3e6483189c8d9a18a9af84877084630875ff9e922c201f9e0209"
+"checksum console 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)" = "6186a012aed6b3ab3b36015337ecbc30563961181868a31b6314e97e36e3c36e"
 "checksum crossbeam-channel 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)" = "cced8691919c02aac3cb0a1bc2e9b73d89e832bf9a06fc579d4e71b68a2da061"
 "checksum crossbeam-deque 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)" = "9f02af974daeee82218205558e51ec8768b48cf524bd01d550abe5573a608285"
 "checksum crossbeam-epoch 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)" = "058ed274caafc1f60c4997b5fc07bf7dc7cca454af7c6e81edffe5f33f70dace"
