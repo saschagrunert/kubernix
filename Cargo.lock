@@ -93,7 +93,7 @@ dependencies = [
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.3.7 (registry+https://github.com/rust-lang/crates.io-index)",
- "terminal_size 0.1.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "terminal_size 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)",
  "termios 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -731,7 +731,7 @@ dependencies = [
 
 [[package]]
 name = "terminal_size"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "libc 0.2.69 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -926,7 +926,7 @@ dependencies = [
 "checksum term_size 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "9e5b9a66db815dcfd2da92db471106457082577c3c278d4138ab3e3b4e189327"
 "checksum term_size 1.0.0-beta1 (registry+https://github.com/rust-lang/crates.io-index)" = "a8a17d8699e154863becdf18e4fd28bd0be27ca72856f54daf75c00f2566898f"
 "checksum termcolor 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "bb6bfa289a4d7c5766392812c0a1f4c1ba45afa1ad47803c11e1f407d846d75f"
-"checksum terminal_size 0.1.11 (registry+https://github.com/rust-lang/crates.io-index)" = "248dbcb93f8697c50b85b0492cf559b94667eb24c26934eae73ae5673175ebf6"
+"checksum terminal_size 0.1.12 (registry+https://github.com/rust-lang/crates.io-index)" = "8038f95fc7a6f351163f4b964af631bd26c9e828f7db085f2a84aca56f70d13b"
 "checksum termios 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6f0fcee7b24a25675de40d5bb4de6e41b0df07bc9856295e7e2b3a3600c400c2"
 "checksum textwrap 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 "checksum toml 0.5.6 (registry+https://github.com/rust-lang/crates.io-index)" = "ffc92d160b1eef40665be3a05630d003936a3bc7da7421277846c2613e92c71a"
