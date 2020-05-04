@@ -334,7 +334,7 @@
             <span class="comment">// Run as usual process</span>
             <span class="ident">Process</span>::<span class="ident">start</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="string">&quot;CRI-O&quot;</span>, <span class="ident">CRIO</span>, <span class="ident">args</span>)<span class="question-mark">?</span>
         };
-        <span class="ident">process</span>.<span class="ident">wait_ready</span>(<span class="string">&quot;sandboxes:&quot;</span>)<span class="question-mark">?</span>;
+        <span class="ident">process</span>.<span class="ident">wait_ready</span>(<span class="string">&quot;Sandboxes:&quot;</span>)<span class="question-mark">?</span>;
 
         <span class="prelude-val">Ok</span>(<span class="ident">Box</span>::<span class="ident">new</span>(<span class="self">Self</span> {
             <span class="ident">process</span>,
