@@ -122,7 +122,7 @@ impl Crio {
             // Run as usual process
             Process::start(&dir, "CRI-O", CRIO, args)?
         };
-        process.wait_ready("sandboxes:")?;
+        process.wait_ready("Sandboxes:")?;
 
         Ok(Box::new(Self {
             process,
