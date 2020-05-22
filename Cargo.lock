@@ -48,7 +48,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "clap"
 version = "3.0.0-beta.1"
-source = "git+https://github.com/clap-rs/clap#f8824fc10a6911e61904f93bb5711e65b25f51e9"
+source = "git+https://github.com/clap-rs/clap#31ebd7efb5ca61467b08f8226d639200f5b6e826"
 dependencies = [
  "atty 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -67,7 +67,7 @@ dependencies = [
 [[package]]
 name = "clap_derive"
 version = "3.0.0-beta.1"
-source = "git+https://github.com/clap-rs/clap#f8824fc10a6911e61904f93bb5711e65b25f51e9"
+source = "git+https://github.com/clap-rs/clap#31ebd7efb5ca61467b08f8226d639200f5b6e826"
 dependencies = [
  "heck 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "proc-macro-error 0.4.12 (registry+https://github.com/rust-lang/crates.io-index)",
