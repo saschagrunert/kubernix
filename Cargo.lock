@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "console 0.11.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -280,7 +280,7 @@ dependencies = [
  "crossbeam-channel 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "getset 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "hostname 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "indicatif 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "indicatif 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ipnetwork 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -847,7 +847,7 @@ dependencies = [
 "checksum hermit-abi 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)" = "b9586eedd4ce6b3c498bc3b4dd92fc9f11166aa908a914071953768066c67909"
 "checksum hostname 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "3c731c3e10504cc8ed35cfe2f1db4c9274c3d35fa486e3b31df46f068ef3e867"
 "checksum indexmap 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c398b2b113b55809ceb9ee3e753fcbac793f1956663f3c36549c1346015c2afe"
-"checksum indicatif 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)" = "49a68371cf417889c9d7f98235b7102ea7c54fc59bcbd22f3dea785be9d27e40"
+"checksum indicatif 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7baab56125e25686df467fe470785512329883aab42696d661247aca2a2896e4"
 "checksum ipnetwork 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b8eca9f51da27bc908ef3dd85c21e1bbba794edaf94d7841e37356275b82d31e"
 "checksum itoa 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)" = "b8b7a7c0c47db5545ed3fef7468ee7bb5b74691498139e4b3f6a20685dc6dd8e"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
