@@ -257,7 +257,7 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "0.4.5"
+version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -591,7 +591,7 @@ name = "serde_json"
 version = "1.0.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "itoa 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "itoa 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "ryu 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.112 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -850,7 +850,7 @@ dependencies = [
 "checksum indexmap 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "c398b2b113b55809ceb9ee3e753fcbac793f1956663f3c36549c1346015c2afe"
 "checksum indicatif 0.15.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7baab56125e25686df467fe470785512329883aab42696d661247aca2a2896e4"
 "checksum ipnetwork 0.16.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b8eca9f51da27bc908ef3dd85c21e1bbba794edaf94d7841e37356275b82d31e"
-"checksum itoa 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)" = "b8b7a7c0c47db5545ed3fef7468ee7bb5b74691498139e4b3f6a20685dc6dd8e"
+"checksum itoa 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)" = "dc6f3ad7b9d11a0c00842ff8de1b60ee58661048eb8049ed33c73594f359d7e6"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
 "checksum lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 "checksum libc 0.2.71 (registry+https://github.com/rust-lang/crates.io-index)" = "9457b06509d27052635f90d6466700c65095fdf75409b3fbdd903e988b886f49"
