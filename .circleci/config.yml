@@ -334,7 +334,7 @@ jobs:
             sudo apt-get install -y podman
       - run:
           name: Install Nix
-          command: curl https://nixos.org/nix/install | sh
+          command: curl -L https://nixos.org/nix/install | sh
       - run:
           name: Set hostname
           command: |
