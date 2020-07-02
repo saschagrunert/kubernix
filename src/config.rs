@@ -31,7 +31,7 @@ pub struct Config {
         env("KUBERNIX_RUN"),
         global(true),
         long("root"),
-        short("r"),
+        short('r'),
         value_name("PATH")
     )]
     /// Path where all the runtime data is stored
@@ -43,7 +43,7 @@ pub struct Config {
         env("KUBERNIX_LOG_LEVEL"),
         long("log-level"),
         possible_values(&["trace", "debug", "info", "warn", "error", "off"]),
-        short("l"),
+        short('l'),
         value_name("LEVEL")
     )]
     /// The logging level of the application
@@ -54,7 +54,7 @@ pub struct Config {
         default_value("10.10.0.0/16"),
         env("KUBERNIX_CIDR"),
         long("cidr"),
-        short("c"),
+        short('c'),
         value_name("CIDR")
     )]
     /// The CIDR used for the cluster
@@ -64,7 +64,7 @@ pub struct Config {
     #[clap(
         env("KUBERNIX_OVERLAY"),
         long("overlay"),
-        short("o"),
+        short('o'),
         value_name("PATH")
     )]
     /// The Nix package overlay to be used
@@ -75,14 +75,14 @@ pub struct Config {
         env("KUBERNIX_PACKAGES"),
         long("packages"),
         multiple(true),
-        short("p"),
+        short('p'),
         value_name("PACKAGE")
     )]
     /// Additional dependencies to be added to the environment
     packages: Vec<String>,
 
     #[get = "pub"]
-    #[clap(env("KUBERNIX_SHELL"), long("shell"), short("s"), value_name("SHELL"))]
+    #[clap(env("KUBERNIX_SHELL"), long("shell"), short('s'), value_name("SHELL"))]
     /// The shell executable to be used, defaults to $SHELL, fallback is `sh`
     shell: Option<String>,
 
@@ -91,7 +91,7 @@ pub struct Config {
         default_value("1"),
         env("KUBERNIX_NODES"),
         long("nodes"),
-        short("n"),
+        short('n'),
         value_name("NODES")
     )]
     /// The number of nodes to be registered
@@ -103,7 +103,7 @@ pub struct Config {
         long("container-runtime"),
         default_value(Podman::EXECUTABLE),
         requires("nodes"),
-        short("u"),
+        short('u'),
         value_name("RUNTIME")
     )]
     /// The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1`
@@ -114,7 +114,7 @@ pub struct Config {
         conflicts_with("shell"),
         env("KUBERNIX_NO_SHELL"),
         long("no-shell"),
-        short("e"),
+        short('e'),
         takes_value(false)
     )]
     /// Do not spawn an interactive shell after bootstrap
