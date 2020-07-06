@@ -310,7 +310,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "lock_api"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "scopeguard 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -380,7 +380,7 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "instant 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "lock_api 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lock_api 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "parking_lot_core 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -824,7 +824,7 @@ dependencies = [
 "checksum lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 "checksum libc 0.2.71 (registry+https://github.com/rust-lang/crates.io-index)" = "9457b06509d27052635f90d6466700c65095fdf75409b3fbdd903e988b886f49"
 "checksum linked-hash-map 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "8dd5a6d5999d9907cda8ed67bbd137d3af8085216c2ac62de5be860bd41f304a"
-"checksum lock_api 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "de302ce1fe7482db13738fbaf2e21cfb06a986b89c0bf38d88abf16681aada4e"
+"checksum lock_api 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "28247cc5a5be2f05fbcd76dd0cf2c7d3b5400cb978a28042abcd4fa0b3f8261c"
 "checksum log 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)" = "1b9ad466a945c9c40f6f9a449c55675547e59bc75a2722d4689042ab3ae80c9c"
 "checksum match_cfg 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4"
 "checksum maybe-uninit 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
