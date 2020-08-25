@@ -39,24 +39,24 @@ The following technology stack is currently being used:
 
 | Application     | Version      |
 | --------------- | ------------ |
-| cfssl           | v1.3.2       |
+| cfssl           | v1.4.1       |
 | cni-plugins     | v0.8.6       |
-| conmon          | v2.0.17      |
+| conmon          | v2.0.20      |
 | conntrack-tools | v1.4.6       |
-| cri-o           | v1.18.1      |
+| cri-o           | v1.18.3      |
 | cri-tools       | v1.18.0      |
 | etcd            | v3.3.22      |
-| iproute2        | v5.6.0       |
-| iptables        | v1.8.4       |
-| kmod            | v26          |
-| kubectl         | v1.18.3      |
-| kubernetes      | v1.18.3      |
-| nss-cacert      | v3.51        |
-| podman          | v1.9.3       |
-| runc            | v1.0.0-rc90  |
+| iproute2        | v5.8.0       |
+| iptables        | v1.8.5       |
+| kmod            | v27          |
+| kubectl         | v1.18.8      |
+| kubernetes      | v1.18.8      |
+| nss-cacert      | v3.55        |
+| podman          | v2.0.4       |
+| runc            | v1.0.0-rc92  |
 | socat           | v1.7.3.4     |
 | sysctl          | v1003.1.2008 |
-| util-linux      | v2.35.1      |
+| util-linux      | v2.35.2      |
 
 Some other tools are not explicitly mentioned here, because they are no
 first-level dependencies.

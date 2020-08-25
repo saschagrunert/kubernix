@@ -39,7 +39,7 @@ impl Podman {
     /// Podman args which should apply to every command
     pub fn default_args(config: &Config) -> Result<Vec<String>> {
         let log_level = if config.log_level() >= LevelFilter::Debug {
-            "DEBUG".into()
+            "debug".into()
         } else {
             config.log_level().to_string()
         };
