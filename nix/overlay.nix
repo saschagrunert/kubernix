@@ -1,1 +1,1 @@
-self: super: {}
+self: super: { }

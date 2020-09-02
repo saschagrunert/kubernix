@@ -1,5 +1,5 @@
 let
-  pkgs = import ./nixpkgs.nix { overlays = [(import ./overlay.nix)]; };
+  pkgs = import ./nixpkgs.nix { overlays = [ (import ./overlay.nix) ]; };
   packages = with pkgs; [
     cacert
     cfssl
@@ -20,4 +20,5 @@ let
     sysctl
     utillinux
   ] ++ [ /* PACKAGES */ ];
-in packages
+in
+packages

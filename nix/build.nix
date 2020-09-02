@@ -1,5 +1,5 @@
 let
-  rustCommit = "e912ed483e980dfb4666ae0ed17845c4220e5e7c";
+  rustCommit = "efda5b357451dbb0431f983cca679ae3cd9b9829";
   overlay = import (
     builtins.fetchTarball "https://github.com/mozilla/nixpkgs-mozilla/archive/${rustCommit}.tar.gz"
   );
@@ -13,7 +13,7 @@ let
     ];
   });
   deps = with pkgs; (import ./default.nix) ++ [
-    (pkgs.callPackage ./derivations/cargo-kcov.nix {})
+    (pkgs.callPackage ./derivations/cargo-kcov.nix { })
     binutils
     coreutils
     curl
@@ -24,4 +24,5 @@ let
     procps
     ruststable
   ];
-in deps
+in
+deps
