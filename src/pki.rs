@@ -310,12 +310,10 @@ impl Pki {
                 "algo": "rsa",
                 "size": 2048
             },
-            "names": [
-            {
+            "names": [{
                 "O": o,
                 "OU": "kubernetes",
-            }
-            ]
+            }]
         });
         fs::write(dest, to_string_pretty(&csr)?)?;
         Ok(())

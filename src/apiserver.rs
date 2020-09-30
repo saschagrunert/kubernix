@@ -59,7 +59,6 @@ impl ApiServer {
                     pki.apiserver().cert().display()
                 ),
                 &format!("--kubelet-client-key={}", pki.apiserver().key().display()),
-                "--kubelet-https=true",
                 "--runtime-config=api/all=true",
                 &format!(
                     "--service-account-key-file={}",
@@ -72,7 +71,7 @@ impl ApiServer {
             ],
         )?;
 
-        process.wait_ready("etcd ok")?;
+        process.wait_ready("sending update to cc")?;
         Self::setup_rbac(&dir, kubectl)?;
         Ok(Box::new(Self { process }))
     }
