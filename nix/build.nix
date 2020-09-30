@@ -1,5 +1,5 @@
 let
-  rustCommit = "efda5b357451dbb0431f983cca679ae3cd9b9829";
+  rustCommit = "8c007b60731c07dd7a052cce508de3bb1ae849b4";
   overlay = import (
     builtins.fetchTarball "https://github.com/mozilla/nixpkgs-mozilla/archive/${rustCommit}.tar.gz"
   );

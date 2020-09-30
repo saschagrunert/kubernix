@@ -61,38 +61,6 @@ workflows:
           requires:
             - build-release
       - machine-run:
-          name: test-integration-docker-single-node
-          cache: v11
-          run: |
-            docker load -i $LOCAL_IMAGE
-            make test-integration ARGS=docker_single_node
-          requires:
-            - build-image
-      - machine-run:
-          name: test-integration-podman-single-node
-          cache: v12
-          run: |
-            sudo podman load -i $LOCAL_IMAGE
-            sudo podman tag localhost/saschagrunert/kubernix:latest $IMAGE
-            make test-integration ARGS=podman_single_node
-          requires:
-            - build-image
-      - machine-run:
-          name: test-integration-podman-multi-node
-          cache: v13
-          run: |
-            sudo podman load -i $LOCAL_IMAGE
-            sudo podman tag localhost/saschagrunert/kubernix:latest $IMAGE
-            make test-integration ARGS=podman_multi_node
-          requires:
-            - build-image
-      - machine-run:
-          name: test-integration-local-multi-node
-          cache: v14
-          run: make test-integration ARGS=local_multi_node
-          requires:
-            - build-release
-      - machine-run:
           name: test-integration-local-single-node
           cache: v15
           run: make test-integration ARGS=local_single_node
@@ -326,12 +294,6 @@ jobs:
             - << parameters.cache >>-machine-run-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
       - attach_workspace:
           at: .
-      - run:
-          name: Install podman
-          command: |
-            sudo add-apt-repository -y ppa:projectatomic/ppa
-            sudo apt-get update -y
-            sudo apt-get install -y podman
       - run:
           name: Install Nix
           command: curl -L https://nixos.org/nix/install | sh
