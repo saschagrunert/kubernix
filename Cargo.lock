@@ -2,7 +2,7 @@
 # It is not intended for manual editing.
 [[package]]
 name = "anyhow"
-version = "1.0.32"
+version = "1.0.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -268,7 +268,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "kubernix"
 version = "0.2.0"
 dependencies = [
- "anyhow 1.0.32 (registry+https://github.com/rust-lang/crates.io-index)",
+ "anyhow 1.0.33 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 3.0.0-beta.2 (git+https://github.com/clap-rs/clap)",
  "console 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -771,7 +771,7 @@ dependencies = [
 ]
 
 [metadata]
-"checksum anyhow 1.0.32 (registry+https://github.com/rust-lang/crates.io-index)" = "6b602bfe940d21c130f3895acd65221e8a61270debe89d628b9cb4e3ccb8569b"
+"checksum anyhow 1.0.33 (registry+https://github.com/rust-lang/crates.io-index)" = "a1fd36ffbb1fb7c834eac128ea8d0e310c5aeb635548f9d58861e1308d46e71c"
 "checksum arc-swap 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)" = "4d25d88fd6b8041580a654f9d0c581a047baee2b3efee13275f2fc392fc75034"
 "checksum atty 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)" = "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
 "checksum autocfg 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
