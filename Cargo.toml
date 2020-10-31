@@ -35,7 +35,7 @@ rand = "0.7.3"
 rayon = "1.5.0"
 serde = { version = "1.0.117", features = ["derive"] }
 serde_json = "1.0.59"
-serde_yaml = "0.8.13"
+serde_yaml = "0.8.14"
 signal-hook = "0.1.16"
 toml = "0.5.7"
 
