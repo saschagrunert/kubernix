@@ -741,9 +741,9 @@ dependencies = [
 
 [[package]]
 name = "terminal_size"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a14cd9f8c72704232f0bfc8455c0e861f0ad4eb60cc9ec8a170e231414c1e13"
+checksum = "5e288a11a53da73056d3c7cbdee83b1d1ce3344c3210a1f8b56c32f9662a87e9"
 dependencies = [
  "libc",
  "winapi",
