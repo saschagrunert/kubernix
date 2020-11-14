@@ -244,17 +244,17 @@ args:
 
 KuberNix has some configuration possibilities, which are currently:
 
-| CLI argument      | Description                                                                         | Default        | Environment Variable         |
-| ----------------- | ----------------------------------------------------------------------------------- | -------------- | ---------------------------- |
-| `-r, --root`      | Path where all the runtime data is stored                                           | `kubernix-run` | `KUBERNIX_ROOT`              |
-| `-l, --log-level` | Logging verbosity                                                                   | `info`         | `KUBERNIX_LOG_LEVEL`         |
-| `-c, --cidr`      | CIDR used for the cluster network                                                   | `10.10.0.0/16` | `KUBERNIX_CIDR`              |
-| `-s, --shell`     | The shell executable to be used                                                     | `$SHELL`/`sh`  | `KUBERNIX_SHELL`             |
-| `-e, --no-shell`  | Do not spawn an interactive shell after bootstrap                                   | `false`        | `KUBERNIX_NO_SHELL`          |
-| `-n, --nodes`     | The number of nodes to be registered                                                | `1`            | `KUBERNIX_NODES`             |
-| `-u, --runtime`   | The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1` | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
-| `-o, --overlay`   | Nix package overlay to be used                                                      |                | `KUBERNIX_OVERLAY`           |
-| `-p, --packages`  | Additional Nix dependencies to be added to the environment                          |                | `KUBERNIX_PACKAGES`          |
+| CLI argument              | Description                                                                         | Default        | Environment Variable         |
+| ------------------------- | ----------------------------------------------------------------------------------- | -------------- | ---------------------------- |
+| `-r, --root`              | Path where all the runtime data is stored                                           | `kubernix-run` | `KUBERNIX_ROOT`              |
+| `-l, --log-level`         | Logging verbosity                                                                   | `info`         | `KUBERNIX_LOG_LEVEL`         |
+| `-c, --cidr`              | CIDR used for the cluster network                                                   | `10.10.0.0/16` | `KUBERNIX_CIDR`              |
+| `-s, --shell`             | The shell executable to be used                                                     | `$SHELL`/`sh`  | `KUBERNIX_SHELL`             |
+| `-e, --no-shell`          | Do not spawn an interactive shell after bootstrap                                   | `false`        | `KUBERNIX_NO_SHELL`          |
+| `-n, --nodes`             | The number of nodes to be registered                                                | `1`            | `KUBERNIX_NODES`             |
+| `-u, --container-runtime` | The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1` | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
+| `-o, --overlay`           | Nix package overlay to be used                                                      |                | `KUBERNIX_OVERLAY`           |
+| `-p, --packages`          | Additional Nix dependencies to be added to the environment                          |                | `KUBERNIX_PACKAGES`          |
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
@@ -264,8 +264,8 @@ up over the necessary cluster components.
 
 It is possible to spawn multiple worker nodes, too. To do this, simply adjust
 the `-n, --nodes` command line argument as well as your preferred container
-runtime via `-u, --runtime`. The default runtime is [podman][41], but every
-other Docker drop-in replacement should work out of the box.
+runtime via `-u, --container-runtime`. The default runtime is [podman][41],
+but every other Docker drop-in replacement should work out of the box.
 
 #### Overlays
 
