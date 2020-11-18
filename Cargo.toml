@@ -29,7 +29,7 @@ ipnetwork = "0.17.0"
 lazy_static = "1.4.0"
 log = { version = "0.4.11", features = ["serde", "std"] }
 nix = "0.19.0"
-parking_lot = "0.11.0"
+parking_lot = "0.11.1"
 proc-mounts = "0.2.4"
 rand = "0.7.3"
 rayon = "1.5.0"
