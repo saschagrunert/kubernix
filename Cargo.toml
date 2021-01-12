@@ -36,7 +36,7 @@ rayon = "1.5.0"
 serde = { version = "1.0.119", features = ["derive"] }
 serde_json = "1.0.61"
 serde_yaml = "0.8.15"
-signal-hook = "0.2.2"
+signal-hook = "0.3.3"
 toml = "0.5.8"
 
 [dev-dependencies]
