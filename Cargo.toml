@@ -40,4 +40,4 @@ signal-hook = "0.2.2"
 toml = "0.5.8"
 
 [dev-dependencies]
-tempfile = "3.1.0"
+tempfile = "3.2.0"
