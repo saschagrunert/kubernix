@@ -54,7 +54,10 @@ use anyhow::{bail, Context, Result};
 use log::{debug, error, info, set_boxed_logger};
 use proc_mounts::MountIter;
 use rayon::{prelude::*, scope};
-use signal_hook::{flag, SIGHUP, SIGINT, SIGTERM};
+use signal_hook::{
+    consts::signal::{SIGHUP, SIGINT, SIGTERM},
+    flag,
+};
 use std::{
     fs,
     path::PathBuf,
