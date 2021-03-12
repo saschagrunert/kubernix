@@ -10,7 +10,7 @@ stdenv: &stdenv
 executors:
   container:
     docker:
-      - image: &image nixos/nix
+      - image: &image nixos/nix:2.3
     <<: *stdenv
 
   container-musl:
@@ -207,7 +207,9 @@ jobs:
       - save_cache:
           key: v1-docs-{{ checksum "nix/nixpkgs.json" }}-{{ checksum "Cargo.lock" }}
           paths:
+            - /nix
             - target
+            - ~/.cargo
       - persist_to_workspace:
           root: .
           paths:
@@ -310,6 +312,7 @@ jobs:
           command: << parameters.run >>
           environment:
             BASH_ENV: ~/.nix-profile/etc/profile.d/nix.sh
+          no_output_timeout: 60m
       - run:
           name: Fixup cache
           command: sudo chown -R $(id -u):$(id -g) /nix
