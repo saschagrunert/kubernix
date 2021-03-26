@@ -421,7 +421,7 @@
 <span class="kw">use</span> <span class="ident">apiserver</span>::<span class="ident">ApiServer</span>;
 <span class="kw">use</span> <span class="ident">container</span>::<span class="ident">Container</span>;
 <span class="kw">use</span> <span class="ident">controllermanager</span>::<span class="ident">ControllerManager</span>;
-<span class="kw">use</span> <span class="ident">coredns</span>::<span class="ident">CoreDNS</span>;
+<span class="kw">use</span> <span class="ident">coredns</span>::<span class="ident">CoreDns</span>;
 <span class="kw">use</span> <span class="ident">crio</span>::<span class="ident">Crio</span>;
 <span class="kw">use</span> <span class="ident">encryptionconfig</span>::<span class="ident">EncryptionConfig</span>;
 <span class="kw">use</span> <span class="ident">etcd</span>::<span class="ident">Etcd</span>;
@@ -668,7 +668,7 @@
     <span class="doccomment">/// Apply needed workloads to the running cluster. This method stops the cluster on any error.</span>
     <span class="kw">fn</span> <span class="ident">apply_addons</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Applying cluster addons&quot;</span>);
-        <span class="ident">CoreDNS</span>::<span class="ident">apply</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">network</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">kubectl</span>)
+        <span class="ident">CoreDns</span>::<span class="ident">apply</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">network</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">kubectl</span>)
     }
 
     <span class="doccomment">/// Wait until a termination signal occurs</span>
@@ -775,4 +775,5 @@
     }
 }
 </pre></div>
-</section><section id="search" class="content hidden"></section><section class="footer"></section><script>window.rootPath = "../../";window.currentCrate = "kubernix";</script><script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>
+</section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="kubernix"></div>
+    <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script><script defer src="../../search-index.js"></script></body></html>
