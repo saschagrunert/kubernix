@@ -31,7 +31,7 @@ use crate::nix::Nix;
 use apiserver::ApiServer;
 use container::Container;
 use controllermanager::ControllerManager;
-use coredns::CoreDNS;
+use coredns::CoreDns;
 use crio::Crio;
 use encryptionconfig::EncryptionConfig;
 use etcd::Etcd;
@@ -278,7 +278,7 @@ impl Kubernix {
     /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
     fn apply_addons(&mut self) -> Result<()> {
         info!("Applying cluster addons");
-        CoreDNS::apply(&self.config, &self.network, &self.kubectl)
+        CoreDns::apply(&self.config, &self.network, &self.kubectl)
     }
 
     /// Wait until a termination signal occurs

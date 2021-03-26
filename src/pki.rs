@@ -210,67 +210,53 @@ impl Pki {
         let user = Self::node_user(node);
         let csr_file = pki_config.dir().join(format!("{}-csr.json", node));
         Self::write_csr(&user, "system:nodes", &csr_file)?;
-        Ok(Self::generate(pki_config, node, &csr_file, &user)?)
+        Self::generate(pki_config, node, &csr_file, &user)
     }
 
     fn setup_admin(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("admin-csr.json");
         Self::write_csr(ADMIN_NAME, "system:masters", &csr_file)?;
-        Ok(Self::generate(
-            pki_config, ADMIN_NAME, &csr_file, ADMIN_NAME,
-        )?)
+        Self::generate(pki_config, ADMIN_NAME, &csr_file, ADMIN_NAME)
     }
 
     fn setup_controller_manager(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("kube-controller-manager-csr.json");
         Self::write_csr(CONTROLLER_MANAGER_USER, CONTROLLER_MANAGER_USER, &csr_file)?;
-        Ok(Self::generate(
+        Self::generate(
             pki_config,
             CONTROLLER_MANAGER_NAME,
             &csr_file,
             CONTROLLER_MANAGER_USER,
-        )?)
+        )
     }
 
     fn setup_proxy(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("kube-proxy-csr.json");
         Self::write_csr("system:kube-proxy", "system:node-proxier", &csr_file)?;
-        Ok(Self::generate(
-            pki_config, PROXY_NAME, &csr_file, PROXY_USER,
-        )?)
+        Self::generate(pki_config, PROXY_NAME, &csr_file, PROXY_USER)
     }
 
     fn setup_scheduler(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("kube-scheduler-csr.json");
         Self::write_csr(SCHEDULER_USER, SCHEDULER_USER, &csr_file)?;
-        Ok(Self::generate(
-            pki_config,
-            SCHEDULER_NAME,
-            &csr_file,
-            SCHEDULER_USER,
-        )?)
+        Self::generate(pki_config, SCHEDULER_NAME, &csr_file, SCHEDULER_USER)
     }
 
     fn setup_apiserver(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("kubernetes-csr.json");
         Self::write_csr(APISERVER_NAME, APISERVER_NAME, &csr_file)?;
-        Ok(Self::generate(
-            pki_config,
-            APISERVER_NAME,
-            &csr_file,
-            APISERVER_NAME,
-        )?)
+        Self::generate(pki_config, APISERVER_NAME, &csr_file, APISERVER_NAME)
     }
 
     fn setup_service_account(pki_config: &PkiConfig) -> Result<Idendity> {
         let csr_file = pki_config.dir().join("service-account-csr.json");
         Self::write_csr("service-accounts", "kubernetes", &csr_file)?;
-        Ok(Self::generate(
+        Self::generate(
             pki_config,
             SERVICE_ACCOUNT_NAME,
             &csr_file,
             SERVICE_ACCOUNT_NAME,
-        )?)
+        )
     }
 
     fn generate(pki_config: &PkiConfig, name: &str, csr: &Path, user: &str) -> Result<Idendity> {

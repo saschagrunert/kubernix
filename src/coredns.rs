@@ -3,9 +3,9 @@ use anyhow::{Context, Result};
 use log::info;
 use std::fs::{self, create_dir_all};
 
-pub struct CoreDNS;
+pub struct CoreDns;
 
-impl CoreDNS {
+impl CoreDns {
     pub fn apply(config: &Config, network: &Network, kubectl: &Kubectl) -> Result<()> {
         info!("Deploying CoreDNS and waiting to be ready");
 
