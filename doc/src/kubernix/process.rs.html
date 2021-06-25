@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/process.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>process.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><script src="../../crates.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="alternate icon" type="image/png" href="../../favicon-16x16.png">
-<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../kubernix/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><script src="../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
+<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../kubernix/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
                 <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
 <span id="2">  2</span>
 <span id="3">  3</span>
@@ -261,13 +261,13 @@
 <span id="258">258</span>
 <span id="259">259</span>
 </pre><div class="example-wrap"><pre class="rust ">
-<span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">system</span>::<span class="ident">System</span>;
+<span class="kw">use</span> <span class="kw">crate</span><span class="ident">::system::System</span>;
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">bail</span>, <span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
 <span class="kw">use</span> <span class="ident">crossbeam_channel</span>::{<span class="ident">bounded</span>, <span class="ident">Receiver</span>, <span class="ident">Sender</span>};
 <span class="kw">use</span> <span class="ident">log</span>::{<span class="ident">debug</span>, <span class="ident">error</span>, <span class="ident">info</span>};
 <span class="kw">use</span> <span class="ident">nix</span>::{
-    <span class="ident">sys</span>::<span class="ident">signal</span>::{<span class="ident">kill</span>, <span class="ident">Signal</span>},
-    <span class="ident">unistd</span>::<span class="ident">Pid</span>,
+    <span class="ident">sys::signal</span>::{<span class="ident">kill</span>, <span class="ident">Signal</span>},
+    <span class="ident">unistd::Pid</span>,
 };
 <span class="kw">use</span> <span class="ident">serde</span>::{<span class="ident">Deserialize</span>, <span class="ident">Serialize</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
@@ -276,7 +276,7 @@
     <span class="ident">path</span>::{<span class="ident">Path</span>, <span class="ident">PathBuf</span>},
     <span class="ident">process</span>::{<span class="ident">Command</span>, <span class="ident">Stdio</span>},
     <span class="ident">thread</span>::{<span class="ident">spawn</span>, <span class="ident">JoinHandle</span>},
-    <span class="ident">time</span>::<span class="ident">Instant</span>,
+    <span class="ident">time::Instant</span>,
 };
 
 <span class="doccomment">/// A general process abstraction</span>
@@ -318,9 +318,9 @@
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="ident">dir</span>: <span class="kw-2">&amp;</span><span class="ident">Path</span>, <span class="ident">identifier</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">command</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>, <span class="ident">args</span>: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="ident">str</span>]) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Process</span><span class="op">&gt;</span> {
         <span class="comment">// Prepare the commands</span>
         <span class="kw">if</span> <span class="ident">command</span>.<span class="ident">is_empty</span>() {
-            <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;No valid command provided&quot;</span>)
+            <span class="macro">bail!</span>(<span class="string">&quot;No valid command provided&quot;</span>)
         }
-        <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;Starting {}&quot;</span>, <span class="ident">identifier</span>);
+        <span class="macro">info!</span>(<span class="string">&quot;Starting {}&quot;</span>, <span class="ident">identifier</span>);
 
         <span class="comment">// Write the executed command into the dir</span>
         <span class="ident">create_dir_all</span>(<span class="ident">dir</span>)<span class="question-mark">?</span>;
@@ -328,36 +328,36 @@
         <span class="comment">// If the run file exists, execute only that one</span>
         <span class="kw">let</span> <span class="ident">run_file</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;run.yml&quot;</span>);
         <span class="kw">let</span> <span class="ident">run</span> <span class="op">=</span> <span class="kw">if</span> <span class="op">!</span><span class="ident">run_file</span>.<span class="ident">exists</span>() {
-            <span class="macro">debug</span><span class="macro">!</span>(
+            <span class="macro">debug!</span>(
                 <span class="string">&quot;No previous run file &#39;{}&#39; found, writing new one&quot;</span>,
                 <span class="ident">run_file</span>.<span class="ident">display</span>()
             );
             <span class="comment">// Write the run file</span>
             <span class="kw">let</span> <span class="ident">f</span> <span class="op">=</span> <span class="ident">Run</span> {
-                <span class="ident">command</span>: <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="ident">command</span>)<span class="question-mark">?</span>,
+                <span class="ident">command</span>: <span class="ident">System::find_executable</span>(<span class="ident">command</span>)<span class="question-mark">?</span>,
                 <span class="ident">args</span>: <span class="ident">args</span>.<span class="ident">iter</span>().<span class="ident">map</span>(<span class="op">|</span><span class="ident">x</span><span class="op">|</span> (<span class="kw-2">*</span><span class="ident">x</span>).<span class="ident">to_string</span>()).<span class="ident">collect</span>(),
             };
-            <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">run_file</span>, <span class="ident">serde_yaml</span>::<span class="ident">to_string</span>(<span class="kw-2">&amp;</span><span class="ident">f</span>)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+            <span class="ident">fs::write</span>(<span class="ident">run_file</span>, <span class="ident">serde_yaml::to_string</span>(<span class="kw-2">&amp;</span><span class="ident">f</span>)<span class="question-mark">?</span>)<span class="question-mark">?</span>;
             <span class="ident">f</span>
         } <span class="kw">else</span> {
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Re using run file &#39;{}&#39;&quot;</span>, <span class="ident">run_file</span>.<span class="ident">display</span>());
-            <span class="kw">let</span> <span class="ident">f</span> <span class="op">=</span> <span class="ident">File</span>::<span class="ident">open</span>(<span class="ident">run_file</span>)<span class="question-mark">?</span>;
-            <span class="ident">serde_yaml</span>::<span class="ident">from_reader</span>(<span class="ident">f</span>)<span class="question-mark">?</span>
+            <span class="macro">debug!</span>(<span class="string">&quot;Re using run file &#39;{}&#39;&quot;</span>, <span class="ident">run_file</span>.<span class="ident">display</span>());
+            <span class="kw">let</span> <span class="ident">f</span> <span class="op">=</span> <span class="ident">File::open</span>(<span class="ident">run_file</span>)<span class="question-mark">?</span>;
+            <span class="ident">serde_yaml::from_reader</span>(<span class="ident">f</span>)<span class="question-mark">?</span>
         };
 
         <span class="comment">// Prepare the log dir and file</span>
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">log_file</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="ident">command</span>);
         <span class="ident">log_file</span>.<span class="ident">set_extension</span>(<span class="string">&quot;log&quot;</span>);
-        <span class="kw">let</span> <span class="ident">out_file</span> <span class="op">=</span> <span class="ident">File</span>::<span class="ident">create</span>(<span class="kw-2">&amp;</span><span class="ident">log_file</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">out_file</span> <span class="op">=</span> <span class="ident">File::create</span>(<span class="kw-2">&amp;</span><span class="ident">log_file</span>)<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">err_file</span> <span class="op">=</span> <span class="ident">out_file</span>.<span class="ident">try_clone</span>()<span class="question-mark">?</span>;
 
         <span class="comment">// Spawn the process child</span>
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">child</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="ident">run</span>.<span class="ident">command</span>)
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">child</span> <span class="op">=</span> <span class="ident">Command::new</span>(<span class="ident">run</span>.<span class="ident">command</span>)
             .<span class="ident">args</span>(<span class="ident">run</span>.<span class="ident">args</span>)
-            .<span class="ident">stderr</span>(<span class="ident">Stdio</span>::<span class="ident">from</span>(<span class="ident">err_file</span>))
-            .<span class="ident">stdout</span>(<span class="ident">Stdio</span>::<span class="ident">from</span>(<span class="ident">out_file</span>))
+            .<span class="ident">stderr</span>(<span class="ident">Stdio::from</span>(<span class="ident">err_file</span>))
+            .<span class="ident">stdout</span>(<span class="ident">Stdio::from</span>(<span class="ident">out_file</span>))
             .<span class="ident">spawn</span>()
-            .<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;Unable to start process &#39;{}&#39; ({})&quot;</span>, <span class="ident">identifier</span>, <span class="ident">command</span>,))<span class="question-mark">?</span>;
+            .<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format!</span>(<span class="string">&quot;Unable to start process &#39;{}&#39; ({})&quot;</span>, <span class="ident">identifier</span>, <span class="ident">command</span>,))<span class="question-mark">?</span>;
 
         <span class="comment">// Start the watcher thread</span>
         <span class="kw">let</span> (<span class="ident">kill</span>, <span class="ident">killed</span>) <span class="op">=</span> <span class="ident">bounded</span>(<span class="number">1</span>);
@@ -371,12 +371,12 @@
 
             <span class="comment">// No kill send, we assume that the process died</span>
             <span class="kw">if</span> <span class="ident">killed</span>.<span class="ident">try_recv</span>().<span class="ident">is_err</span>() {
-                <span class="macro">error</span><span class="macro">!</span>(<span class="string">&quot;{} ({}) died unexpectedly&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>);
+                <span class="macro">error!</span>(<span class="string">&quot;{} ({}) died unexpectedly&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>);
                 <span class="ident">dead</span>.<span class="ident">send</span>(())<span class="question-mark">?</span>;
             } <span class="kw">else</span> {
-                <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;{} stopped&quot;</span>, <span class="ident">n</span>);
+                <span class="macro">info!</span>(<span class="string">&quot;{} stopped&quot;</span>, <span class="ident">n</span>);
             }
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;{} ({}) {}&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>, <span class="ident">status</span>);
+            <span class="macro">debug!</span>(<span class="string">&quot;{} ({}) {}&quot;</span>, <span class="ident">n</span>, <span class="ident">c</span>, <span class="ident">status</span>);
             <span class="prelude-val">Ok</span>(())
         });
 
@@ -395,71 +395,71 @@
     <span class="doccomment">/// Wait for the process to become ready, by searching for the pattern in</span>
     <span class="doccomment">/// every line of its output.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">wait_ready</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>, <span class="ident">pattern</span>: <span class="kw-2">&amp;</span><span class="ident">str</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="macro">debug</span><span class="macro">!</span>(
+        <span class="macro">debug!</span>(
             <span class="string">&quot;Waiting for process &#39;{}&#39; ({}) to become ready with pattern: &#39;{}&#39;&quot;</span>,
             <span class="self">self</span>.<span class="ident">name</span>, <span class="self">self</span>.<span class="ident">command</span>, <span class="ident">pattern</span>
         );
-        <span class="kw">let</span> <span class="ident">now</span> <span class="op">=</span> <span class="ident">Instant</span>::<span class="ident">now</span>();
-        <span class="kw">let</span> <span class="ident">file</span> <span class="op">=</span> <span class="ident">File</span>::<span class="ident">open</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">log_file</span>)<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">reader</span> <span class="op">=</span> <span class="ident">BufReader</span>::<span class="ident">new</span>(<span class="ident">file</span>);
+        <span class="kw">let</span> <span class="ident">now</span> <span class="op">=</span> <span class="ident">Instant::now</span>();
+        <span class="kw">let</span> <span class="ident">file</span> <span class="op">=</span> <span class="ident">File::open</span>(<span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">log_file</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">reader</span> <span class="op">=</span> <span class="ident">BufReader::new</span>(<span class="ident">file</span>);
 
         <span class="kw">while</span> <span class="ident">now</span>.<span class="ident">elapsed</span>().<span class="ident">as_secs</span>() <span class="op">&lt;</span> <span class="self">self</span>.<span class="ident">readyness_timeout</span> {
-            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">line</span> <span class="op">=</span> <span class="ident">String</span>::<span class="ident">new</span>();
+            <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">line</span> <span class="op">=</span> <span class="ident">String::new</span>();
             <span class="ident">reader</span>.<span class="ident">read_line</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">line</span>)<span class="question-mark">?</span>;
 
             <span class="kw">if</span> <span class="ident">line</span>.<span class="ident">contains</span>(<span class="ident">pattern</span>) {
-                <span class="macro">info</span><span class="macro">!</span>(<span class="string">&quot;{} is ready&quot;</span>, <span class="self">self</span>.<span class="ident">name</span>);
-                <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Found pattern &#39;{}&#39; in line &#39;{}&#39;&quot;</span>, <span class="ident">pattern</span>, <span class="ident">line</span>.<span class="ident">trim</span>());
+                <span class="macro">info!</span>(<span class="string">&quot;{} is ready&quot;</span>, <span class="self">self</span>.<span class="ident">name</span>);
+                <span class="macro">debug!</span>(<span class="string">&quot;Found pattern &#39;{}&#39; in line &#39;{}&#39;&quot;</span>, <span class="ident">pattern</span>, <span class="ident">line</span>.<span class="ident">trim</span>());
                 <span class="kw">return</span> <span class="prelude-val">Ok</span>(());
             }
 
             <span class="kw">if</span> <span class="self">self</span>.<span class="ident">died</span>.<span class="ident">try_recv</span>().<span class="ident">is_ok</span>() {
-                <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;{} ({}) died&quot;</span>, <span class="self">self</span>.<span class="ident">command</span>, <span class="self">self</span>.<span class="ident">name</span>)
+                <span class="macro">bail!</span>(<span class="string">&quot;{} ({}) died&quot;</span>, <span class="self">self</span>.<span class="ident">command</span>, <span class="self">self</span>.<span class="ident">name</span>)
             }
         }
 
         <span class="comment">// Cleanup since process is not ready</span>
         <span class="self">self</span>.<span class="ident">stop</span>()<span class="question-mark">?</span>;
-        <span class="macro">error</span><span class="macro">!</span>(
+        <span class="macro">error!</span>(
             <span class="string">&quot;Timed out waiting for process &#39;{}&#39; ({}) to become ready&quot;</span>,
             <span class="self">self</span>.<span class="ident">name</span>, <span class="self">self</span>.<span class="ident">command</span>
         );
-        <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Process timeout&quot;</span>)
+        <span class="macro">bail!</span>(<span class="string">&quot;Process timeout&quot;</span>)
     }
 
     <span class="doccomment">/// Retrieve a pseudo state for stopped processes</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">stopped</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="ident">ProcessState</span> {
-        <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Process not started yet&quot;</span>)
+        <span class="macro">bail!</span>(<span class="string">&quot;Process not started yet&quot;</span>)
     }
 }
 
 <span class="kw">impl</span> <span class="ident">Stoppable</span> <span class="kw">for</span> <span class="ident">Process</span> {
     <span class="doccomment">/// Stopping the process by killing it</span>
     <span class="kw">fn</span> <span class="ident">stop</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Stopping process {} (via {})&quot;</span>, <span class="self">self</span>.<span class="ident">name</span>, <span class="self">self</span>.<span class="ident">command</span>);
+        <span class="macro">debug!</span>(<span class="string">&quot;Stopping process {} (via {})&quot;</span>, <span class="self">self</span>.<span class="ident">name</span>, <span class="self">self</span>.<span class="ident">command</span>);
 
         <span class="comment">// Indicate that this shutdown is intended</span>
         <span class="self">self</span>.<span class="ident">kill</span>.<span class="ident">send</span>(()).<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> {
-            <span class="macro">format</span><span class="macro">!</span>(
+            <span class="macro">format!</span>(
                 <span class="string">&quot;Unable to send kill signal to process {} (via {})&quot;</span>,
                 <span class="self">self</span>.<span class="ident">name</span>, <span class="self">self</span>.<span class="ident">command</span>,
             )
         })<span class="question-mark">?</span>;
 
         <span class="comment">// Send SIGTERM to the process</span>
-        <span class="ident">kill</span>(<span class="ident">Pid</span>::<span class="ident">from_raw</span>(<span class="self">self</span>.<span class="ident">pid</span> <span class="kw">as</span> <span class="ident">i32</span>), <span class="ident">Signal</span>::<span class="ident">SIGTERM</span>)<span class="question-mark">?</span>;
+        <span class="ident">kill</span>(<span class="ident">Pid::from_raw</span>(<span class="self">self</span>.<span class="ident">pid</span> <span class="kw">as</span> <span class="ident">i32</span>), <span class="ident">Signal::SIGTERM</span>)<span class="question-mark">?</span>;
 
         <span class="comment">// Join the waiting thread</span>
         <span class="kw">if</span> <span class="kw">let</span> <span class="prelude-val">Some</span>(<span class="ident">handle</span>) <span class="op">=</span> <span class="self">self</span>.<span class="ident">watch</span>.<span class="ident">take</span>() {
             <span class="kw">if</span> <span class="ident">handle</span>.<span class="ident">join</span>().<span class="ident">is_err</span>() {
-                <span class="macro">bail</span><span class="macro">!</span>(
+                <span class="macro">bail!</span>(
                     <span class="string">&quot;Unable to stop process {} (via {})&quot;</span>,
                     <span class="self">self</span>.<span class="ident">name</span>,
                     <span class="self">self</span>.<span class="ident">command</span>
                 );
             }
         }
-        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Process {} (via {}) stopped&quot;</span>, <span class="self">self</span>.<span class="ident">name</span>, <span class="self">self</span>.<span class="ident">command</span>);
+        <span class="macro">debug!</span>(<span class="string">&quot;Process {} (via {}) stopped&quot;</span>, <span class="self">self</span>.<span class="ident">name</span>, <span class="self">self</span>.<span class="ident">command</span>);
         <span class="prelude-val">Ok</span>(())
     }
 }
@@ -467,38 +467,38 @@
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
 <span class="kw">mod</span> <span class="ident">tests</span> {
     <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use</span> <span class="ident">tempfile</span>::<span class="ident">tempdir</span>;
+    <span class="kw">use</span> <span class="ident">tempfile::tempdir</span>;
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">stopped</span>() {
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">Process</span>::<span class="ident">stopped</span>().<span class="ident">is_err</span>())
+        <span class="macro">assert!</span>(<span class="ident">Process::stopped</span>().<span class="ident">is_err</span>())
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">start_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">d</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>;
-        <span class="ident">Process</span>::<span class="ident">start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;echo&quot;</span>, <span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>;
+        <span class="ident">Process::start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;echo&quot;</span>, <span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">start_failure_no_command</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">d</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>;
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">Process</span>::<span class="ident">start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;&quot;</span>, <span class="kw-2">&amp;</span>[]).<span class="ident">is_err</span>());
+        <span class="macro">assert!</span>(<span class="ident">Process::start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;&quot;</span>, <span class="kw-2">&amp;</span>[]).<span class="ident">is_err</span>());
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">start_failure_invalid_command</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">d</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>;
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">Process</span>::<span class="ident">start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;invalid_command&quot;</span>, <span class="kw-2">&amp;</span>[]).<span class="ident">is_err</span>());
+        <span class="macro">assert!</span>(<span class="ident">Process::start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;invalid_command&quot;</span>, <span class="kw-2">&amp;</span>[]).<span class="ident">is_err</span>());
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">wait_ready_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">d</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p</span> <span class="op">=</span> <span class="ident">Process</span>::<span class="ident">start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;echo&quot;</span>, <span class="kw-2">&amp;</span>[<span class="string">&quot;test&quot;</span>])<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p</span> <span class="op">=</span> <span class="ident">Process::start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;echo&quot;</span>, <span class="kw-2">&amp;</span>[<span class="string">&quot;test&quot;</span>])<span class="question-mark">?</span>;
         <span class="ident">p</span>.<span class="ident">wait_ready</span>(<span class="string">&quot;test&quot;</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
@@ -506,20 +506,20 @@
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">wait_ready_failure</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">d</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p</span> <span class="op">=</span> <span class="ident">Process</span>::<span class="ident">start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;echo&quot;</span>, <span class="kw-2">&amp;</span>[<span class="string">&quot;test&quot;</span>])<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p</span> <span class="op">=</span> <span class="ident">Process::start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;echo&quot;</span>, <span class="kw-2">&amp;</span>[<span class="string">&quot;test&quot;</span>])<span class="question-mark">?</span>;
         <span class="ident">p</span>.<span class="ident">readyness_timeout</span> <span class="op">=</span> <span class="number">1</span>;
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">p</span>.<span class="ident">wait_ready</span>(<span class="string">&quot;invalid&quot;</span>).<span class="ident">is_err</span>());
+        <span class="macro">assert!</span>(<span class="ident">p</span>.<span class="ident">wait_ready</span>(<span class="string">&quot;invalid&quot;</span>).<span class="ident">is_err</span>());
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">stop_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="ident">d</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p</span> <span class="op">=</span> <span class="ident">Process</span>::<span class="ident">start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;sleep&quot;</span>, <span class="kw-2">&amp;</span>[<span class="string">&quot;500&quot;</span>])<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">p</span> <span class="op">=</span> <span class="ident">Process::start</span>(<span class="ident">d</span>.<span class="ident">path</span>(), <span class="string">&quot;&quot;</span>, <span class="string">&quot;sleep&quot;</span>, <span class="kw-2">&amp;</span>[<span class="string">&quot;500&quot;</span>])<span class="question-mark">?</span>;
         <span class="ident">p</span>.<span class="ident">stop</span>()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 }
 </pre></div>
-</section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="kubernix" data-search-js="../../search-index.js"></div>
+</section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="kubernix" data-search-index-js="../../search-index.js" data-search-js="../../search.js"></div>
     <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script></body></html>

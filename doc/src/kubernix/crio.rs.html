@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/crio.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>crio.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><script src="../../crates.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="alternate icon" type="image/png" href="../../favicon-16x16.png">
-<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../kubernix/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><script src="../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
+<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../kubernix/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
                 <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
 <span id="2">  2</span>
 <span id="3">  3</span>
@@ -214,21 +214,21 @@
 <span id="211">211</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="kw">use</span> <span class="kw">crate</span>::{
-    <span class="ident">container</span>::<span class="ident">Container</span>,
-    <span class="ident">network</span>::<span class="ident">Network</span>,
-    <span class="ident">node</span>::<span class="ident">Node</span>,
+    <span class="ident">container::Container</span>,
+    <span class="ident">network::Network</span>,
+    <span class="ident">node::Node</span>,
     <span class="ident">process</span>::{<span class="ident">Process</span>, <span class="ident">ProcessState</span>, <span class="ident">Stoppable</span>},
-    <span class="ident">system</span>::<span class="ident">System</span>,
+    <span class="ident">system::System</span>,
     <span class="ident">Config</span>, <span class="ident">RUNTIME_ENV</span>,
 };
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">bail</span>, <span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
-<span class="kw">use</span> <span class="ident">log</span>::<span class="ident">debug</span>;
+<span class="kw">use</span> <span class="ident">log::debug</span>;
 <span class="kw">use</span> <span class="ident">serde_json</span>::{<span class="ident">json</span>, <span class="ident">to_string_pretty</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">fmt</span>::{<span class="self">self</span>, <span class="ident">Display</span>, <span class="ident">Formatter</span>},
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">create_dir_all</span>},
-    <span class="ident">path</span>::<span class="ident">PathBuf</span>,
-    <span class="ident">process</span>::<span class="ident">Command</span>,
+    <span class="ident">path::PathBuf</span>,
+    <span class="ident">process::Command</span>,
 };
 
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Crio</span> {
@@ -241,21 +241,21 @@
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">CriSocket</span>(<span class="ident">PathBuf</span>);
 
 <span class="kw">impl</span> <span class="ident">Display</span> <span class="kw">for</span> <span class="ident">CriSocket</span> {
-    <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">fmt</span>::<span class="prelude-ty">Result</span> {
-        <span class="macro">write</span><span class="macro">!</span>(<span class="ident">f</span>, <span class="string">&quot;{}&quot;</span>, <span class="self">self</span>.<span class="number">0</span>.<span class="ident">display</span>())
+    <span class="kw">fn</span> <span class="ident">fmt</span>(<span class="kw-2">&amp;</span><span class="self">self</span>, <span class="ident">f</span>: <span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">Formatter</span><span class="op">&lt;</span><span class="lifetime">&#39;_</span><span class="op">&gt;</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">fmt::Result</span> {
+        <span class="macro">write!</span>(<span class="ident">f</span>, <span class="string">&quot;{}&quot;</span>, <span class="self">self</span>.<span class="number">0</span>.<span class="ident">display</span>())
     }
 }
 
 <span class="kw">impl</span> <span class="ident">CriSocket</span> {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">new</span>(<span class="ident">path</span>: <span class="ident">PathBuf</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">CriSocket</span><span class="op">&gt;</span> {
         <span class="kw">if</span> <span class="ident">path</span>.<span class="ident">display</span>().<span class="ident">to_string</span>().<span class="ident">len</span>() <span class="op">&gt;</span> <span class="number">100</span> {
-            <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;Socket path &#39;{}&#39; is too long&quot;</span>)
+            <span class="macro">bail!</span>(<span class="string">&quot;Socket path &#39;{}&#39; is too long&quot;</span>)
         }
         <span class="prelude-val">Ok</span>(<span class="ident">CriSocket</span>(<span class="ident">path</span>))
     }
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">to_socket_string</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">String</span> {
-        <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;unix://{}&quot;</span>, <span class="self">self</span>.<span class="number">0</span>.<span class="ident">display</span>())
+        <span class="macro">format!</span>(<span class="string">&quot;unix://{}&quot;</span>, <span class="self">self</span>.<span class="number">0</span>.<span class="ident">display</span>())
     }
 }
 
@@ -263,17 +263,17 @@
 
 <span class="kw">impl</span> <span class="ident">Crio</span> {
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">start</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">node</span>: <span class="ident">u8</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="ident">ProcessState</span> {
-        <span class="kw">let</span> <span class="ident">node_name</span> <span class="op">=</span> <span class="ident">Node</span>::<span class="ident">name</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>);
+        <span class="kw">let</span> <span class="ident">node_name</span> <span class="op">=</span> <span class="ident">Node::name</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>);
 
-        <span class="kw">let</span> <span class="ident">conmon</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;conmon&quot;</span>)<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">loopback</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;loopback&quot;</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">conmon</span> <span class="op">=</span> <span class="ident">System::find_executable</span>(<span class="string">&quot;conmon&quot;</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">loopback</span> <span class="op">=</span> <span class="ident">System::find_executable</span>(<span class="string">&quot;loopback&quot;</span>)<span class="question-mark">?</span>;
         <span class="kw">let</span> <span class="ident">cni_plugin</span> <span class="op">=</span> <span class="ident">loopback</span>.<span class="ident">parent</span>().<span class="ident">context</span>(<span class="string">&quot;Unable to find CNI plugin dir&quot;</span>)<span class="question-mark">?</span>;
 
-        <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">path</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>);
+        <span class="kw">let</span> <span class="ident">dir</span> <span class="op">=</span> <span class="self">Self</span><span class="ident">::path</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>);
         <span class="kw">let</span> <span class="ident">config_dir</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;crio.conf.d&quot;</span>);
         <span class="kw">let</span> <span class="ident">config_file</span> <span class="op">=</span> <span class="ident">config_dir</span>.<span class="ident">join</span>(<span class="string">&quot;crio.conf&quot;</span>);
         <span class="kw">let</span> <span class="ident">network_dir</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;cni&quot;</span>);
-        <span class="kw">let</span> <span class="ident">socket</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">socket</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">socket</span> <span class="op">=</span> <span class="self">Self</span><span class="ident">::socket</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>)<span class="question-mark">?</span>;
 
         <span class="kw">if</span> <span class="op">!</span><span class="ident">dir</span>.<span class="ident">exists</span>() {
             <span class="ident">create_dir_all</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>)<span class="question-mark">?</span>;
@@ -281,10 +281,10 @@
             <span class="ident">create_dir_all</span>(<span class="kw-2">&amp;</span><span class="ident">config_dir</span>)<span class="question-mark">?</span>;
 
             <span class="kw">let</span> <span class="ident">containers_dir</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;containers&quot;</span>);
-            <span class="ident">fs</span>::<span class="ident">write</span>(
+            <span class="ident">fs::write</span>(
                 <span class="kw-2">&amp;</span><span class="ident">config_file</span>,
-                <span class="macro">format</span><span class="macro">!</span>(
-                    <span class="macro">include_str</span><span class="macro">!</span>(<span class="string">&quot;assets/crio.conf&quot;</span>),
+                <span class="macro">format!</span>(
+                    <span class="macro">include_str!</span>(<span class="string">&quot;assets/crio.conf&quot;</span>),
                     <span class="ident">conmon</span> <span class="op">=</span> <span class="ident">conmon</span>.<span class="ident">display</span>(),
                     <span class="ident">containers_root</span> <span class="op">=</span> <span class="ident">containers_dir</span>.<span class="ident">join</span>(<span class="string">&quot;storage&quot;</span>).<span class="ident">display</span>(),
                     <span class="ident">containers_runroot</span> <span class="op">=</span> <span class="ident">containers_dir</span>.<span class="ident">join</span>(<span class="string">&quot;run&quot;</span>).<span class="ident">display</span>(),
@@ -293,10 +293,10 @@
                     <span class="ident">network_dir</span> <span class="op">=</span> <span class="ident">network_dir</span>.<span class="ident">display</span>(),
                     <span class="ident">plugin_dir</span> <span class="op">=</span> <span class="ident">cni_plugin</span>.<span class="ident">display</span>(),
                     <span class="ident">exits_dir</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;exits&quot;</span>).<span class="ident">display</span>(),
-                    <span class="ident">runtime_path</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">find_executable</span>(<span class="string">&quot;runc&quot;</span>)<span class="question-mark">?</span>.<span class="ident">display</span>(),
+                    <span class="ident">runtime_path</span> <span class="op">=</span> <span class="ident">System::find_executable</span>(<span class="string">&quot;runc&quot;</span>)<span class="question-mark">?</span>.<span class="ident">display</span>(),
                     <span class="ident">runtime_root</span> <span class="op">=</span> <span class="ident">dir</span>.<span class="ident">join</span>(<span class="string">&quot;runc&quot;</span>).<span class="ident">display</span>(),
-                    <span class="ident">signature_policy</span> <span class="op">=</span> <span class="ident">Container</span>::<span class="ident">policy_json</span>(<span class="ident">config</span>).<span class="ident">display</span>(),
-                    <span class="ident">storage_driver</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">multi_node</span>() <span class="op">|</span><span class="op">|</span> <span class="ident">System</span>::<span class="ident">in_container</span>()<span class="question-mark">?</span> {
+                    <span class="ident">signature_policy</span> <span class="op">=</span> <span class="ident">Container::policy_json</span>(<span class="ident">config</span>).<span class="ident">display</span>(),
+                    <span class="ident">storage_driver</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">multi_node</span>() <span class="op">|</span><span class="op">|</span> <span class="ident">System::in_container</span>()<span class="question-mark">?</span> {
                         <span class="string">&quot;vfs&quot;</span>
                     } <span class="kw">else</span> {
                         <span class="string">&quot;overlay&quot;</span>
@@ -308,14 +308,14 @@
             <span class="kw">let</span> <span class="ident">cidr</span> <span class="op">=</span> <span class="ident">network</span>
                 .<span class="ident">crio_cidrs</span>()
                 .<span class="ident">get</span>(<span class="ident">node</span> <span class="kw">as</span> <span class="ident">usize</span>)
-                .<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;Unable to find CIDR for {}&quot;</span>, <span class="ident">node_name</span>))<span class="question-mark">?</span>;
-            <span class="ident">fs</span>::<span class="ident">write</span>(
+                .<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format!</span>(<span class="string">&quot;Unable to find CIDR for {}&quot;</span>, <span class="ident">node_name</span>))<span class="question-mark">?</span>;
+            <span class="ident">fs::write</span>(
                 <span class="ident">network_dir</span>.<span class="ident">join</span>(<span class="string">&quot;10-bridge.json&quot;</span>),
-                <span class="ident">to_string_pretty</span>(<span class="kw-2">&amp;</span><span class="macro">json</span><span class="macro">!</span>({
+                <span class="ident">to_string_pretty</span>(<span class="kw-2">&amp;</span><span class="macro">json!</span>({
                     <span class="string">&quot;cniVersion&quot;</span>: <span class="string">&quot;0.3.1&quot;</span>,
-                    <span class="string">&quot;name&quot;</span>: <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;kubernix-{}&quot;</span>, <span class="ident">node_name</span>),
+                    <span class="string">&quot;name&quot;</span>: <span class="macro">format!</span>(<span class="string">&quot;kubernix-{}&quot;</span>, <span class="ident">node_name</span>),
                     <span class="string">&quot;type&quot;</span>: <span class="string">&quot;bridge&quot;</span>,
-                    <span class="string">&quot;bridge&quot;</span>: <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;{}.{}&quot;</span>, <span class="ident">Network</span>::<span class="ident">INTERFACE_PREFIX</span>, <span class="ident">node</span>),
+                    <span class="string">&quot;bridge&quot;</span>: <span class="macro">format!</span>(<span class="string">&quot;{}.{}&quot;</span>, <span class="ident">Network::INTERFACE_PREFIX</span>, <span class="ident">node</span>),
                     <span class="string">&quot;isGateway&quot;</span>: <span class="bool-val">true</span>,
                     <span class="string">&quot;ipMasq&quot;</span>: <span class="bool-val">true</span>,
                     <span class="string">&quot;hairpinMode&quot;</span>: <span class="bool-val">true</span>,
@@ -327,19 +327,19 @@
                 }))<span class="question-mark">?</span>,
             )<span class="question-mark">?</span>;
         }
-        <span class="kw">let</span> <span class="ident">args</span>: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="ident">str</span>] <span class="op">=</span> <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;--config-dir={}&quot;</span>, <span class="ident">config_file</span>.<span class="ident">display</span>())];
+        <span class="kw">let</span> <span class="ident">args</span>: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="ident">str</span>] <span class="op">=</span> <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">&quot;--config-dir={}&quot;</span>, <span class="ident">config_file</span>.<span class="ident">display</span>())];
 
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">process</span> <span class="op">=</span> <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">multi_node</span>() {
             <span class="comment">// Run inside a container</span>
-            <span class="kw">let</span> <span class="ident">identifier</span> <span class="op">=</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;CRI-O {}&quot;</span>, <span class="ident">node_name</span>);
-            <span class="ident">Container</span>::<span class="ident">start</span>(<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="kw-2">&amp;</span><span class="ident">identifier</span>, <span class="ident">CRIO</span>, <span class="kw-2">&amp;</span><span class="ident">node_name</span>, <span class="ident">args</span>)<span class="question-mark">?</span>
+            <span class="kw">let</span> <span class="ident">identifier</span> <span class="op">=</span> <span class="macro">format!</span>(<span class="string">&quot;CRI-O {}&quot;</span>, <span class="ident">node_name</span>);
+            <span class="ident">Container::start</span>(<span class="ident">config</span>, <span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="kw-2">&amp;</span><span class="ident">identifier</span>, <span class="ident">CRIO</span>, <span class="kw-2">&amp;</span><span class="ident">node_name</span>, <span class="ident">args</span>)<span class="question-mark">?</span>
         } <span class="kw">else</span> {
             <span class="comment">// Run as usual process</span>
-            <span class="ident">Process</span>::<span class="ident">start</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="string">&quot;CRI-O&quot;</span>, <span class="ident">CRIO</span>, <span class="ident">args</span>)<span class="question-mark">?</span>
+            <span class="ident">Process::start</span>(<span class="kw-2">&amp;</span><span class="ident">dir</span>, <span class="string">&quot;CRI-O&quot;</span>, <span class="ident">CRIO</span>, <span class="ident">args</span>)<span class="question-mark">?</span>
         };
         <span class="ident">process</span>.<span class="ident">wait_ready</span>(<span class="string">&quot;Sandboxes:&quot;</span>)<span class="question-mark">?</span>;
 
-        <span class="prelude-val">Ok</span>(<span class="ident">Box</span>::<span class="ident">new</span>(<span class="self">Self</span> {
+        <span class="prelude-val">Ok</span>(<span class="ident">Box::new</span>(<span class="self">Self</span> {
             <span class="ident">process</span>,
             <span class="ident">socket</span>,
             <span class="ident">node_name</span>,
@@ -348,7 +348,7 @@
 
     <span class="doccomment">/// Retrieve the CRI socket</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">socket</span>(<span class="ident">config</span>: <span class="kw-2">&amp;</span><span class="ident">Config</span>, <span class="ident">network</span>: <span class="kw-2">&amp;</span><span class="ident">Network</span>, <span class="ident">node</span>: <span class="ident">u8</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">CriSocket</span><span class="op">&gt;</span> {
-        <span class="ident">CriSocket</span>::<span class="ident">new</span>(<span class="self">Self</span>::<span class="ident">path</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>).<span class="ident">join</span>(<span class="string">&quot;crio.sock&quot;</span>))
+        <span class="ident">CriSocket::new</span>(<span class="self">Self</span><span class="ident">::path</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>).<span class="ident">join</span>(<span class="string">&quot;crio.sock&quot;</span>))
     }
 
     <span class="doccomment">/// Retrieve the working path for the node</span>
@@ -356,44 +356,44 @@
         <span class="ident">config</span>
             .<span class="ident">root</span>()
             .<span class="ident">join</span>(<span class="ident">CRIO</span>)
-            .<span class="ident">join</span>(<span class="ident">Node</span>::<span class="ident">name</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>))
+            .<span class="ident">join</span>(<span class="ident">Node::name</span>(<span class="ident">config</span>, <span class="ident">network</span>, <span class="ident">node</span>))
     }
 
     <span class="doccomment">/// Remove all containers via crictl invocations</span>
     <span class="kw">fn</span> <span class="ident">remove_all_containers</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Removing all CRI-O workloads on {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
+        <span class="macro">debug!</span>(<span class="string">&quot;Removing all CRI-O workloads on {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
 
-        <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;crictl&quot;</span>)
+        <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="ident">Command::new</span>(<span class="string">&quot;crictl&quot;</span>)
             .<span class="ident">env</span>(<span class="ident">RUNTIME_ENV</span>, <span class="self">self</span>.<span class="ident">socket</span>.<span class="ident">to_socket_string</span>())
             .<span class="ident">arg</span>(<span class="string">&quot;pods&quot;</span>)
             .<span class="ident">arg</span>(<span class="string">&quot;-q&quot;</span>)
             .<span class="ident">output</span>()<span class="question-mark">?</span>;
-        <span class="kw">let</span> <span class="ident">stdout</span> <span class="op">=</span> <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">stdout</span> <span class="op">=</span> <span class="ident">String::from_utf8</span>(<span class="ident">output</span>.<span class="ident">stdout</span>)<span class="question-mark">?</span>;
         <span class="kw">if</span> <span class="op">!</span><span class="ident">output</span>.<span class="ident">status</span>.<span class="ident">success</span>() {
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;critcl pods stdout ({}): {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>, <span class="ident">stdout</span>);
-            <span class="macro">debug</span><span class="macro">!</span>(
+            <span class="macro">debug!</span>(<span class="string">&quot;critcl pods stdout ({}): {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>, <span class="ident">stdout</span>);
+            <span class="macro">debug!</span>(
                 <span class="string">&quot;critcl pods stderr ({}): {}&quot;</span>,
                 <span class="self">self</span>.<span class="ident">node_name</span>,
-                <span class="ident">String</span>::<span class="ident">from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>
+                <span class="ident">String::from_utf8</span>(<span class="ident">output</span>.<span class="ident">stderr</span>)<span class="question-mark">?</span>
             );
-            <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;crictl pods command failed ({})&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
+            <span class="macro">bail!</span>(<span class="string">&quot;crictl pods command failed ({})&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
         }
 
         <span class="kw">for</span> <span class="ident">x</span> <span class="kw">in</span> <span class="ident">stdout</span>.<span class="ident">lines</span>() {
-            <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;Removing pod {} on {}&quot;</span>, <span class="ident">x</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
-            <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="ident">Command</span>::<span class="ident">new</span>(<span class="string">&quot;crictl&quot;</span>)
+            <span class="macro">debug!</span>(<span class="string">&quot;Removing pod {} on {}&quot;</span>, <span class="ident">x</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
+            <span class="kw">let</span> <span class="ident">output</span> <span class="op">=</span> <span class="ident">Command::new</span>(<span class="string">&quot;crictl&quot;</span>)
                 .<span class="ident">env</span>(<span class="ident">RUNTIME_ENV</span>, <span class="self">self</span>.<span class="ident">socket</span>.<span class="ident">to_socket_string</span>())
                 .<span class="ident">arg</span>(<span class="string">&quot;rmp&quot;</span>)
                 .<span class="ident">arg</span>(<span class="string">&quot;-f&quot;</span>)
                 .<span class="ident">arg</span>(<span class="ident">x</span>)
                 .<span class="ident">output</span>()<span class="question-mark">?</span>;
             <span class="kw">if</span> <span class="op">!</span><span class="ident">output</span>.<span class="ident">status</span>.<span class="ident">success</span>() {
-                <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;critcl rmp ({}): {:?}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>, <span class="ident">output</span>);
-                <span class="macro">bail</span><span class="macro">!</span>(<span class="string">&quot;crictl rmp command failed ({})&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
+                <span class="macro">debug!</span>(<span class="string">&quot;critcl rmp ({}): {:?}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>, <span class="ident">output</span>);
+                <span class="macro">bail!</span>(<span class="string">&quot;crictl rmp command failed ({})&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
             }
         }
 
-        <span class="macro">debug</span><span class="macro">!</span>(<span class="string">&quot;All workloads removed on {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
+        <span class="macro">debug!</span>(<span class="string">&quot;All workloads removed on {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>);
         <span class="prelude-val">Ok</span>(())
     }
 }
@@ -402,7 +402,7 @@
     <span class="kw">fn</span> <span class="ident">stop</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="comment">// Remove all running containers</span>
         <span class="self">self</span>.<span class="ident">remove_all_containers</span>()
-            .<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;Unable to remove CRI-O containers on {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>,))<span class="question-mark">?</span>;
+            .<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format!</span>(<span class="string">&quot;Unable to remove CRI-O containers on {}&quot;</span>, <span class="self">self</span>.<span class="ident">node_name</span>,))<span class="question-mark">?</span>;
 
         <span class="comment">// Stop the process, should never really fail</span>
         <span class="self">self</span>.<span class="ident">process</span>.<span class="ident">stop</span>()
@@ -415,15 +415,15 @@
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">cri_socket_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="ident">CriSocket</span>::<span class="ident">new</span>(<span class="string">&quot;/some/path.sock&quot;</span>.<span class="ident">into</span>())<span class="question-mark">?</span>;
+        <span class="ident">CriSocket::new</span>(<span class="string">&quot;/some/path.sock&quot;</span>.<span class="ident">into</span>())<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">cri_socket_failure</span>() {
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">CriSocket</span>::<span class="ident">new</span>(<span class="string">&quot;a&quot;</span>.<span class="ident">repeat</span>(<span class="number">101</span>).<span class="ident">into</span>()).<span class="ident">is_err</span>());
+        <span class="macro">assert!</span>(<span class="ident">CriSocket::new</span>(<span class="string">&quot;a&quot;</span>.<span class="ident">repeat</span>(<span class="number">101</span>).<span class="ident">into</span>()).<span class="ident">is_err</span>());
     }
 }
 </pre></div>
-</section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="kubernix" data-search-js="../../search-index.js"></div>
+</section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="kubernix" data-search-index-js="../../search-index.js" data-search-js="../../search.js"></div>
     <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script></body></html>

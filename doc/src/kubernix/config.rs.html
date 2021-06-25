@@ -1,6 +1,6 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/config.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>config.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><script src="../../crates.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="alternate icon" type="image/png" href="../../favicon-16x16.png">
-<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../kubernix/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><script src="../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
+<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../kubernix/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
                 <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
 <span id="2">  2</span>
 <span id="3">  3</span>
@@ -282,16 +282,16 @@
 <span id="279">279</span>
 </pre><div class="example-wrap"><pre class="rust ">
 <span class="doccomment">//! Configuration related structures</span>
-<span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">podman</span>::<span class="ident">Podman</span>, <span class="ident">system</span>::<span class="ident">System</span>};
+<span class="kw">use</span> <span class="kw">crate</span>::{<span class="ident">podman::Podman</span>, <span class="ident">system::System</span>};
 <span class="kw">use</span> <span class="ident">anyhow</span>::{<span class="ident">Context</span>, <span class="prelude-ty">Result</span>};
 <span class="kw">use</span> <span class="ident">clap</span>::{<span class="ident">AppSettings</span>, <span class="ident">Clap</span>};
 <span class="kw">use</span> <span class="ident">getset</span>::{<span class="ident">CopyGetters</span>, <span class="ident">Getters</span>};
-<span class="kw">use</span> <span class="ident">ipnetwork</span>::<span class="ident">Ipv4Network</span>;
-<span class="kw">use</span> <span class="ident">log</span>::<span class="ident">LevelFilter</span>;
+<span class="kw">use</span> <span class="ident">ipnetwork::Ipv4Network</span>;
+<span class="kw">use</span> <span class="ident">log::LevelFilter</span>;
 <span class="kw">use</span> <span class="ident">serde</span>::{<span class="ident">Deserialize</span>, <span class="ident">Serialize</span>};
 <span class="kw">use</span> <span class="ident">std</span>::{
     <span class="ident">fs</span>::{<span class="self">self</span>, <span class="ident">canonicalize</span>, <span class="ident">create_dir_all</span>, <span class="ident">read_to_string</span>},
-    <span class="ident">path</span>::<span class="ident">PathBuf</span>,
+    <span class="ident">path::PathBuf</span>,
 };
 
 <span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Clap</span>, <span class="ident">CopyGetters</span>, <span class="ident">Getters</span>, <span class="ident">Deserialize</span>, <span class="ident">Serialize</span>)]</span>
@@ -299,7 +299,7 @@
 <span class="attribute">#[<span class="ident">clap</span>(
     <span class="ident">after_help</span>(<span class="string">&quot;More info at: https://github.com/saschagrunert/kubernix&quot;</span>),
     <span class="ident">author</span>(<span class="string">&quot;Sascha Grunert &lt;mail@saschagrunert.de&gt;&quot;</span>),
-    <span class="ident">global_setting</span>(<span class="ident">AppSettings</span>::<span class="ident">ColoredHelp</span>)
+    <span class="ident">global_setting</span>(<span class="ident">AppSettings::ColoredHelp</span>)
 )]</span>
 <span class="doccomment">/// The global configuration</span>
 <span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">Config</span> {
@@ -384,7 +384,7 @@
     <span class="attribute">#[<span class="ident">clap</span>(
         <span class="ident">env</span>(<span class="string">&quot;KUBERNIX_CONTAINER_RUNTIME&quot;</span>),
         <span class="ident">long</span>(<span class="string">&quot;container-runtime&quot;</span>),
-        <span class="ident">default_value</span>(<span class="ident">Podman</span>::<span class="ident">EXECUTABLE</span>),
+        <span class="ident">default_value</span>(<span class="ident">Podman::EXECUTABLE</span>),
         <span class="ident">requires</span>(<span class="string">&quot;nodes&quot;</span>),
         <span class="ident">short</span>(<span class="string">&#39;u&#39;</span>),
         <span class="ident">value_name</span>(<span class="string">&quot;RUNTIME&quot;</span>)
@@ -414,9 +414,9 @@
 
 <span class="kw">impl</span> <span class="ident">Default</span> <span class="kw">for</span> <span class="ident">Config</span> {
     <span class="kw">fn</span> <span class="ident">default</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span> {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">config</span> <span class="op">=</span> <span class="self">Self</span>::<span class="ident">parse</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">config</span> <span class="op">=</span> <span class="self">Self</span><span class="ident">::parse</span>();
         <span class="kw">if</span> <span class="ident">config</span>.<span class="ident">shell</span>.<span class="ident">is_none</span>() {
-            <span class="ident">config</span>.<span class="ident">shell</span> <span class="op">=</span> <span class="ident">System</span>::<span class="ident">shell</span>().<span class="ident">ok</span>();
+            <span class="ident">config</span>.<span class="ident">shell</span> <span class="op">=</span> <span class="ident">System::shell</span>().<span class="ident">ok</span>();
         }
         <span class="ident">config</span>
     }
@@ -436,7 +436,7 @@
     <span class="doccomment">/// Write the current configuration to the internal set root path</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">to_file</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
         <span class="self">self</span>.<span class="ident">create_root_dir</span>()<span class="question-mark">?</span>;
-        <span class="ident">fs</span>::<span class="ident">write</span>(<span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">FILENAME</span>), <span class="ident">toml</span>::<span class="ident">to_string</span>(<span class="kw-2">&amp;</span><span class="self">self</span>)<span class="question-mark">?</span>)
+        <span class="ident">fs::write</span>(<span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span><span class="ident">::FILENAME</span>), <span class="ident">toml::to_string</span>(<span class="kw-2">&amp;</span><span class="self">self</span>)<span class="question-mark">?</span>)
             .<span class="ident">context</span>(<span class="string">&quot;Unable to write configuration to file&quot;</span>)<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(())
     }
@@ -444,15 +444,15 @@
     <span class="doccomment">/// Read the configuration from the internal set root path</span>
     <span class="doccomment">/// If not existing, write the current configuration to the path.</span>
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">try_load_file</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="ident">file</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span>::<span class="ident">FILENAME</span>);
+        <span class="kw">let</span> <span class="ident">file</span> <span class="op">=</span> <span class="self">self</span>.<span class="ident">root</span>().<span class="ident">join</span>(<span class="self">Self</span><span class="ident">::FILENAME</span>);
         <span class="kw">if</span> <span class="ident">file</span>.<span class="ident">exists</span>() {
-            <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="ident">toml</span>::<span class="ident">from_str</span>(<span class="kw-2">&amp;</span><span class="ident">read_to_string</span>(<span class="kw-2">&amp;</span><span class="ident">file</span>).<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> {
-                <span class="macro">format</span><span class="macro">!</span>(
+            <span class="kw-2">*</span><span class="self">self</span> <span class="op">=</span> <span class="ident">toml::from_str</span>(<span class="kw-2">&amp;</span><span class="ident">read_to_string</span>(<span class="kw-2">&amp;</span><span class="ident">file</span>).<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> {
+                <span class="macro">format!</span>(
                     <span class="string">&quot;Unable to read expected configuration file &#39;{}&#39;&quot;</span>,
                     <span class="ident">file</span>.<span class="ident">display</span>(),
                 )
             })<span class="question-mark">?</span>)
-            .<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format</span><span class="macro">!</span>(<span class="string">&quot;Unable to load config file &#39;{}&#39;&quot;</span>, <span class="ident">file</span>.<span class="ident">display</span>()))<span class="question-mark">?</span>;
+            .<span class="ident">with_context</span>(<span class="op">|</span><span class="op">|</span> <span class="macro">format!</span>(<span class="string">&quot;Unable to load config file &#39;{}&#39;&quot;</span>, <span class="ident">file</span>.<span class="ident">display</span>()))<span class="question-mark">?</span>;
         } <span class="kw">else</span> {
             <span class="self">self</span>.<span class="ident">to_file</span>()<span class="question-mark">?</span>;
         }
@@ -478,11 +478,11 @@
 <span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
 <span class="kw">pub</span> <span class="kw">mod</span> <span class="ident">tests</span> {
     <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use</span> <span class="ident">std</span>::<span class="ident">path</span>::<span class="ident">Path</span>;
-    <span class="kw">use</span> <span class="ident">tempfile</span>::<span class="ident">tempdir</span>;
+    <span class="kw">use</span> <span class="ident">std::path::Path</span>;
+    <span class="kw">use</span> <span class="ident">tempfile::tempdir</span>;
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config::default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">c</span>.<span class="ident">canonicalize_root</span>()<span class="question-mark">?</span>;
         <span class="prelude-val">Ok</span>(<span class="ident">c</span>)
@@ -490,7 +490,7 @@
 
     <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">test_config_wrong_root</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="ident">Config</span><span class="op">&gt;</span> {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">test_config</span>()<span class="question-mark">?</span>;
-        <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">Path</span>::<span class="ident">new</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;proc&quot;</span>);
+        <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">Path::new</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;proc&quot;</span>);
         <span class="prelude-val">Ok</span>(<span class="ident">c</span>)
     }
 
@@ -502,38 +502,38 @@
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">canonicalize_root_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config::default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">c</span>.<span class="ident">canonicalize_root</span>()
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">canonicalize_root_failure</span>() {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
-        <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">Path</span>::<span class="ident">new</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;proc&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;invalid&quot;</span>);
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">canonicalize_root</span>().<span class="ident">is_err</span>())
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config::default</span>();
+        <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">Path::new</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;proc&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;invalid&quot;</span>);
+        <span class="macro">assert!</span>(<span class="ident">c</span>.<span class="ident">canonicalize_root</span>().<span class="ident">is_err</span>())
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">to_file_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config::default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
         <span class="ident">c</span>.<span class="ident">to_file</span>()
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">to_file_failure</span>() {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
-        <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">Path</span>::<span class="ident">new</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;proc&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;invalid&quot;</span>);
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">to_file</span>().<span class="ident">is_err</span>())
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config::default</span>();
+        <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">Path::new</span>(<span class="string">&quot;/&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;proc&quot;</span>).<span class="ident">join</span>(<span class="string">&quot;invalid&quot;</span>);
+        <span class="macro">assert!</span>(<span class="ident">c</span>.<span class="ident">to_file</span>().<span class="ident">is_err</span>())
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">try_load_file_success</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config::default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
-        <span class="ident">fs</span>::<span class="ident">write</span>(
-            <span class="ident">c</span>.<span class="ident">root</span>.<span class="ident">join</span>(<span class="ident">Config</span>::<span class="ident">FILENAME</span>),
+        <span class="ident">fs::write</span>(
+            <span class="ident">c</span>.<span class="ident">root</span>.<span class="ident">join</span>(<span class="ident">Config::FILENAME</span>),
             <span class="string">r#&quot;
 cidr = &quot;1.1.1.1/16&quot;
 container-runtime = &quot;podman&quot;
@@ -545,21 +545,21 @@ root = &quot;root&quot;
             &quot;#</span>,
         )<span class="question-mark">?</span>;
         <span class="ident">c</span>.<span class="ident">try_load_file</span>()<span class="question-mark">?</span>;
-        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">root</span>(), <span class="ident">Path</span>::<span class="ident">new</span>(<span class="string">&quot;root&quot;</span>));
-        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">log_level</span>(), <span class="ident">LevelFilter</span>::<span class="ident">Debug</span>);
-        <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>.<span class="ident">cidr</span>().<span class="ident">to_string</span>(), <span class="string">&quot;1.1.1.1/16&quot;</span>);
+        <span class="macro">assert_eq!</span>(<span class="ident">c</span>.<span class="ident">root</span>(), <span class="ident">Path::new</span>(<span class="string">&quot;root&quot;</span>));
+        <span class="macro">assert_eq!</span>(<span class="ident">c</span>.<span class="ident">log_level</span>(), <span class="ident">LevelFilter::Debug</span>);
+        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span><span class="ident">c</span>.<span class="ident">cidr</span>().<span class="ident">to_string</span>(), <span class="string">&quot;1.1.1.1/16&quot;</span>);
         <span class="prelude-val">Ok</span>(())
     }
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">try_load_file_failure</span>() <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span>()<span class="op">&gt;</span> {
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config</span>::<span class="ident">default</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">c</span> <span class="op">=</span> <span class="ident">Config::default</span>();
         <span class="ident">c</span>.<span class="ident">root</span> <span class="op">=</span> <span class="ident">tempdir</span>()<span class="question-mark">?</span>.<span class="ident">into_path</span>();
-        <span class="ident">fs</span>::<span class="ident">write</span>(<span class="ident">c</span>.<span class="ident">root</span>.<span class="ident">join</span>(<span class="ident">Config</span>::<span class="ident">FILENAME</span>), <span class="string">&quot;invalid&quot;</span>)<span class="question-mark">?</span>;
-        <span class="macro">assert</span><span class="macro">!</span>(<span class="ident">c</span>.<span class="ident">try_load_file</span>().<span class="ident">is_err</span>());
+        <span class="ident">fs::write</span>(<span class="ident">c</span>.<span class="ident">root</span>.<span class="ident">join</span>(<span class="ident">Config::FILENAME</span>), <span class="string">&quot;invalid&quot;</span>)<span class="question-mark">?</span>;
+        <span class="macro">assert!</span>(<span class="ident">c</span>.<span class="ident">try_load_file</span>().<span class="ident">is_err</span>());
         <span class="prelude-val">Ok</span>(())
     }
 }
 </pre></div>
-</section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="kubernix" data-search-js="../../search-index.js"></div>
+</section><section id="search" class="content hidden"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="kubernix" data-search-index-js="../../search-index.js" data-search-js="../../search.js"></div>
     <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script></body></html>
