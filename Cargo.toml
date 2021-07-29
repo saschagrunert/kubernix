@@ -34,7 +34,7 @@ proc-mounts = "0.2.4"
 rand = "0.8.4"
 rayon = "1.5.1"
 serde = { version = "1.0.126", features = ["derive"] }
-serde_json = "1.0.64"
+serde_json = "1.0.65"
 serde_yaml = "0.8.17"
 signal-hook = "0.3.9"
 toml = "0.5.8"
