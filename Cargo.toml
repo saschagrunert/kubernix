@@ -20,7 +20,7 @@ path = "src/main.rs"
 anyhow = "1.0.43"
 base64 = "0.13.0"
 clap = { git = "https://github.com/clap-rs/clap", features = ["wrap_help"] }
-console = "0.14.1"
+console = "0.15.2"
 crossbeam-channel = "0.5.1"
 getset = "0.1.1"
 hostname = "0.3.1"
