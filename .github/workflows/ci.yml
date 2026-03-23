@@ -191,7 +191,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Nix
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
       - uses: actions/download-artifact@v4
         with:
           name: kubernix-release
@@ -214,7 +214,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Nix
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
       - uses: actions/download-artifact@v4
         with:
           name: kubernix-release
@@ -236,7 +236,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Nix
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
       - name: Set hostname
         run: |
           echo "127.0.0.1 test" | sudo tee -a /etc/hosts
