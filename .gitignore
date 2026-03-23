@@ -1,6 +1,7 @@
 *.rs.bk
 *.orig
 .kube
+/build
 /target
 /test-*
 kubernix*

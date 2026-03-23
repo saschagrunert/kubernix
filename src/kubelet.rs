@@ -8,7 +8,7 @@ use crate::{
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs::{self, create_dir_all};
 
 pub struct Kubelet {
@@ -28,19 +28,20 @@ impl Kubelet {
 
         let dir = config.root().join(KUBELET).join(&node_name);
         let root_dir = dir.join("run");
-        if root_dir.display().to_string().len() + "kubelet.sock".len() > 100 {
+        // pod-resources/<pid> is the longest socket path kubelet creates
+        if root_dir.display().to_string().len() + "pod-resources/1234567890".len() > 107 {
             bail!(
-                "Kubelet run path '{}' is too long for kubelet.sock",
+                "Kubelet run path '{}' is too long for unix sockets",
                 root_dir.display()
             )
         }
 
         create_dir_all(&dir)?;
 
-        let idendity = pki
+        let identity = pki
             .kubelets()
             .get(node as usize)
-            .with_context(|| format!("Unable to retrieve kubelet idendity for {}", node_name))?;
+            .with_context(|| format!("Unable to retrieve kubelet identity for {}", node_name))?;
 
         let yml = format!(
             include_str!("assets/kubelet.yml"),
@@ -50,8 +51,8 @@ impl Kubelet {
                 .crio_cidrs()
                 .get(node as usize)
                 .context("Unable to retrieve kubelet CIDR")?,
-            cert = idendity.cert().display(),
-            key = idendity.key().display(),
+            cert = identity.cert().display(),
+            key = identity.key().display(),
             port = 11250 + u16::from(node),
             healthzPort = 12250 + u16::from(node),
         );

@@ -3,10 +3,9 @@
 [![CI](https://github.com/saschagrunert/kubernix/actions/workflows/ci.yml/badge.svg)](https://github.com/saschagrunert/kubernix/actions/workflows/ci.yml)
 [![Docs main](https://img.shields.io/badge/doc-main-orange.svg)](https://saschagrunert.github.io/kubernix/doc/kubernix/index.html)
 [![Docs release](https://docs.rs/kubernix/badge.svg)](https://docs.rs/kubernix)
-[![Coverage](https://codecov.io/gh/saschagrunert/kubernix/branch/main/graph/badge.svg)](https://codecov.io/gh/saschagrunert/kubernix)
 [![Dependencies](https://deps.rs/repo/github/saschagrunert/kubernix/status.svg)](https://deps.rs/repo/github/saschagrunert/kubernix)
 [![Crates.io](https://img.shields.io/crates/v/kubernix.svg)](https://crates.io/crates/kubernix)
-[![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/saschagrunert/kubernix/blob/main/LICENSE)
+[![License Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/saschagrunert/kubernix/blob/main/LICENSE)
 
 ## Kubernetes development cluster bootstrapping with Nix packages
 
@@ -181,7 +180,7 @@ the same directory as where the initial bootstrap happened.
 ```
 $ sudo kubernix shell
 [INFO  kubernix] Spawning new kubernix shell in 'kubernix-run'
-> kubectl run --generator=run-pod/v1 --image=alpine -it alpine sh
+> kubectl run alpine --image=alpine -it --rm -- sh
 If you don't see a command prompt, try pressing enter.
 / #
 ```

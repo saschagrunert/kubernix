@@ -47,10 +47,10 @@ use scheduler::Scheduler;
 use system::System;
 
 use ::nix::{
-    mount::{umount2, MntFlags},
+    mount::{MntFlags, umount2},
     unistd::getuid,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use log::{debug, error, info, set_boxed_logger};
 use proc_mounts::MountIter;
 use rayon::{prelude::*, scope};
@@ -60,11 +60,11 @@ use signal_hook::{
 };
 use std::{
     fs,
-    path::PathBuf,
-    process::{id, Command},
+    path::{Path, PathBuf},
+    process::{Command, id},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     thread::sleep,
     time::{Duration, Instant},
@@ -111,14 +111,8 @@ impl Kubernix {
             )
         }
 
-        Nix::run(
-            &config,
-            &[
-                &config.shell_ok()?,
-                "-c",
-                &format!(". {} && {}", env_file.display(), config.shell_ok()?,),
-            ],
-        )?;
+        let shell_cmd = format!(". {} && exec {}", env_file.display(), config.shell_ok()?);
+        Nix::run(&config, &["bash", "-c", &format!("'{}'", shell_cmd)])?;
 
         info!("Bye, leaving the Kubernix environment");
         Ok(())
@@ -230,10 +224,12 @@ impl Kubernix {
             });
         });
 
-        // This order is important since we will shut down the processes in order
+        // This order is important since we will shut down the processes in order.
+        // Kubelets must be stopped before CRI-O because in multi-node mode
+        // kubelets run as exec sessions inside CRI-O containers.
         let mut results = vec![scheduler, proxy, controller_manager];
-        results.extend(crios);
         results.extend(kubelets);
+        results.extend(crios);
         results.push(api_server);
         results.push(etcd);
         let all_ok = results.iter().all(|x| x.is_ok());
@@ -260,8 +256,14 @@ impl Kubernix {
         // No dead processes
         if all_ok {
             // Apply all cluster addons
-            kubernix.apply_addons()?;
-            kubernix.write_env_file()?;
+            if let Err(e) = kubernix
+                .apply_addons()
+                .and_then(|_| kubernix.write_env_file())
+            {
+                p.reset();
+                error!("Unable to start all processes: {}", e);
+                return Err(e);
+            }
             info!("Everything is up and running");
             p.reset();
 
@@ -271,6 +273,7 @@ impl Kubernix {
                 kubernix.wait()?;
             }
         } else {
+            p.reset();
             error!("Unable to start all processes")
         }
 
@@ -307,15 +310,23 @@ impl Kubernix {
         info!("Spawning interactive shell");
         info!("Please be aware that the cluster stops if you exit the shell");
 
-        Command::new(self.config.shell_ok()?)
-            .current_dir(self.config.root())
-            .arg("-c")
-            .arg(format!(
-                ". {} && {}",
-                Self::env_file(&self.config).display(),
-                self.config.shell_ok()?,
-            ))
-            .status()?;
+        let mut cmd = Command::new(self.config.shell_ok()?);
+        cmd.current_dir(self.config.root());
+        Self::apply_env_file(&Self::env_file(&self.config), &mut cmd)?;
+        cmd.status()?;
+        Ok(())
+    }
+
+    /// Parse the env file and apply its variables to a Command
+    fn apply_env_file(env_file: &Path, cmd: &mut Command) -> Result<()> {
+        let content = fs::read_to_string(env_file)
+            .with_context(|| format!("Unable to read env file '{}'", env_file.display()))?;
+        for line in content.lines() {
+            let line = line.strip_prefix("export ").unwrap_or(line);
+            if let Some((key, value)) = line.split_once('=') {
+                cmd.env(key, value);
+            }
+        }
         Ok(())
     }
 

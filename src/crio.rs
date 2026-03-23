@@ -1,12 +1,12 @@
 use crate::{
+    Config, RUNTIME_ENV,
     container::Container,
     network::Network,
     node::Node,
     process::{Process, ProcessState, Stoppable},
     system::System,
-    Config, RUNTIME_ENV,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use log::debug;
 use serde_json::{json, to_string_pretty};
 use std::{
@@ -50,9 +50,28 @@ impl Crio {
     pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
         let node_name = Node::name(config, network, node);
 
-        let conmon = System::find_executable("conmon")?;
-        let loopback = System::find_executable("loopback")?;
-        let cni_plugin = loopback.parent().context("Unable to find CNI plugin dir")?;
+        // In multi-node mode, CRI-O runs inside a container where host paths
+        // don't exist. Use empty paths so CRI-O resolves binaries from $PATH
+        // (set up by nix-shell in the container).
+        let conmon: String;
+        let crun_path: String;
+        let plugin_dir: String;
+        if config.multi_node() {
+            // Empty paths let CRI-O resolve conmon/crun from $PATH inside the container.
+            conmon = String::new();
+            crun_path = String::new();
+            // Placeholder: overridden by --cni-plugin-dir CLI arg at startup.
+            plugin_dir = "/tmp/cni-plugins".to_string();
+        } else {
+            conmon = System::find_executable("conmon")?.display().to_string();
+            crun_path = System::find_executable("crun")?.display().to_string();
+            let loopback = System::find_executable("loopback")?;
+            plugin_dir = loopback
+                .parent()
+                .context("Unable to find CNI plugin dir")?
+                .display()
+                .to_string();
+        };
 
         let dir = Self::path(config, network, node);
         let config_dir = dir.join("crio.conf.d");
@@ -70,16 +89,16 @@ impl Crio {
                 &config_file,
                 format!(
                     include_str!("assets/crio.conf"),
-                    conmon = conmon.display(),
+                    conmon = conmon,
                     containers_root = containers_dir.join("storage").display(),
                     containers_runroot = containers_dir.join("run").display(),
                     listen = socket,
                     log_dir = dir.join("log").display(),
                     network_dir = network_dir.display(),
-                    plugin_dir = cni_plugin.display(),
+                    plugin_dir = plugin_dir,
                     exits_dir = dir.join("exits").display(),
-                    runtime_path = System::find_executable("runc")?.display(),
-                    runtime_root = dir.join("runc").display(),
+                    runtime_path = crun_path,
+                    runtime_root = dir.join("crun").display(),
                     signature_policy = Container::policy_json(config).display(),
                     storage_driver = if config.multi_node() || System::in_container()? {
                         "vfs"
@@ -112,12 +131,17 @@ impl Crio {
                 }))?,
             )?;
         }
-        let args: &[&str] = &[&format!("--config-dir={}", config_dir.display())];
+        let config_dir_arg = format!("--config-dir={}", config_dir.display());
+        let args: &[&str] = &[&config_dir_arg];
 
         let mut process = if config.multi_node() {
-            // Run inside a container
+            // Run inside a container, resolve CNI plugin dir from $PATH at runtime
             let identifier = format!("CRI-O {}", node_name);
-            Container::start(config, &dir, &identifier, CRIO, &node_name, args)?
+            let plugin_dir_arg =
+                r#"--cni-plugin-dir=$(dirname $(which loopback || echo loopback_not_found))"#
+                    .to_string();
+            let container_args: &[&str] = &[&config_dir_arg, &plugin_dir_arg];
+            Container::start(config, &dir, &identifier, CRIO, &node_name, container_args)?
         } else {
             // Run as usual process
             Process::start(&dir, "CRI-O", CRIO, args)?
@@ -155,9 +179,9 @@ impl Crio {
             .output()?;
         let stdout = String::from_utf8(output.stdout)?;
         if !output.status.success() {
-            debug!("critcl pods stdout ({}): {}", self.node_name, stdout);
+            debug!("crictl pods stdout ({}): {}", self.node_name, stdout);
             debug!(
-                "critcl pods stderr ({}): {}",
+                "crictl pods stderr ({}): {}",
                 self.node_name,
                 String::from_utf8(output.stderr)?
             );
@@ -173,7 +197,7 @@ impl Crio {
                 .arg(x)
                 .output()?;
             if !output.status.success() {
-                debug!("critcl rmp ({}): {:?}", self.node_name, output);
+                debug!("crictl rmp ({}): {:?}", self.node_name, output);
                 bail!("crictl rmp command failed ({})", self.node_name);
             }
         }

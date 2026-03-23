@@ -1,5 +1,5 @@
-use crate::{node::Node, Config};
-use anyhow::{bail, Context, Result};
+use crate::{Config, node::Node};
+use anyhow::{Context, Result, bail};
 use log::{debug, info, warn};
 use std::{
     env::{split_paths, var, var_os},

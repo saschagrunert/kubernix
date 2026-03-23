@@ -1,9 +1,9 @@
 use crate::progress::Progress;
-use console::{style, Color};
-use log::{set_max_level, Level, LevelFilter, Log, Metadata, Record};
-use std::io::{stderr, Write};
+use console::{Color, style};
+use log::{Level, LevelFilter, Log, Metadata, Record, set_max_level};
+use std::io::{IsTerminal, Write, stderr};
 
-/// The main logging faccade
+/// The main logging facade
 pub struct Logger {
     level: LevelFilter,
 }
@@ -56,11 +56,18 @@ impl Log for Logger {
         );
 
         if let Some(pb) = Progress::get() {
-            if level != Level::Info {
-                pb.println(msg);
+            if stderr().is_terminal() {
+                if level != Level::Info {
+                    pb.println(&msg);
+                } else {
+                    pb.inc(1);
+                    pb.set_message(record.args().to_string());
+                }
             } else {
-                pb.inc(1);
-                pb.set_message(record.args().to_string());
+                if level == Level::Info {
+                    pb.inc(1);
+                }
+                writeln!(stderr(), "{}", msg).ok();
             }
         } else {
             writeln!(stderr(), "{}", msg).ok();

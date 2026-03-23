@@ -1,5 +1,5 @@
 use crate::Config;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use hostname::get;
 use ipnetwork::Ipv4Network;
 use log::{debug, warn};

@@ -16,7 +16,7 @@ with pkgs; [
   kubernetes
   kubectl
   podman
-  runc
+  crun
   socat
   sysctl
   util-linux

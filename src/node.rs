@@ -1,4 +1,4 @@
-use crate::{network::Network, Config};
+use crate::{Config, network::Network};
 
 pub struct Node;
 
