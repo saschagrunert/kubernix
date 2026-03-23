@@ -1,7 +1,10 @@
 use crate::{config::Config, kubectl::Kubectl, network::Network};
 use anyhow::{Context, Result};
 use log::info;
-use std::fs::{self, create_dir_all};
+use std::{
+    fs::{self, create_dir_all},
+    net::Ipv4Addr,
+};
 
 pub struct CoreDns;
 
@@ -12,7 +15,7 @@ impl CoreDns {
         let dir = config.root().join("coredns");
         create_dir_all(&dir)?;
 
-        let yml = format!(include_str!("assets/coredns.yml"), network.dns()?);
+        let yml = Self::render(network.dns()?);
         let file = dir.join("coredns.yml");
 
         if !file.exists() {
@@ -23,5 +26,22 @@ impl CoreDns {
         kubectl.wait_ready("coredns")?;
         info!("CoreDNS deployed");
         Ok(())
+    }
+
+    fn render(dns: Ipv4Addr) -> String {
+        format!(include_str!("assets/coredns.yml"), dns)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn render_contains_dns_ip() {
+        let ip = Ipv4Addr::new(10, 10, 1, 2);
+        let yml = CoreDns::render(ip);
+        assert!(yml.contains("clusterIP: 10.10.1.2"));
+        assert!(yml.contains("k8s-app: coredns"));
     }
 }

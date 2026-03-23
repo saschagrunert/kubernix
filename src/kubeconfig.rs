@@ -118,11 +118,12 @@ impl KubeConfig {
 
         kubectl.config(&["use-context", context])?;
 
-        // Adapt file permissions
+        // Make kubeconfig readable for non-root users spawning additional
+        // shell sessions via `kubernix shell`
         let file = File::open(&kubeconfig).context("unable to open kubeconfig")?;
         fchmod(
             &file,
-            Mode::from_bits(0o600).ok_or_else(|| format_err!("unable to get mode bits"))?,
+            Mode::from_bits(0o644).ok_or_else(|| format_err!("unable to get mode bits"))?,
         )
         .context("unable to set kubeconfig permissions")?;
 

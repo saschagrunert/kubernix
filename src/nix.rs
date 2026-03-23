@@ -94,6 +94,12 @@ impl Nix {
             args.push(pkg.as_str());
         }
 
+        let addon_vals: Vec<String> = config.addons().clone();
+        for addon in &addon_vals {
+            args.push("--addons");
+            args.push(addon.as_str());
+        }
+
         if *config.no_shell() {
             args.push("--no-shell");
         } else if !shell_val.is_empty() {

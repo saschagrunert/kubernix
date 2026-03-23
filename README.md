@@ -1,7 +1,11 @@
-<img src=".github/kubernix.png" width="300px"></img>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/logo-dark.png">
+  <img src=".github/kubernix.png" width="300px">
+</picture>
 
 [![CI](https://github.com/saschagrunert/kubernix/actions/workflows/ci.yml/badge.svg)](https://github.com/saschagrunert/kubernix/actions/workflows/ci.yml)
-[![Docs main](https://img.shields.io/badge/doc-main-orange.svg)](https://saschagrunert.github.io/kubernix/doc/kubernix/index.html)
+[![codecov](https://codecov.io/gh/saschagrunert/kubernix/graph/badge.svg)](https://codecov.io/gh/saschagrunert/kubernix)
+[![Docs main](https://img.shields.io/badge/doc-main-orange.svg)](https://saschagrunert.github.io/kubernix/kubernix/index.html)
 [![Docs release](https://docs.rs/kubernix/badge.svg)](https://docs.rs/kubernix)
 [![Dependencies](https://deps.rs/repo/github/saschagrunert/kubernix/status.svg)](https://deps.rs/repo/github/saschagrunert/kubernix)
 [![Crates.io](https://img.shields.io/crates/v/kubernix.svg)](https://crates.io/crates/kubernix)
@@ -44,6 +48,7 @@ The following technology stack is currently being used:
 | conntrack-tools | v1.4.8   |
 | cri-o-wrapper   | v1.35.0  |
 | cri-tools       | v1.35.0  |
+| crun            | v1.26    |
 | etcd            | v3.6.9   |
 | iproute2        | v6.19.0  |
 | iptables        | v1.8.12  |
@@ -52,7 +57,6 @@ The following technology stack is currently being used:
 | kubernetes      | v1.35.3  |
 | nss-cacert      | v3.121   |
 | podman          | v5.8.1   |
-| runc            | v1.4.1   |
 | socat           | v1.8.1.1 |
 | sysctl          | v4.0.6   |
 | util-linux      | v2.41.3  |
@@ -72,24 +76,6 @@ $ curl https://nixos.org/nix/install | sh
 ```
 
 Please make sure to follow the instructions output by the script.
-
-#### With the Container Runtime of your Choice
-
-It is also possible to run KuberNix in the container runtime of your choice. To
-do this, simply grab the latest image from [`saschagrunert/kubernix`][40].
-Please note that running KuberNix inside a container image requires to run
-`privileged` mode and `host` networking. For example, we can run KuberNix with
-[podman][41] like this:
-
-[40]: https://cloud.docker.com/u/saschagrunert/repository/docker/saschagrunert/kubernix
-[41]: https://github.com/containers/libpod
-
-```
-$ sudo podman run \
-    --net=host \
-    --privileged \
-    -it docker.io/saschagrunert/kubernix:latest
-```
 
 ### Getting Started
 
@@ -179,7 +165,7 @@ the same directory as where the initial bootstrap happened.
 
 ```
 $ sudo kubernix shell
-[INFO  kubernix] Spawning new kubernix shell in 'kubernix-run'
+[INFO ] Spawning new kubernix shell in: 'kubernix-run'
 > kubectl run alpine --image=alpine -it --rm -- sh
 If you don't see a command prompt, try pressing enter.
 / #
@@ -208,35 +194,26 @@ handy if you want to test configuration changes.
 If you start KuberNix again in the same run directory, then it will re-use the
 configuration during the cluster bootstrapping process. This means that you
 can modify all data inside the run root for testing and debugging purposes. The
-startup of the individual components will be initiated by YAML files called
-`run.yml`, which are available inside the directories of the corresponding
-components. For example, etc gets started via:
+startup of the individual components will be initiated by JSON files called
+`run.json`, which are available inside the directories of the corresponding
+components. For example, etcd gets started via:
 
 ```
-> cat kubernix-run/etcd/run.yml
+> cat kubernix-run/etcd/run.json
 ```
 
-```yml
----
-command: /nix/store/qlbsv0hvi0j5qj3631dzl9srl75finlk-etcd-3.3.13-bin/bin/etcd
-args:
-  - "--advertise-client-urls=https://127.0.0.1:2379"
-  - "--client-cert-auth"
-  - "--data-dir=/…/kubernix-run/etcd/run"
-  - "--initial-advertise-peer-urls=https://127.0.0.1:2380"
-  - "--initial-cluster-state=new"
-  - "--initial-cluster-token=etcd-cluster"
-  - "--initial-cluster=etcd=https://127.0.0.1:2380"
-  - "--listen-client-urls=https://127.0.0.1:2379"
-  - "--listen-peer-urls=https://127.0.0.1:2380"
-  - "--name=etcd"
-  - "--peer-client-cert-auth"
-  - "--cert-file=/…/kubernix-run/pki/kubernetes.pem"
-  - "--key-file=/…/kubernix-run/pki/kubernetes-key.pem"
-  - "--peer-cert-file=/…/kubernix-run/pki/kubernetes.pem"
-  - "--peer-key-file=/…/kubernix-run/pki/kubernetes-key.pem"
-  - "--peer-trusted-ca-file=/…/kubernix-run/pki/ca.pem"
-  - "--trusted-ca-file=/…/kubernix-run/pki/ca.pem"
+```json
+{
+  "command": "/nix/store/…-etcd-3.6.9-bin/bin/etcd",
+  "args": [
+    "--advertise-client-urls=https://127.0.0.1:2379",
+    "--client-cert-auth",
+    "--data-dir=/…/kubernix-run/etcd/run",
+    "--listen-client-urls=https://127.0.0.1:2379",
+    "--name=etcd",
+    "…"
+  ]
+}
 ```
 
 ### Configuration
@@ -254,6 +231,7 @@ KuberNix has some configuration possibilities, which are currently:
 | `-u, --container-runtime` | The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1` | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
 | `-o, --overlay`           | Nix package overlay to be used                                                      |                | `KUBERNIX_OVERLAY`           |
 | `-p, --packages`          | Additional Nix dependencies to be added to the environment                          |                | `KUBERNIX_PACKAGES`          |
+| `-a, --addons`            | Cluster addons to deploy (available: coredns)                                       | `coredns`      | `KUBERNIX_ADDONS`            |
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
@@ -263,8 +241,10 @@ up over the necessary cluster components.
 
 It is possible to spawn multiple worker nodes, too. To do this, simply adjust
 the `-n, --nodes` command line argument as well as your preferred container
-runtime via `-u, --container-runtime`. The default runtime is [podman][41],
+runtime via `-u, --container-runtime`. The default runtime is [podman][30],
 but every other Docker drop-in replacement should work out of the box.
+
+[30]: https://github.com/containers/podman
 
 #### Overlays
 
@@ -285,8 +265,8 @@ Now we can run KuberNix with the `--overlay, -o` command line argument:
 
 ```
 $ sudo kubernix --overlay overlay.nix
-[INFO  kubernix] Nix environment not found, bootstrapping one
-[INFO  kubernix] Using custom overlay 'overlay.nix'
+[INFO ] Nix environment not found, bootstrapping one
+[INFO ] Using custom overlay 'overlay.nix'
 these derivations will be built:
   /nix/store/9jb43i2mqjc94mbx30d9nrx529w6lngw-cri-o-1.15.2.drv
   building '/nix/store/9jb43i2mqjc94mbx30d9nrx529w6lngw-cri-o-1.15.2.drv'...
@@ -307,10 +287,8 @@ $ sudo kubernix -p kubernetes-helm
 [INFO ] Nix environment not found, bootstrapping one
 [INFO ] Bootstrapping cluster inside nix environment
 …
-> helm init
 > helm version
-Client: &version.Version{SemVer:"v2.14.3", GitCommit:"", GitTreeState:"clean"}
-Server: &version.Version{SemVer:"v2.14.3", GitCommit:"0e7f3b6637f7af8fcfddb3d2941fcc7cbebb0085", GitTreeState:"clean"}
+version.BuildInfo{Version:"v3.x.x", …}
 ```
 
 All available packages are listed on the [official Nix index][21].

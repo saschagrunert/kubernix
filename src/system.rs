@@ -156,7 +156,7 @@ mod tests {
     use super::*;
     use std::env::set_var;
 
-    const VALID_EXECUTABLE: &str = "runc";
+    const VALID_EXECUTABLE: &str = "echo";
     const INVALID_EXECUTABLE: &str = "should-not-exist";
 
     #[test]

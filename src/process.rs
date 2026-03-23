@@ -12,8 +12,8 @@ use std::{
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    thread::{JoinHandle, spawn},
-    time::Instant,
+    thread::{JoinHandle, sleep, spawn},
+    time::{Duration, Instant},
 };
 
 /// A general process abstraction
@@ -63,7 +63,7 @@ impl Process {
         create_dir_all(dir)?;
 
         // If the run file exists, execute only that one
-        let run_file = dir.join("run.yml");
+        let run_file = dir.join("run.json");
         let run = if !run_file.exists() {
             debug!(
                 "No previous run file '{}' found, writing new one",
@@ -74,12 +74,12 @@ impl Process {
                 command: System::find_executable(command)?,
                 args: args.iter().map(|x| (*x).to_string()).collect(),
             };
-            fs::write(run_file, serde_yml::to_string(&f)?)?;
+            fs::write(&run_file, serde_json::to_string_pretty(&f)?)?;
             f
         } else {
             debug!("Re using run file '{}'", run_file.display());
-            let contents = fs::read_to_string(run_file)?;
-            serde_yml::from_str(&contents)?
+            let contents = fs::read_to_string(&run_file)?;
+            serde_json::from_str(&contents)?
         };
 
         // Prepare the log dir and file
@@ -102,6 +102,7 @@ impl Process {
         let c = command.to_owned();
         let n = identifier.to_owned();
         let pid = child.id();
+        let lf = log_file.clone();
         let watch = spawn(move || {
             // Wait for the process to exit
             let status = child.wait()?;
@@ -109,6 +110,7 @@ impl Process {
             // No kill send, we assume that the process died
             if killed.try_recv().is_err() {
                 error!("{} ({}) died unexpectedly", n, c);
+                Self::dump_log_tail(&lf, &n);
                 dead.send(())?;
             } else {
                 info!("{} stopped", n);
@@ -144,14 +146,22 @@ impl Process {
             let mut line = String::new();
             reader.read_line(&mut line)?;
 
+            if line.is_empty() {
+                if self.died.try_recv().is_ok() {
+                    bail!(
+                        "{} ({}) died before becoming ready",
+                        self.name,
+                        self.command
+                    )
+                }
+                sleep(Duration::from_millis(50));
+                continue;
+            }
+
             if line.contains(pattern) {
                 info!("{} is ready", self.name);
                 debug!("Found pattern '{}' in line '{}'", pattern, line.trim());
                 return Ok(());
-            }
-
-            if self.died.try_recv().is_ok() {
-                bail!("{} ({}) died", self.command, self.name)
             }
         }
 
@@ -162,6 +172,18 @@ impl Process {
             self.name, self.command
         );
         bail!("Process timeout")
+    }
+
+    /// Dump the last lines of a process log file for debugging
+    fn dump_log_tail(log_file: &Path, name: &str) {
+        if let Ok(content) = fs::read_to_string(log_file) {
+            let lines: Vec<&str> = content.lines().collect();
+            let start = lines.len().saturating_sub(20);
+            error!("Last log lines of {}:", name);
+            for line in &lines[start..] {
+                error!("  {}", line);
+            }
+        }
     }
 
     /// Retrieve a pseudo state for stopped processes

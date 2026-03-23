@@ -7,7 +7,7 @@ dependencies:
         match: cfssl@v
 
   - name: etcd
-    version: 3.5.21
+    version: 3.6.9
     refPaths:
       - path: .github/workflows/ci.yml
         match: ETCD_VER

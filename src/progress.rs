@@ -31,13 +31,14 @@ impl Progress {
                 .template(&format!(
                     "{}{}{} {}",
                     style("[").white().dim(),
-                    "{spinner:.green} {elapsed:>3}",
+                    "{spinner:.cyan} {elapsed:>3}",
                     style("]").white().dim(),
-                    "{bar:25.green/blue} {pos:>2}/{len} {msg}",
+                    "{bar:25.cyan/black} {pos:>2}/{len} {msg:.bold}",
                 ))
-                .expect("invalid progress bar template"),
+                .expect("invalid progress bar template")
+                .progress_chars("━╸━"),
         );
-        p.enable_steady_tick(Duration::from_millis(100));
+        p.enable_steady_tick(Duration::from_millis(80));
 
         // Set the global instance
         *progress_bar().write() = Some(Arc::downgrade(&p));

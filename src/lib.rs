@@ -52,7 +52,6 @@ use ::nix::{
 };
 use anyhow::{Context, Result, bail};
 use log::{debug, error, info, set_boxed_logger};
-use proc_mounts::MountIter;
 use rayon::{prelude::*, scope};
 use signal_hook::{
     consts::signal::{SIGHUP, SIGINT, SIGTERM},
@@ -60,6 +59,7 @@ use signal_hook::{
 };
 use std::{
     fs,
+    io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, id},
     sync::{
@@ -283,7 +283,10 @@ impl Kubernix {
     /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
     fn apply_addons(&mut self) -> Result<()> {
         info!("Applying cluster addons");
-        CoreDns::apply(&self.config, &self.network, &self.kubectl)
+        if self.config.addons().iter().any(|a| a == "coredns") {
+            CoreDns::apply(&self.config, &self.network, &self.kubectl)?;
+        }
+        Ok(())
     }
 
     /// Wait until a termination signal occurs
@@ -301,7 +304,9 @@ impl Kubernix {
         fs::write(pid_file, id().to_string())?;
 
         // Wait for the signals
-        while !term.load(Ordering::Relaxed) {}
+        while !term.load(Ordering::Relaxed) {
+            sleep(Duration::from_millis(100));
+        }
         Ok(())
     }
 
@@ -356,23 +361,15 @@ impl Kubernix {
         debug!("Removing active mounts");
         let now = Instant::now();
         while now.elapsed().as_secs() < 15 {
-            match MountIter::new() {
+            match Self::read_mount_points(self.config.root()) {
                 Err(e) => {
                     debug!("Unable to retrieve mounts: {}", e);
                     sleep(Duration::from_secs(1));
                 }
-                Ok(mounts) => {
-                    let mut mount_points: Vec<_> = mounts
-                        .filter_map(|x| x.ok())
-                        .filter(|x| x.dest.starts_with(self.config.root()))
-                        .filter(|x| !x.dest.eq(self.config.root()))
-                        .map(|m| m.dest)
-                        .collect();
+                Ok(mount_points) => {
                     if mount_points.is_empty() {
                         break;
                     }
-                    // Unmount deepest paths first to avoid "device busy"
-                    mount_points.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
                     for dest in &mount_points {
                         debug!("Removing mount: {}", dest.display());
                         if let Err(e) = umount2(dest, MntFlags::MNT_FORCE) {
@@ -383,6 +380,21 @@ impl Kubernix {
                 }
             };
         }
+    }
+
+    /// Read mount points from /proc/mounts filtered by the given root path,
+    /// sorted deepest-first for safe unmounting.
+    fn read_mount_points(root: &Path) -> Result<Vec<PathBuf>> {
+        let file = fs::File::open("/proc/mounts").context("Unable to open /proc/mounts")?;
+        let reader = BufReader::new(file);
+        let mut points: Vec<PathBuf> = reader
+            .lines()
+            .map_while(Result::ok)
+            .filter_map(|line| line.split_whitespace().nth(1).map(PathBuf::from))
+            .filter(|p| p.starts_with(root) && p != root)
+            .collect();
+        points.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
+        Ok(points)
     }
 }
 
