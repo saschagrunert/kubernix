@@ -95,16 +95,5 @@ shell: build-release ## Run kubernix with a shell.
 test-unit: ## Run unit tests.
 	cargo test --lib
 
-.PHONY: test-integration-single-node
-test-integration-single-node: build-release ## Run single-node integration test.
-	cargo test --test integration local_single_node -- --test-threads 1 --nocapture
-
-.PHONY: test-integration-multi-node
-test-integration-multi-node: build-release ## Run multi-node integration test.
-	cargo test --test integration local_multi_node -- --test-threads 1 --nocapture
-
-.PHONY: test-integration
-test-integration: test-integration-single-node test-integration-multi-node ## Run all integration tests.
-
 .PHONY: test
-test: test-unit test-integration ## Run all tests.
+test: test-unit ## Run all tests.

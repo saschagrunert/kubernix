@@ -18,3 +18,24 @@ impl Node {
         format!("{}-{}", PREFIX, number)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{config::tests::test_config, network::tests::test_network};
+    use anyhow::Result;
+
+    #[test]
+    fn raw_name() {
+        assert_eq!(Node::raw(0), "node-0");
+        assert_eq!(Node::raw(5), "node-5");
+    }
+
+    #[test]
+    fn single_node_uses_hostname() -> Result<()> {
+        let c = test_config()?;
+        let n = test_network()?;
+        assert_eq!(Node::name(&c, &n, 0), *n.hostname());
+        Ok(())
+    }
+}

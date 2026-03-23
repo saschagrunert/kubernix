@@ -31,9 +31,12 @@ impl Display for CriSocket {
     }
 }
 
+/// Maximum usable bytes in a Unix socket path (108 - 1 for null terminator)
+pub const MAX_SOCKET_PATH_LEN: usize = 107;
+
 impl CriSocket {
     pub fn new(path: PathBuf) -> Result<CriSocket> {
-        if path.display().to_string().len() > 100 {
+        if path.display().to_string().len() > MAX_SOCKET_PATH_LEN {
             bail!("Socket path '{}' is too long", path.display())
         }
         Ok(CriSocket(path))
@@ -230,6 +233,6 @@ pub mod tests {
 
     #[test]
     fn cri_socket_failure() {
-        assert!(CriSocket::new("a".repeat(101).into()).is_err());
+        assert!(CriSocket::new("a".repeat(MAX_SOCKET_PATH_LEN + 1).into()).is_err());
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     container::Container,
-    crio::Crio,
+    crio::{Crio, MAX_SOCKET_PATH_LEN},
     kubeconfig::KubeConfig,
     network::Network,
     node::Node,
@@ -29,7 +29,9 @@ impl Kubelet {
         let dir = config.root().join(KUBELET).join(&node_name);
         let root_dir = dir.join("run");
         // pod-resources/<pid> is the longest socket path kubelet creates
-        if root_dir.display().to_string().len() + "pod-resources/1234567890".len() > 107 {
+        if root_dir.display().to_string().len() + "pod-resources/1234567890".len()
+            > MAX_SOCKET_PATH_LEN
+        {
             bail!(
                 "Kubelet run path '{}' is too long for unix sockets",
                 root_dir.display()

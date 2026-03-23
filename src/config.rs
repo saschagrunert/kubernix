@@ -30,7 +30,7 @@ pub struct Config {
 
     #[arg(
         default_value = "kubernix-run",
-        env = "KUBERNIX_RUN",
+        env = "KUBERNIX_ROOT",
         global = true,
         long = "root",
         short = 'r',
@@ -116,6 +116,17 @@ pub struct Config {
     )]
     /// Do not spawn an interactive shell after bootstrap
     no_shell: bool,
+
+    #[arg(
+        default_value = "coredns",
+        env = "KUBERNIX_ADDONS",
+        long = "addons",
+        short = 'a',
+        num_args = 0..,
+        value_name = "ADDON",
+    )]
+    /// Cluster addons to deploy (available: coredns)
+    addons: Vec<String>,
 }
 
 impl Config {
@@ -167,6 +178,11 @@ impl Config {
     /// Returns whether to skip the shell
     pub fn no_shell(&self) -> &bool {
         &self.no_shell
+    }
+
+    /// Returns the addons to deploy
+    pub fn addons(&self) -> &Vec<String> {
+        &self.addons
     }
 }
 
@@ -304,6 +320,7 @@ pub mod tests {
         fs::write(
             c.root.join(Config::FILENAME),
             r#"
+addons = ["coredns"]
 cidr = "1.1.1.1/16"
 container-runtime = "podman"
 log-level = "DEBUG"
