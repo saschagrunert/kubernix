@@ -1,1 +1,0 @@
-initSidebarItems({"struct":[["Config","The global configuration"],["Kubernix","The main entry point for the application"],["Logger","The main logging faccade"]]});
