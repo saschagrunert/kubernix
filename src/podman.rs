@@ -1,4 +1,4 @@
-use crate::{system::System, Config};
+use crate::{Config, system::System};
 use anyhow::Result;
 use log::LevelFilter;
 use std::{
@@ -44,10 +44,9 @@ impl Podman {
             config.log_level().to_string()
         };
         let mut args = vec![
-            format!("--cni-config-dir={}", Self::cni_dir(config).display()),
             format!("--conmon={}", System::find_executable("conmon")?.display()),
             format!("--log-level={}", log_level),
-            format!("--runtime={}", System::find_executable("runc")?.display()),
+            format!("--runtime={}", System::find_executable("crun")?.display()),
             "--cgroup-manager=cgroupfs".into(),
             "--events-backend=none".into(),
         ];

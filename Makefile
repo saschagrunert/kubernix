@@ -1,126 +1,110 @@
 ARGS ?=
 SUDO ?= sudo -E
+ZEITGEIST_VERSION ?= v0.5.4
 
 # Avoid cargo/nix warnings about HOME ownership when running via sudo
 ifeq ($(shell id -u),0)
 export HOME := /root
 endif
 KUBERNIX ?= $(SUDO) target/release/kubernix $(ARGS)
-CONTAINER_RUNTIME ?= $(SUDO) podman
-RUN_DIR ?= $(shell pwd)/kubernix-run
+BUILD_DIR ?= build
 
-export IMAGE ?= docker.io/saschagrunert/kubernix
-
-NIX_BUILD ?= nix/build.nix
-
-define nix-run
-	nix-shell $(NIX_BUILD) --run '$(1)'
-endef
-
-define nix-run-pure
-	nix-shell $(NIX_BUILD) --pure --run '$(1)'
-endef
+COLOR := \033[36m
+NOCOLOR := \033[0m
+WIDTH := 30
 
 all: build
 
-.PHONY: build
-build:
-	$(call nix-run-pure,cargo build)
+.PHONY: help
+help: ## Display this help.
+	@awk \
+		-v "col=${COLOR}" -v "nocol=${NOCOLOR}" \
+		' \
+			BEGIN { \
+				FS = ":.*##" ; \
+				printf "Usage:\n  make %s<target>%s\n", col, nocol \
+			} \
+			/^[./a-zA-Z_-]+:.*?##/ { \
+				printf "  %s%-${WIDTH}s%s %s\n", col, $$1, nocol, $$2 \
+			} \
+			/^##@/ { \
+				printf "\n%s\n", substr($$0, 5) \
+			} \
+		' $(MAKEFILE_LIST)
 
-.PHONY: build-image
-build-image:
-	$(CONTAINER_RUNTIME) build -t $(IMAGE) .
+##@ Build targets:
+
+.PHONY: build
+build: ## Build in debug mode.
+	cargo build
 
 .PHONY: build-release
-build-release:
-	$(call nix-run-pure,cargo build --release)
+build-release: ## Build in release mode.
+	cargo build --release
 
-.PHONY: coverage
-coverage:
-	$(call nix-run-pure,cargo llvm-cov --lib --lcov --output-path lcov.info)
-
-.PHONY: e2e
-e2e:
-	$(call nix-run,$(SUDO) \
-		KUBERNETES_SERVICE_HOST=127.0.0.1 \
-		KUBERNETES_SERVICE_PORT=6443 \
-		KUBECONFIG=$(RUN_DIR)/kubeconfig/admin.kubeconfig \
-		e2e.test \
-			--provider=local \
-			--ginkgo.focus='.*$(FOCUS).*' \
-			--ginkgo.progress \
-			$(ARGS) \
-	)
+.PHONY: build-static
+build-static: ## Build the static release binary.
+	RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --target x86_64-unknown-linux-gnu
+	strip -s target/x86_64-unknown-linux-gnu/release/kubernix
+	ldd target/x86_64-unknown-linux-gnu/release/kubernix 2>&1 | grep -qE '(statically linked)|(not a dynamic executable)'
 
 .PHONY: docs
-docs:
-	$(call nix-run-pure,cargo doc --no-deps)
+docs: ## Build the documentation.
+	cargo doc --no-deps
+
+##@ Lint targets:
 
 .PHONY: lint-clippy
-lint-clippy:
-	$(call nix-run-pure,cargo clippy --all -- -D warnings)
+lint-clippy: ## Run clippy linter.
+	cargo clippy --all -- -D warnings
 
 .PHONY: lint-rustfmt
-lint-rustfmt:
-	$(call nix-run-pure,cargo fmt && git diff --exit-code)
+lint-rustfmt: ## Check code formatting.
+	cargo fmt --check
 
-.PHONY: nix
-nix:
-	$(call nix-run-pure,$(shell which bash))
+.PHONY: lint-audit
+lint-audit: ## Audit dependencies for security vulnerabilities.
+	cargo audit
 
-.PHONY: nixdeps
-nixdeps:
-	@echo '| Application | Version |'
-	@echo '| - | - |'
-	@nix-instantiate nix/packages.nix 2>/dev/null \
-		| sed -n 's;/nix/store/[[:alnum:]]\{32\}-\(.*\)-\(.*\)\.drv\(!bin\)\{0,1\};| \1 | v\2 |;p' \
-		| sort
+.PHONY: lint-dependencies
+lint-dependencies: ## Validate dependency versions via zeitgeist.
+	@test -x $(BUILD_DIR)/zeitgeist || { \
+		echo "Installing zeitgeist $(ZEITGEIST_VERSION)..."; \
+		mkdir -p $(BUILD_DIR); \
+		curl -sSfL https://github.com/kubernetes-sigs/zeitgeist/releases/download/$(ZEITGEIST_VERSION)/zeitgeist-amd64-linux \
+			-o $(BUILD_DIR)/zeitgeist && chmod +x $(BUILD_DIR)/zeitgeist; \
+	}
+	$(BUILD_DIR)/zeitgeist validate --local-only --base-path . --config dependencies.yaml
 
-.PHONY: nixpkgs
-nixpkgs:
-	@nix-shell -p nix-prefetch-git --run \
-		'nix-prefetch-git --no-deepClone https://github.com/nixos/nixpkgs' > nix/nixpkgs.json
+.PHONY: lint
+lint: lint-clippy lint-rustfmt lint-audit lint-dependencies ## Run all linters.
+
+##@ Run targets:
 
 .PHONY: run
-run: build-release
+run: build-release ## Run kubernix.
 	$(KUBERNIX)
 
-.PHONY: run-image
-run-image:
-	$(SUDO) contrib/prepare-system
-	mkdir -p $(RUN_DIR)
-	if [ -d /dev/mapper ]; then \
-		DEV_MAPPER=-v/dev/mapper:/dev/mapper ;\
-	fi ;\
-	$(CONTAINER_RUNTIME) run \
-		-v $(RUN_DIR):/kubernix-run \
-		--rm \
-		--privileged \
-		--net=host \
-		$$DEV_MAPPER \
-		-it $(IMAGE) $(ARGS)
-
 .PHONY: shell
-shell: build-release
+shell: build-release ## Run kubernix with a shell.
 	$(KUBERNIX) shell
 
-define test
-	$(call nix-run,\
-		cargo test \
-			--test $(1) $(ARGS) \
-			-- \
-			--test-threads 1 \
-			--nocapture)
-endef
-
-.PHONY: test-integration
-test-integration:
-	$(call test,integration)
-
-.PHONY: test-e2e
-test-e2e:
-	$(call test,e2e)
+##@ Test targets:
 
 .PHONY: test-unit
-test-unit:
-	$(call nix-run-pure,cargo test --lib)
+test-unit: ## Run unit tests.
+	cargo test --lib
+
+.PHONY: test-integration-single-node
+test-integration-single-node: build-release ## Run single-node integration test.
+	cargo test --test integration local_single_node -- --test-threads 1 --nocapture
+
+.PHONY: test-integration-multi-node
+test-integration-multi-node: build-release ## Run multi-node integration test.
+	cargo test --test integration local_multi_node -- --test-threads 1 --nocapture
+
+.PHONY: test-integration
+test-integration: test-integration-single-node test-integration-multi-node ## Run all integration tests.
+
+.PHONY: test
+test: test-unit test-integration ## Run all tests.

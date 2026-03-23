@@ -1,0 +1,19 @@
+---
+dependencies:
+  - name: cfssl
+    version: 1.6.5
+    refPaths:
+      - path: .github/workflows/ci.yml
+        match: cfssl@v
+
+  - name: etcd
+    version: 3.5.21
+    refPaths:
+      - path: .github/workflows/ci.yml
+        match: ETCD_VER
+
+  - name: zeitgeist
+    version: 0.5.4
+    refPaths:
+      - path: Makefile
+        match: ZEITGEIST_VERSION

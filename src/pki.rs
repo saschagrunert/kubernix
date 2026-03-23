@@ -1,5 +1,5 @@
-use crate::{network::Network, node::Node, Config};
-use anyhow::{bail, Context, Result};
+use crate::{Config, network::Network, node::Node};
+use anyhow::{Context, Result, bail};
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
 use std::{
@@ -10,58 +10,58 @@ use std::{
 };
 
 pub struct Pki {
-    admin: Idendity,
-    apiserver: Idendity,
-    ca: Idendity,
-    controller_manager: Idendity,
-    kubelets: Vec<Idendity>,
-    proxy: Idendity,
-    scheduler: Idendity,
-    service_account: Idendity,
+    admin: Identity,
+    apiserver: Identity,
+    ca: Identity,
+    controller_manager: Identity,
+    kubelets: Vec<Identity>,
+    proxy: Identity,
+    scheduler: Identity,
+    service_account: Identity,
 }
 
 impl Pki {
-    pub fn admin(&self) -> &Idendity {
+    pub fn admin(&self) -> &Identity {
         &self.admin
     }
 
-    pub fn apiserver(&self) -> &Idendity {
+    pub fn apiserver(&self) -> &Identity {
         &self.apiserver
     }
 
-    pub fn ca(&self) -> &Idendity {
+    pub fn ca(&self) -> &Identity {
         &self.ca
     }
 
-    pub fn controller_manager(&self) -> &Idendity {
+    pub fn controller_manager(&self) -> &Identity {
         &self.controller_manager
     }
 
-    pub fn kubelets(&self) -> &Vec<Idendity> {
+    pub fn kubelets(&self) -> &Vec<Identity> {
         &self.kubelets
     }
 
-    pub fn proxy(&self) -> &Idendity {
+    pub fn proxy(&self) -> &Identity {
         &self.proxy
     }
 
-    pub fn scheduler(&self) -> &Idendity {
+    pub fn scheduler(&self) -> &Identity {
         &self.scheduler
     }
 
-    pub fn service_account(&self) -> &Idendity {
+    pub fn service_account(&self) -> &Identity {
         &self.service_account
     }
 }
 
-pub struct Idendity {
+pub struct Identity {
     name: String,
     user: String,
     cert: PathBuf,
     key: PathBuf,
 }
 
-impl Idendity {
+impl Identity {
     pub fn name(&self) -> &String {
         &self.name
     }
@@ -78,8 +78,8 @@ impl Idendity {
         &self.key
     }
 
-    pub fn new(dir: &Path, name: &str, user: &str) -> Idendity {
-        Idendity {
+    pub fn new(dir: &Path, name: &str, user: &str) -> Identity {
+        Identity {
             cert: dir.join(format!("{}.pem", name)),
             key: dir.join(format!("{}-key.pem", name)),
             name: name.into(),
@@ -89,14 +89,14 @@ impl Idendity {
 }
 
 struct PkiConfig<'a> {
-    ca: &'a Idendity,
+    ca: &'a Identity,
     ca_config: PathBuf,
     dir: &'a Path,
     hostnames: &'a str,
 }
 
 impl<'a> PkiConfig<'a> {
-    fn ca(&self) -> &Idendity {
+    fn ca(&self) -> &Identity {
         self.ca
     }
 
@@ -139,11 +139,11 @@ impl Pki {
                 // Multiple nodes get identified via their node name
                 nodes
                     .iter()
-                    .map(|n| Idendity::new(dir, n, &Self::node_user(n)))
+                    .map(|n| Identity::new(dir, n, &Self::node_user(n)))
                     .collect()
             } else {
                 // Single node gets identified via its hostname
-                vec![Idendity::new(
+                vec![Identity::new(
                     dir,
                     network.hostname(),
                     &Self::node_user(network.hostname()),
@@ -151,18 +151,18 @@ impl Pki {
             };
 
             Ok(Pki {
-                admin: Idendity::new(dir, ADMIN_NAME, ADMIN_NAME),
-                apiserver: Idendity::new(dir, APISERVER_NAME, APISERVER_NAME),
-                ca: Idendity::new(dir, CA_NAME, CA_NAME),
-                controller_manager: Idendity::new(
+                admin: Identity::new(dir, ADMIN_NAME, ADMIN_NAME),
+                apiserver: Identity::new(dir, APISERVER_NAME, APISERVER_NAME),
+                ca: Identity::new(dir, CA_NAME, CA_NAME),
+                controller_manager: Identity::new(
                     dir,
                     CONTROLLER_MANAGER_NAME,
                     CONTROLLER_MANAGER_USER,
                 ),
                 kubelets,
-                proxy: Idendity::new(dir, PROXY_NAME, PROXY_USER),
-                scheduler: Idendity::new(dir, SCHEDULER_NAME, SCHEDULER_USER),
-                service_account: Idendity::new(dir, SERVICE_ACCOUNT_NAME, SERVICE_ACCOUNT_NAME),
+                proxy: Identity::new(dir, PROXY_NAME, PROXY_USER),
+                scheduler: Identity::new(dir, SCHEDULER_NAME, SCHEDULER_USER),
+                service_account: Identity::new(dir, SERVICE_ACCOUNT_NAME, SERVICE_ACCOUNT_NAME),
             })
         } else {
             info!("Generating certificates");
@@ -213,7 +213,7 @@ impl Pki {
         }
     }
 
-    fn setup_ca(dir: &Path) -> Result<Idendity> {
+    fn setup_ca(dir: &Path) -> Result<Identity> {
         debug!("Creating CA certificates");
         const CN: &str = "kubernetes";
         let csr = dir.join("ca-csr.json");
@@ -238,23 +238,23 @@ impl Pki {
             bail!("CA certificate generation failed");
         }
         debug!("CA certificates created");
-        Ok(Idendity::new(dir, CA_NAME, CA_NAME))
+        Ok(Identity::new(dir, CA_NAME, CA_NAME))
     }
 
-    fn setup_kubelet(pki_config: &PkiConfig, node: &str) -> Result<Idendity> {
+    fn setup_kubelet(pki_config: &PkiConfig, node: &str) -> Result<Identity> {
         let user = Self::node_user(node);
         let csr_file = pki_config.dir().join(format!("{}-csr.json", node));
         Self::write_csr(&user, "system:nodes", &csr_file)?;
         Self::generate(pki_config, node, &csr_file, &user)
     }
 
-    fn setup_admin(pki_config: &PkiConfig) -> Result<Idendity> {
+    fn setup_admin(pki_config: &PkiConfig) -> Result<Identity> {
         let csr_file = pki_config.dir().join("admin-csr.json");
         Self::write_csr(ADMIN_NAME, "system:masters", &csr_file)?;
         Self::generate(pki_config, ADMIN_NAME, &csr_file, ADMIN_NAME)
     }
 
-    fn setup_controller_manager(pki_config: &PkiConfig) -> Result<Idendity> {
+    fn setup_controller_manager(pki_config: &PkiConfig) -> Result<Identity> {
         let csr_file = pki_config.dir().join("kube-controller-manager-csr.json");
         Self::write_csr(CONTROLLER_MANAGER_USER, CONTROLLER_MANAGER_USER, &csr_file)?;
         Self::generate(
@@ -265,25 +265,25 @@ impl Pki {
         )
     }
 
-    fn setup_proxy(pki_config: &PkiConfig) -> Result<Idendity> {
+    fn setup_proxy(pki_config: &PkiConfig) -> Result<Identity> {
         let csr_file = pki_config.dir().join("kube-proxy-csr.json");
         Self::write_csr("system:kube-proxy", "system:node-proxier", &csr_file)?;
         Self::generate(pki_config, PROXY_NAME, &csr_file, PROXY_USER)
     }
 
-    fn setup_scheduler(pki_config: &PkiConfig) -> Result<Idendity> {
+    fn setup_scheduler(pki_config: &PkiConfig) -> Result<Identity> {
         let csr_file = pki_config.dir().join("kube-scheduler-csr.json");
         Self::write_csr(SCHEDULER_USER, SCHEDULER_USER, &csr_file)?;
         Self::generate(pki_config, SCHEDULER_NAME, &csr_file, SCHEDULER_USER)
     }
 
-    fn setup_apiserver(pki_config: &PkiConfig) -> Result<Idendity> {
+    fn setup_apiserver(pki_config: &PkiConfig) -> Result<Identity> {
         let csr_file = pki_config.dir().join("kubernetes-csr.json");
         Self::write_csr(APISERVER_NAME, APISERVER_NAME, &csr_file)?;
         Self::generate(pki_config, APISERVER_NAME, &csr_file, APISERVER_NAME)
     }
 
-    fn setup_service_account(pki_config: &PkiConfig) -> Result<Idendity> {
+    fn setup_service_account(pki_config: &PkiConfig) -> Result<Identity> {
         let csr_file = pki_config.dir().join("service-account-csr.json");
         Self::write_csr("service-accounts", "kubernetes", &csr_file)?;
         Self::generate(
@@ -294,7 +294,7 @@ impl Pki {
         )
     }
 
-    fn generate(pki_config: &PkiConfig, name: &str, csr: &Path, user: &str) -> Result<Idendity> {
+    fn generate(pki_config: &PkiConfig, name: &str, csr: &Path, user: &str) -> Result<Identity> {
         debug!("Creating certificate for {}", name);
 
         let mut cfssl = Command::new("cfssl")
@@ -321,7 +321,7 @@ impl Pki {
         }
         debug!("Certificate created for {}", name);
 
-        Ok(Idendity::new(pki_config.dir(), name, user))
+        Ok(Identity::new(pki_config.dir(), name, user))
     }
 
     fn write_csr(cn: &str, o: &str, dest: &Path) -> Result<()> {

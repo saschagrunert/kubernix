@@ -1,6 +1,6 @@
-use crate::{nix::Nix, podman::Podman, process::Process, system::System, Config};
-use anyhow::{bail, Result};
-use log::{debug, info, trace, LevelFilter};
+use crate::{Config, nix::Nix, podman::Podman, process::Process, system::System};
+use anyhow::{Result, bail};
+use log::{LevelFilter, debug, info, trace};
 use std::{
     fmt::Display,
     fs,
@@ -95,6 +95,7 @@ impl Container {
             "--net=host",
             "--privileged",
             "--rm",
+            "--cgroupns=host",
             arg_hostname,
             arg_name,
             arg_volume_root,
@@ -144,17 +145,18 @@ impl Container {
         }
 
         let name = Self::prefixed_container_name(container_name);
+        let nix_dir = format!("{}/default.nix", DEFAULT_ROOT);
+        let mut cmd_parts = vec![process_name.to_string()];
+        cmd_parts.extend(args.iter().map(|a| a.to_string()));
+        let run_cmd = cmd_parts.join(" ");
         args_vec.extend(vec![
             "exec",
             &name,
-            "nix",
-            "run",
-            "-f",
-            DEFAULT_ROOT,
-            "-c",
-            process_name,
+            "nix-shell",
+            &nix_dir,
+            "--run",
+            &run_cmd,
         ]);
-        args_vec.extend(args);
 
         // Run as usual process
         trace!("Container runtime exec args: {:?}", args_vec);

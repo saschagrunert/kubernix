@@ -1,8 +1,8 @@
 use crate::Config;
 use anyhow::Result;
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use log::info;
-use rand::{thread_rng, Rng};
+use rand::random;
 use std::{
     fs::{self, create_dir_all},
     path::PathBuf,
@@ -25,7 +25,7 @@ impl EncryptionConfig {
         // Create only if not already existing to make cluster reuse work
         if !path.exists() {
             info!("Creating encryption config");
-            let rnd = thread_rng().r#gen::<[u8; 32]>();
+            let rnd: [u8; 32] = random();
             let b64 = STANDARD.encode(rnd);
             let yml = format!(include_str!("assets/encryptionconfig.yml"), b64);
             fs::write(&path, yml)?;

@@ -1,13 +1,13 @@
 use crate::{
-    kubectl::Kubectl,
-    pki::{Idendity, Pki},
     Config,
+    kubectl::Kubectl,
+    pki::{Identity, Pki},
 };
-use anyhow::{format_err, Context, Result};
+use anyhow::{Context, Result, format_err};
 use log::{debug, info};
-use nix::sys::stat::{fchmod, Mode};
+use nix::sys::stat::{Mode, fchmod};
 use std::{
-    fs::{create_dir_all, File},
+    fs::{File, create_dir_all},
     net::Ipv4Addr,
     path::{Path, PathBuf},
 };
@@ -85,9 +85,9 @@ impl KubeConfig {
         }
     }
 
-    fn setup_kubeconfig(dir: &Path, idendity: &Idendity, ca: &Path) -> Result<PathBuf> {
-        debug!("Creating kubeconfig for {}", idendity.name());
-        let kubeconfig = Self::target_config(dir, idendity);
+    fn setup_kubeconfig(dir: &Path, identity: &Identity, ca: &Path) -> Result<PathBuf> {
+        debug!("Creating kubeconfig for {}", identity.name());
+        let kubeconfig = Self::target_config(dir, identity);
 
         let embed_certs = "--embed-certs=true";
         let cluster = "kubernetes";
@@ -102,9 +102,9 @@ impl KubeConfig {
 
         kubectl.config(&[
             "set-credentials",
-            idendity.user(),
-            &format!("--client-certificate={}", idendity.cert().display()),
-            &format!("--client-key={}", idendity.key().display()),
+            identity.user(),
+            &format!("--client-certificate={}", identity.cert().display()),
+            &format!("--client-key={}", identity.key().display()),
             embed_certs,
         ])?;
 
@@ -113,22 +113,25 @@ impl KubeConfig {
             "set-context",
             context,
             &format!("--cluster={}", cluster),
-            &format!("--user={}", idendity.user()),
+            &format!("--user={}", identity.user()),
         ])?;
 
         kubectl.config(&["use-context", context])?;
 
         // Adapt file permissions
         let file = File::open(&kubeconfig).context("unable to open kubeconfig")?;
-        fchmod(&file, Mode::from_bits(0o644).ok_or_else(|| format_err!("unable to get mode bits"))?)
-            .context("unable to set kubeconfig permissions")?;
+        fchmod(
+            &file,
+            Mode::from_bits(0o600).ok_or_else(|| format_err!("unable to get mode bits"))?,
+        )
+        .context("unable to set kubeconfig permissions")?;
 
-        debug!("Kubeconfig created for {}", idendity.name());
+        debug!("Kubeconfig created for {}", identity.name());
         Ok(kubeconfig)
     }
 
-    fn target_config(dir: &Path, idendity: &Idendity) -> PathBuf {
-        dir.join(format!("{}.kubeconfig", idendity.name()))
+    fn target_config(dir: &Path, identity: &Identity) -> PathBuf {
+        dir.join(format!("{}.kubeconfig", identity.name()))
     }
 }
 

@@ -1,7 +1,7 @@
 //! Configuration related structures
 use crate::{podman::Podman, system::System};
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand as ClapSubcommand};
+use clap::{Parser, Subcommand as ClapSubcommand, builder::styling};
 use ipnetwork::Ipv4Network;
 use log::LevelFilter;
 use serde::{Deserialize, Serialize};
@@ -15,6 +15,12 @@ use std::{
 #[command(
     after_help = "More info at: https://github.com/saschagrunert/kubernix",
     author = "Sascha Grunert <mail@saschagrunert.de>",
+    version,
+    styles = styling::Styles::styled()
+        .header(styling::AnsiColor::Green.on_default().bold())
+        .usage(styling::AnsiColor::Green.on_default().bold())
+        .literal(styling::AnsiColor::Cyan.on_default().bold())
+        .placeholder(styling::AnsiColor::Cyan.on_default())
 )]
 /// The global configuration
 pub struct Config {
@@ -28,7 +34,7 @@ pub struct Config {
         global = true,
         long = "root",
         short = 'r',
-        value_name = "PATH",
+        value_name = "PATH"
     )]
     /// Path where all the runtime data is stored
     root: PathBuf,
@@ -38,7 +44,7 @@ pub struct Config {
         env = "KUBERNIX_LOG_LEVEL",
         long = "log-level",
         short = 'l',
-        value_name = "LEVEL",
+        value_name = "LEVEL"
     )]
     /// The logging level of the application
     log_level: LevelFilter,
@@ -48,7 +54,7 @@ pub struct Config {
         env = "KUBERNIX_CIDR",
         long = "cidr",
         short = 'c',
-        value_name = "CIDR",
+        value_name = "CIDR"
     )]
     /// The CIDR used for the cluster
     cidr: Ipv4Network,
@@ -57,7 +63,7 @@ pub struct Config {
         env = "KUBERNIX_OVERLAY",
         long = "overlay",
         short = 'o',
-        value_name = "PATH",
+        value_name = "PATH"
     )]
     /// The Nix package overlay to be used
     overlay: Option<PathBuf>,
@@ -72,7 +78,12 @@ pub struct Config {
     /// Additional dependencies to be added to the environment
     packages: Vec<String>,
 
-    #[arg(env = "KUBERNIX_SHELL", long = "shell", short = 's', value_name = "SHELL")]
+    #[arg(
+        env = "KUBERNIX_SHELL",
+        long = "shell",
+        short = 's',
+        value_name = "SHELL"
+    )]
     /// The shell executable to be used, defaults to $SHELL, fallback is `sh`
     shell: Option<String>,
 
@@ -81,7 +92,7 @@ pub struct Config {
         env = "KUBERNIX_NODES",
         long = "nodes",
         short = 'n',
-        value_name = "NODES",
+        value_name = "NODES"
     )]
     /// The number of nodes to be registered
     nodes: u8,
@@ -101,7 +112,7 @@ pub struct Config {
         conflicts_with = "shell",
         env = "KUBERNIX_NO_SHELL",
         long = "no-shell",
-        short = 'e',
+        short = 'e'
     )]
     /// Do not spawn an interactive shell after bootstrap
     no_shell: bool,
@@ -237,7 +248,10 @@ pub mod tests {
     use tempfile::tempdir;
 
     pub fn test_config() -> Result<Config> {
-        let mut c = Config::default();
+        let mut c = Config::parse_from(&[] as &[&str]);
+        if c.shell.is_none() {
+            c.shell = System::shell().ok();
+        }
         c.root = tempdir()?.keep();
         c.canonicalize_root()?;
         Ok(c)

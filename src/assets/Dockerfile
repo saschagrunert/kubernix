@@ -1,4 +1,4 @@
 FROM docker.io/nixos/nix:latest
 COPY {nix} {root}
-RUN nix run -f {root} -c echo bootstrap done
-ENTRYPOINT [ "nix", "run", "-f", "{root}", "-c" ]
+RUN nix-shell {root}/default.nix --run "echo bootstrap done"
+ENTRYPOINT [ "/bin/sh", "-c", "nix-shell {root}/default.nix --run \"$*\"", "--" ]

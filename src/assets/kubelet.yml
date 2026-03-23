@@ -17,6 +17,9 @@ podCIDR: "{cidr}"
 runtimeRequestTimeout: "15m"
 tlsCertFile: "{cert}"
 tlsPrivateKeyFile: "{key}"
+cgroupDriver: "systemd"
+cgroupsPerQOS: false
 failSwapOn: false
+enforceNodeAllocatable: []
 port: {port}
 healthzPort: {healthzPort}

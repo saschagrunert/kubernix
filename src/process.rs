@@ -1,18 +1,18 @@
 use crate::system::System;
-use anyhow::{bail, Context, Result};
-use crossbeam_channel::{bounded, Receiver, Sender};
+use anyhow::{Context, Result, bail};
+use crossbeam_channel::{Receiver, Sender, bounded};
 use log::{debug, error, info};
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{Signal, kill},
     unistd::Pid,
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, create_dir_all, File},
+    fs::{self, File, create_dir_all},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    thread::{spawn, JoinHandle},
+    thread::{JoinHandle, spawn},
     time::Instant,
 };
 

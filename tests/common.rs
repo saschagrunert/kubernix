@@ -1,73 +1,17 @@
 #![allow(dead_code)]
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::{
     env::{current_dir, var},
-    fs::{canonicalize, create_dir_all, File},
+    fs::{File, create_dir_all},
     io::{BufRead, BufReader},
     path::PathBuf,
     process::{Command, Stdio},
-    time::Instant,
+    thread::sleep,
+    time::{Duration, Instant},
 };
 
 const TIMEOUT: u64 = 2000;
 pub const SUDO: &str = "sudo";
-
-pub fn run_podman_test(test: &str, args: Option<&[&str]>) -> Result<()> {
-    run_container_test(test, "podman", args)
-}
-
-pub fn run_docker_test(test: &str, args: Option<&[&str]>) -> Result<()> {
-    run_container_test(test, "docker", args)
-}
-
-fn run_container_test(test: &str, command: &str, args: Option<&[&str]>) -> Result<()> {
-    let image = var("IMAGE")?;
-    let mut full_args = vec![
-        command,
-        "run",
-        "--name",
-        test,
-        "--rm",
-        "--privileged",
-        "--net=host",
-    ];
-
-    // Mount /dev/mapper if needed
-    let devmapper = PathBuf::from("/").join("dev").join("mapper");
-    let devmapper_arg = format!("-v={d}:{d}", d = devmapper.display());
-    if devmapper.exists() {
-        full_args.push(&devmapper_arg);
-    }
-
-    // Mount test dir
-    let mut test_dir = test_dir(test);
-    create_dir_all(&test_dir)?;
-    test_dir = canonicalize(&test_dir)?;
-    let test_dir_volume_arg = format!("-v={d}:/kubernix-run", d = test_dir.display());
-    full_args.push(&test_dir_volume_arg);
-
-    full_args.push(&image);
-    if let Some(a) = args {
-        full_args.extend(a);
-    }
-    full_args.push("--log-level=debug");
-
-    let success = run_test(test, &full_args, none_hook)?;
-
-    // Cleanup
-    let status = Command::new(SUDO)
-        .arg(command)
-        .arg("rm")
-        .arg("-f")
-        .arg(test)
-        .status()?;
-
-    // Result evaluation
-    if !success || !status.success() {
-        bail!("Test failed")
-    }
-    Ok(())
-}
 
 pub fn run_local_test<F>(test: &str, args: Option<&[&str]>, hook: F) -> Result<()>
 where
@@ -94,7 +38,7 @@ where
         .arg("-F")
         .arg(&pid_file)
         .status()?;
-    let cleanup_success = check_file_for_output(test, "All done", "died unexpectedly")?;
+    let cleanup_success = check_file_for_output(test, "All done", &["died unexpectedly"])?;
 
     // Results evaluation
     if !success || !cleanup_success {
@@ -133,6 +77,7 @@ where
     Command::new(SUDO)
         .arg("env")
         .arg(format!("PATH={}", var("PATH")?))
+        .arg(format!("NIX_PATH={}", var("NIX_PATH").unwrap_or_default()))
         .args(args)
         .arg("--no-shell")
         .stderr(Stdio::from(err_file))
@@ -144,7 +89,7 @@ where
     let success_ready = check_file_for_output(
         test,
         "Waiting for interrupt",
-        "Unable to start all processes",
+        &["Unable to start all processes", "All done"],
     )?;
     println!("Process ready: {}", success_ready);
 
@@ -164,7 +109,11 @@ where
     Ok(success_ready && success_hook)
 }
 
-fn check_file_for_output(test: &str, success_pattern: &str, failure_pattern: &str) -> Result<bool> {
+fn check_file_for_output(
+    test: &str,
+    success_pattern: &str,
+    failure_patterns: &[&str],
+) -> Result<bool> {
     let mut success = false;
     let now = Instant::now();
     let mut reader = BufReader::new(File::open(log_file(test))?);
@@ -178,12 +127,14 @@ fn check_file_for_output(test: &str, success_pattern: &str, failure_pattern: &st
                 success = true;
                 break;
             }
-            if line.contains(failure_pattern) {
+            if failure_patterns.iter().any(|p| line.contains(p)) {
                 break;
             }
+        } else {
+            sleep(Duration::from_millis(100));
         }
     }
-    return Ok(success);
+    Ok(success)
 }
 
 fn test_dir(test: &str) -> PathBuf {
