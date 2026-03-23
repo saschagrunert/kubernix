@@ -62,7 +62,6 @@ impl Kubelet {
         }
 
         let args = &[
-            "--container-runtime=remote",
             &format!("--config={}", cfg.display()),
             &format!("--root-dir={}", root_dir.display()),
             &format!(

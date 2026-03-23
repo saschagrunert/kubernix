@@ -74,12 +74,12 @@ impl Process {
                 command: System::find_executable(command)?,
                 args: args.iter().map(|x| (*x).to_string()).collect(),
             };
-            fs::write(run_file, serde_yaml::to_string(&f)?)?;
+            fs::write(run_file, serde_yml::to_string(&f)?)?;
             f
         } else {
             debug!("Re using run file '{}'", run_file.display());
-            let f = File::open(run_file)?;
-            serde_yaml::from_reader(f)?
+            let contents = fs::read_to_string(run_file)?;
+            serde_yml::from_str(&contents)?
         };
 
         // Prepare the log dir and file
@@ -187,14 +187,14 @@ impl Stoppable for Process {
         kill(Pid::from_raw(self.pid as i32), Signal::SIGTERM)?;
 
         // Join the waiting thread
-        if let Some(handle) = self.watch.take() {
-            if handle.join().is_err() {
-                bail!(
-                    "Unable to stop process {} (via {})",
-                    self.name,
-                    self.command
-                );
-            }
+        if let Some(handle) = self.watch.take()
+            && handle.join().is_err()
+        {
+            bail!(
+                "Unable to stop process {} (via {})",
+                self.name,
+                self.command
+            );
         }
         debug!("Process {} (via {}) stopped", self.name, self.command);
         Ok(())

@@ -2,8 +2,8 @@
 name = "kubernix"
 version = "0.2.0"
 authors = ["Sascha Grunert <mail@saschagrunert.de>"]
-edition = "2018"
-license = "MIT"
+edition = "2024"
+license = "Apache-2.0"
 categories = ["command-line-utilities"]
 description = "Kubernetes development cluster bootstrapping with Nix packages"
 documentation = "https://docs.rs/kubernix"
@@ -17,27 +17,25 @@ name = "kubernix"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0.43"
-base64 = "0.13.0"
-clap = { git = "https://github.com/clap-rs/clap", features = ["wrap_help"] }
-console = "0.14.1"
-crossbeam-channel = "0.5.1"
-getset = "0.1.1"
-hostname = "0.3.1"
-indicatif = "0.15.0"
-ipnetwork = "0.18.0"
-lazy_static = "1.4.0"
-log = { version = "0.4.14", features = ["serde", "std"] }
-nix = "0.22.1"
-parking_lot = "0.11.2"
-proc-mounts = "0.2.4"
-rand = "0.8.4"
-rayon = "1.5.1"
-serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0.70"
-serde_yaml = "0.8.20"
-signal-hook = "0.3.10"
-toml = "0.5.8"
+anyhow = "1.0.102"
+base64 = "0.22.1"
+clap = { version = "4.6.0", features = ["derive", "wrap_help", "env"] }
+console = "0.16.3"
+crossbeam-channel = "0.5.15"
+hostname = "0.4.2"
+indicatif = "0.18.4"
+ipnetwork = { version = "0.21.1", features = ["serde"] }
+log = { version = "0.4.29", features = ["serde", "std"] }
+nix = { version = "0.31.2", features = ["fs", "signal", "mount", "sched", "process", "user"] }
+parking_lot = "0.12.5"
+proc-mounts = "0.3.0"
+rand = "0.8.5"
+rayon = "1.11.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+serde_yml = "0.0.12"
+signal-hook = "0.3.17"
+toml = "0.8.22"
 
 [dev-dependencies]
-tempfile = "3.2.0"
+tempfile = "3.27.0"

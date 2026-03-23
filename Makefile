@@ -1,21 +1,24 @@
 ARGS ?=
 SUDO ?= sudo -E
+
+# Avoid cargo/nix warnings about HOME ownership when running via sudo
+ifeq ($(shell id -u),0)
+export HOME := /root
+endif
 KUBERNIX ?= $(SUDO) target/release/kubernix $(ARGS)
 CONTAINER_RUNTIME ?= $(SUDO) podman
 RUN_DIR ?= $(shell pwd)/kubernix-run
 
 export IMAGE ?= docker.io/saschagrunert/kubernix
 
-define nix
-	nix run -f nix/build.nix $(1)
-endef
+NIX_BUILD ?= nix/build.nix
 
 define nix-run
-	$(call nix,-c $(1))
+	nix-shell $(NIX_BUILD) --run '$(1)'
 endef
 
 define nix-run-pure
-	$(call nix,-ik SSH_AUTH_SOCK -c $(1))
+	nix-shell $(NIX_BUILD) --pure --run '$(1)'
 endef
 
 all: build
@@ -34,7 +37,7 @@ build-release:
 
 .PHONY: coverage
 coverage:
-	$(call nix-run-pure,cargo kcov --lib)
+	$(call nix-run-pure,cargo llvm-cov --lib --lcov --output-path lcov.info)
 
 .PHONY: e2e
 e2e:
@@ -69,14 +72,14 @@ nix:
 nixdeps:
 	@echo '| Application | Version |'
 	@echo '| - | - |'
-	@nix-instantiate nix 2> /dev/null \
-		| sed -n 's;/nix/store/[[:alnum:]]\{32\}-\(.*\)-\(.*\).drv\(!bin\)\{0,1\};| \1 | v\2 |;p' \
+	@nix-instantiate nix/packages.nix 2>/dev/null \
+		| sed -n 's;/nix/store/[[:alnum:]]\{32\}-\(.*\)-\(.*\)\.drv\(!bin\)\{0,1\};| \1 | v\2 |;p' \
 		| sort
 
 .PHONY: nixpkgs
 nixpkgs:
-	@nix run -f channel:nixpkgs-unstable nix-prefetch-git -c nix-prefetch-git \
-		--no-deepClone https://github.com/nixos/nixpkgs > nix/nixpkgs.json
+	@nix-shell -p nix-prefetch-git --run \
+		'nix-prefetch-git --no-deepClone https://github.com/nixos/nixpkgs' > nix/nixpkgs.json
 
 .PHONY: run
 run: build-release

@@ -1,0 +1,252 @@
+name: ci
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+
+env:
+  IMAGE: docker.io/saschagrunert/kubernix:latest
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: nixos/nix:latest
+    steps:
+      - name: Install dependencies
+        run: apk add bash ca-certificates curl file findutils git jq make openssh
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /nix
+            target
+            ~/.cargo
+          key: build-${{ hashFiles('nix/nixpkgs.json') }}-${{ hashFiles('Cargo.lock') }}
+      - name: Build
+        run: make
+
+  build-release:
+    runs-on: ubuntu-latest
+    container: nixos/nix:latest
+    steps:
+      - name: Install dependencies
+        run: apk add bash ca-certificates curl file findutils git jq make openssh
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /nix
+            target
+            ~/.cargo
+          key: build-release-${{ hashFiles('nix/nixpkgs.json') }}-${{ hashFiles('Cargo.lock') }}
+      - name: Build release
+        run: make build-release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kubernix-release
+          path: target/release/kubernix
+
+  build-static:
+    runs-on: ubuntu-latest
+    container: rust:alpine
+    steps:
+      - name: Install dependencies
+        run: apk add --no-cache musl-dev git
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            target
+            ~/.cargo
+          key: build-static-${{ hashFiles('Cargo.lock') }}
+      - name: Build static release
+        run: cargo build --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kubernix-static
+          path: target/release/kubernix
+
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: make build-image CONTAINER_RUNTIME=docker
+      - name: Save the image
+        run: docker save $IMAGE -o image.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kubernix-image
+          path: image.tar
+
+  deploy-image:
+    runs-on: ubuntu-latest
+    needs: build-image
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kubernix-image
+      - name: Load the image
+        run: docker load -i image.tar
+      - name: Login to registry
+        run: docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASS }}
+      - name: Push the image
+        run: docker push $IMAGE
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-static
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kubernix-static
+      - name: Upload release binary
+        uses: softprops/action-gh-release@v2
+        with:
+          files: kubernix
+
+  docs:
+    runs-on: ubuntu-latest
+    container: nixos/nix:latest
+    steps:
+      - name: Install dependencies
+        run: apk add bash ca-certificates curl file findutils git jq make openssh
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /nix
+            target
+            ~/.cargo
+          key: docs-${{ hashFiles('nix/nixpkgs.json') }}-${{ hashFiles('Cargo.lock') }}
+      - name: Build documentation
+        run: make docs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs
+          path: target/doc
+
+  docs-publish:
+    runs-on: ubuntu-latest
+    needs: docs
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: docs
+          path: doc
+      - name: Deploy documentation
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./doc
+
+  lint-clippy:
+    runs-on: ubuntu-latest
+    container: nixos/nix:latest
+    steps:
+      - name: Install dependencies
+        run: apk add bash ca-certificates curl file findutils git jq make openssh
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /nix
+            target
+            ~/.cargo
+          key: lint-clippy-${{ hashFiles('nix/nixpkgs.json') }}-${{ hashFiles('Cargo.lock') }}
+      - name: Clippy
+        run: make lint-clippy
+
+  lint-rustfmt:
+    runs-on: ubuntu-latest
+    container: nixos/nix:latest
+    steps:
+      - name: Install dependencies
+        run: apk add bash ca-certificates curl file findutils git jq make openssh
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            /nix
+            target
+            ~/.cargo
+          key: lint-rustfmt-${{ hashFiles('nix/nixpkgs.json') }}-${{ hashFiles('Cargo.lock') }}
+      - name: Rustfmt
+        run: make lint-rustfmt
+
+  test-e2e:
+    runs-on: ubuntu-latest
+    needs: build-release
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+      - uses: actions/download-artifact@v4
+        with:
+          name: kubernix-release
+          path: target/release
+      - name: Fix permissions
+        run: chmod +x target/release/kubernix
+      - name: Set hostname
+        run: |
+          echo "127.0.0.1 test" | sudo tee -a /etc/hosts
+          sudo hostnamectl set-hostname test
+      - name: Prepare the system
+        run: sudo contrib/prepare-system
+      - name: Run e2e tests
+        run: make test-e2e ARGS=local_single_node
+        timeout-minutes: 60
+
+  test-integration:
+    runs-on: ubuntu-latest
+    needs: build-release
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+      - uses: actions/download-artifact@v4
+        with:
+          name: kubernix-release
+          path: target/release
+      - name: Fix permissions
+        run: chmod +x target/release/kubernix
+      - name: Set hostname
+        run: |
+          echo "127.0.0.1 test" | sudo tee -a /etc/hosts
+          sudo hostnamectl set-hostname test
+      - name: Prepare the system
+        run: sudo contrib/prepare-system
+      - name: Run integration tests
+        run: make test-integration ARGS=local_single_node
+        timeout-minutes: 60
+
+  test-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+      - name: Set hostname
+        run: |
+          echo "127.0.0.1 test" | sudo tee -a /etc/hosts
+          sudo hostnamectl set-hostname test
+      - name: Prepare the system
+        run: sudo contrib/prepare-system
+      - name: Run unit tests and coverage
+        run: make coverage
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info

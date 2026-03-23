@@ -18,8 +18,5 @@ runtimeRequestTimeout: "15m"
 tlsCertFile: "{cert}"
 tlsPrivateKeyFile: "{key}"
 failSwapOn: false
-featureGates:
-  DevicePlugins: false
-  LocalStorageCapacityIsolation: false
 port: {port}
 healthzPort: {healthzPort}

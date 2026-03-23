@@ -1,12 +1,12 @@
 <img src=".github/kubernix.png" width="300px"></img>
 
-[![CircleCI](https://circleci.com/gh/saschagrunert/kubernix.svg?style=shield)](https://circleci.com/gh/saschagrunert/kubernix)
-[![Docs master](https://img.shields.io/badge/doc-master-orange.svg)](https://saschagrunert.github.io/kubernix/doc/kubernix/index.html)
+[![CI](https://github.com/saschagrunert/kubernix/actions/workflows/ci.yml/badge.svg)](https://github.com/saschagrunert/kubernix/actions/workflows/ci.yml)
+[![Docs main](https://img.shields.io/badge/doc-main-orange.svg)](https://saschagrunert.github.io/kubernix/doc/kubernix/index.html)
 [![Docs release](https://docs.rs/kubernix/badge.svg)](https://docs.rs/kubernix)
-[![Coverage](https://codecov.io/gh/saschagrunert/kubernix/branch/master/graph/badge.svg)](https://codecov.io/gh/saschagrunert/kubernix)
+[![Coverage](https://codecov.io/gh/saschagrunert/kubernix/branch/main/graph/badge.svg)](https://codecov.io/gh/saschagrunert/kubernix)
 [![Dependencies](https://deps.rs/repo/github/saschagrunert/kubernix/status.svg)](https://deps.rs/repo/github/saschagrunert/kubernix)
 [![Crates.io](https://img.shields.io/crates/v/kubernix.svg)](https://crates.io/crates/kubernix)
-[![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/saschagrunert/kubernix/blob/master/LICENSE)
+[![License MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/saschagrunert/kubernix/blob/main/LICENSE)
 
 ## Kubernetes development cluster bootstrapping with Nix packages
 
@@ -37,26 +37,26 @@ keeping track of the running processes.
 
 The following technology stack is currently being used:
 
-| Application     | Version      |
-| --------------- | ------------ |
-| cfssl           | v1.5.0       |
-| cni-plugins     | v0.9.0       |
-| conmon          | v2.0.25      |
-| conntrack-tools | v1.4.6       |
-| cri-o-wrapper   | v1.20.0      |
-| cri-tools       | v1.20.0      |
-| etcd            | v3.3.25      |
-| iproute2        | v5.10.0      |
-| iptables        | v1.8.6       |
-| kmod            | v27          |
-| kubectl         | v1.19.5      |
-| kubernetes      | v1.19.5      |
-| nss-cacert      | v3.60        |
-| podman-wrapper  | v2.2.1       |
-| runc            | v1.0.0-rc92  |
-| socat           | v1.7.4.1     |
-| sysctl          | v1003.1.2008 |
-| util-linux      | v2.36.1      |
+| Application     | Version  |
+| --------------- | -------- |
+| cfssl           | v1.6.5   |
+| cni-plugins     | v1.9.0   |
+| conmon          | v2.2.1   |
+| conntrack-tools | v1.4.8   |
+| cri-o-wrapper   | v1.35.0  |
+| cri-tools       | v1.35.0  |
+| etcd            | v3.6.9   |
+| iproute2        | v6.19.0  |
+| iptables        | v1.8.12  |
+| kmod            | v31      |
+| kubectl         | v1.35.3  |
+| kubernetes      | v1.35.3  |
+| nss-cacert      | v3.121   |
+| podman          | v5.8.1   |
+| runc            | v1.4.1   |
+| socat           | v1.8.1.1 |
+| sysctl          | v4.0.6   |
+| util-linux      | v2.41.3  |
 
 Some other tools are not explicitly mentioned here, because they are no
 first-level dependencies.

@@ -231,9 +231,11 @@ impl Kubernix {
         });
 
         // This order is important since we will shut down the processes in order
-        let mut results = vec![scheduler, proxy, controller_manager, api_server, etcd];
-        results.extend(kubelets);
+        let mut results = vec![scheduler, proxy, controller_manager];
         results.extend(crios);
+        results.extend(kubelets);
+        results.push(api_server);
+        results.push(etcd);
         let all_ok = results.iter().all(|x| x.is_ok());
 
         // Note: wait for `drain_filter()` to be stable and make it more straightforward
@@ -342,28 +344,31 @@ impl Kubernix {
     fn umount(&self) {
         debug!("Removing active mounts");
         let now = Instant::now();
-        while now.elapsed().as_secs() < 5 {
+        while now.elapsed().as_secs() < 15 {
             match MountIter::new() {
                 Err(e) => {
                     debug!("Unable to retrieve mounts: {}", e);
                     sleep(Duration::from_secs(1));
                 }
                 Ok(mounts) => {
-                    let mut found_mount = false;
-                    mounts
+                    let mut mount_points: Vec<_> = mounts
                         .filter_map(|x| x.ok())
                         .filter(|x| x.dest.starts_with(self.config.root()))
                         .filter(|x| !x.dest.eq(self.config.root()))
-                        .for_each(|m| {
-                            found_mount = true;
-                            debug!("Removing mount: {}", m.dest.display());
-                            if let Err(e) = umount2(&m.dest, MntFlags::MNT_FORCE) {
-                                debug!("Unable to umount '{}': {}", m.dest.display(), e);
-                            }
-                        });
-                    if !found_mount {
+                        .map(|m| m.dest)
+                        .collect();
+                    if mount_points.is_empty() {
                         break;
                     }
+                    // Unmount deepest paths first to avoid "device busy"
+                    mount_points.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
+                    for dest in &mount_points {
+                        debug!("Removing mount: {}", dest.display());
+                        if let Err(e) = umount2(dest, MntFlags::MNT_FORCE) {
+                            debug!("Unable to umount '{}': {}", dest.display(), e);
+                        }
+                    }
+                    sleep(Duration::from_millis(500));
                 }
             };
         }

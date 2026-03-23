@@ -1,6 +1,5 @@
 use crate::{network::Network, node::Node, Config};
 use anyhow::{bail, Context, Result};
-use getset::Getters;
 use log::{debug, info};
 use serde_json::{json, to_string_pretty};
 use std::{
@@ -10,49 +9,75 @@ use std::{
     process::{Command, Stdio},
 };
 
-#[derive(Getters)]
 pub struct Pki {
-    #[get = "pub"]
     admin: Idendity,
-
-    #[get = "pub"]
     apiserver: Idendity,
-
-    #[get = "pub"]
     ca: Idendity,
-
-    #[get = "pub"]
     controller_manager: Idendity,
-
-    #[get = "pub"]
     kubelets: Vec<Idendity>,
-
-    #[get = "pub"]
     proxy: Idendity,
-
-    #[get = "pub"]
     scheduler: Idendity,
-
-    #[get = "pub"]
     service_account: Idendity,
 }
 
-#[derive(Getters)]
+impl Pki {
+    pub fn admin(&self) -> &Idendity {
+        &self.admin
+    }
+
+    pub fn apiserver(&self) -> &Idendity {
+        &self.apiserver
+    }
+
+    pub fn ca(&self) -> &Idendity {
+        &self.ca
+    }
+
+    pub fn controller_manager(&self) -> &Idendity {
+        &self.controller_manager
+    }
+
+    pub fn kubelets(&self) -> &Vec<Idendity> {
+        &self.kubelets
+    }
+
+    pub fn proxy(&self) -> &Idendity {
+        &self.proxy
+    }
+
+    pub fn scheduler(&self) -> &Idendity {
+        &self.scheduler
+    }
+
+    pub fn service_account(&self) -> &Idendity {
+        &self.service_account
+    }
+}
+
 pub struct Idendity {
-    #[get = "pub"]
     name: String,
-
-    #[get = "pub"]
     user: String,
-
-    #[get = "pub"]
     cert: PathBuf,
-
-    #[get = "pub"]
     key: PathBuf,
 }
 
 impl Idendity {
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+
+    pub fn user(&self) -> &String {
+        &self.user
+    }
+
+    pub fn cert(&self) -> &PathBuf {
+        &self.cert
+    }
+
+    pub fn key(&self) -> &PathBuf {
+        &self.key
+    }
+
     pub fn new(dir: &Path, name: &str, user: &str) -> Idendity {
         Idendity {
             cert: dir.join(format!("{}.pem", name)),
@@ -63,19 +88,29 @@ impl Idendity {
     }
 }
 
-#[derive(Getters)]
 struct PkiConfig<'a> {
-    #[get = "pub"]
     ca: &'a Idendity,
-
-    #[get = "pub"]
     ca_config: PathBuf,
-
-    #[get = "pub"]
     dir: &'a Path,
-
-    #[get = "pub"]
     hostnames: &'a str,
+}
+
+impl<'a> PkiConfig<'a> {
+    fn ca(&self) -> &Idendity {
+        self.ca
+    }
+
+    fn ca_config(&self) -> &PathBuf {
+        &self.ca_config
+    }
+
+    fn dir(&self) -> &Path {
+        self.dir
+    }
+
+    fn hostnames(&self) -> &str {
+        self.hostnames
+    }
 }
 
 const ADMIN_NAME: &str = "admin";

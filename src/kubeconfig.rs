@@ -4,35 +4,43 @@ use crate::{
     Config,
 };
 use anyhow::{format_err, Context, Result};
-use getset::Getters;
 use log::{debug, info};
 use nix::sys::stat::{fchmod, Mode};
 use std::{
     fs::{create_dir_all, File},
     net::Ipv4Addr,
-    os::unix::io::AsRawFd,
     path::{Path, PathBuf},
 };
 
-#[derive(Getters)]
 pub struct KubeConfig {
-    #[get = "pub"]
     kubelets: Vec<PathBuf>,
-
-    #[get = "pub"]
     proxy: PathBuf,
-
-    #[get = "pub"]
     controller_manager: PathBuf,
-
-    #[get = "pub"]
     scheduler: PathBuf,
-
-    #[get = "pub"]
     admin: PathBuf,
 }
 
 impl KubeConfig {
+    pub fn kubelets(&self) -> &Vec<PathBuf> {
+        &self.kubelets
+    }
+
+    pub fn proxy(&self) -> &PathBuf {
+        &self.proxy
+    }
+
+    pub fn controller_manager(&self) -> &PathBuf {
+        &self.controller_manager
+    }
+
+    pub fn scheduler(&self) -> &PathBuf {
+        &self.scheduler
+    }
+
+    pub fn admin(&self) -> &PathBuf {
+        &self.admin
+    }
+
     pub fn new(config: &Config, pki: &Pki) -> Result<KubeConfig> {
         // Create the target dir
         let dir = config.root().join("kubeconfig");
@@ -94,7 +102,7 @@ impl KubeConfig {
 
         kubectl.config(&[
             "set-credentials",
-            &idendity.user(),
+            idendity.user(),
             &format!("--client-certificate={}", idendity.cert().display()),
             &format!("--client-key={}", idendity.key().display()),
             embed_certs,
@@ -111,13 +119,9 @@ impl KubeConfig {
         kubectl.config(&["use-context", context])?;
 
         // Adapt file permissions
-        fchmod(
-            File::open(&kubeconfig)
-                .context("unable to open kubeconfig")?
-                .as_raw_fd(),
-            Mode::from_bits(0o644).ok_or_else(|| format_err!("unable to get mode bits"))?,
-        )
-        .context("unable to set kubeconfig permissions")?;
+        let file = File::open(&kubeconfig).context("unable to open kubeconfig")?;
+        fchmod(&file, Mode::from_bits(0o644).ok_or_else(|| format_err!("unable to get mode bits"))?)
+            .context("unable to set kubeconfig permissions")?;
 
         debug!("Kubeconfig created for {}", idendity.name());
         Ok(kubeconfig)

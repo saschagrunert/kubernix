@@ -28,12 +28,13 @@ impl Nix {
                 include_str!("../nix/nixpkgs.json"),
             )?;
             fs::write(dir.join("nixpkgs.nix"), include_str!("../nix/nixpkgs.nix"))?;
+            fs::write(dir.join("default.nix"), include_str!("../nix/default.nix"))?;
 
             let packages = &config.packages().join(" ");
             debug!("Adding additional packages: {:?}", config.packages());
             fs::write(
-                dir.join("default.nix"),
-                include_str!("../nix/default.nix").replace("/* PACKAGES */", packages),
+                dir.join("packages.nix"),
+                include_str!("../nix/packages.nix").replace("/* PACKAGES */", packages),
             )?;
 
             // Apply the overlay if existing
@@ -64,15 +65,13 @@ impl Nix {
         )
     }
 
-    /// Run a pure nix command
+    /// Run a command inside the nix shell
     pub fn run(config: &Config, args: &[&str]) -> Result<()> {
-        Command::new(System::find_executable("nix")?)
+        Command::new(System::find_executable("nix-shell")?)
             .env(Self::NIX_ENV, "true")
-            .arg("run")
-            .arg("-f")
-            .arg(config.root().join(Self::DIR))
-            .arg("-c")
-            .args(args)
+            .arg(config.root().join(Self::DIR).join("default.nix"))
+            .arg("--run")
+            .arg(args.join(" "))
             .status()?;
         Ok(())
     }

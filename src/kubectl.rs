@@ -1,5 +1,4 @@
 use anyhow::{bail, Result};
-use getset::Getters;
 use log::{debug, trace};
 use std::{
     path::{Path, PathBuf},
@@ -8,13 +7,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[derive(Getters)]
 pub struct Kubectl {
-    #[get = "pub"]
     kubeconfig: PathBuf,
 }
 
 impl Kubectl {
+    pub fn kubeconfig(&self) -> &PathBuf {
+        &self.kubeconfig
+    }
+
     /// Create a new kubectl client for the provided kubeconfig
     pub fn new(kubeconfig: &Path) -> Self {
         Self {
@@ -56,7 +57,7 @@ impl Kubectl {
     /// Wait for a pod to be ready
     pub fn wait_ready(&self, name: &str) -> Result<()> {
         debug!("Waiting for {} to be ready", name);
-        const TIMEOUT: u64 = 60;
+        const TIMEOUT: u64 = 120;
         let now = Instant::now();
         while now.elapsed().as_secs() < TIMEOUT {
             let output = self.execute(&[

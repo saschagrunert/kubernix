@@ -60,7 +60,7 @@ impl Log for Logger {
                 pb.println(msg);
             } else {
                 pb.inc(1);
-                pb.set_message(&record.args().to_string());
+                pb.set_message(record.args().to_string());
             }
         } else {
             writeln!(stderr(), "{}", msg).ok();

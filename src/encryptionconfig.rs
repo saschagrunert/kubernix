@@ -1,7 +1,6 @@
 use crate::Config;
 use anyhow::Result;
-use base64::encode;
-use getset::Getters;
+use base64::{engine::general_purpose::STANDARD, Engine};
 use log::info;
 use rand::{thread_rng, Rng};
 use std::{
@@ -9,13 +8,15 @@ use std::{
     path::PathBuf,
 };
 
-#[derive(Getters)]
 pub struct EncryptionConfig {
-    #[get = "pub"]
     path: PathBuf,
 }
 
 impl EncryptionConfig {
+    pub fn path(&self) -> &PathBuf {
+        &self.path
+    }
+
     pub fn new(config: &Config) -> Result<EncryptionConfig> {
         let dir = &config.root().join("encryptionconfig");
         create_dir_all(dir)?;
@@ -24,8 +25,8 @@ impl EncryptionConfig {
         // Create only if not already existing to make cluster reuse work
         if !path.exists() {
             info!("Creating encryption config");
-            let rnd = thread_rng().gen::<[u8; 32]>();
-            let b64 = encode(&rnd);
+            let rnd = thread_rng().r#gen::<[u8; 32]>();
+            let b64 = STANDARD.encode(rnd);
             let yml = format!(include_str!("assets/encryptionconfig.yml"), b64);
             fs::write(&path, yml)?;
         }

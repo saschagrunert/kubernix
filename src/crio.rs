@@ -34,7 +34,7 @@ impl Display for CriSocket {
 impl CriSocket {
     pub fn new(path: PathBuf) -> Result<CriSocket> {
         if path.display().to_string().len() > 100 {
-            bail!("Socket path '{}' is too long")
+            bail!("Socket path '{}' is too long", path.display())
         }
         Ok(CriSocket(path))
     }
@@ -112,7 +112,7 @@ impl Crio {
                 }))?,
             )?;
         }
-        let args: &[&str] = &[&format!("--config-dir={}", config_file.display())];
+        let args: &[&str] = &[&format!("--config-dir={}", config_dir.display())];
 
         let mut process = if config.multi_node() {
             // Run inside a container
@@ -122,7 +122,7 @@ impl Crio {
             // Run as usual process
             Process::start(&dir, "CRI-O", CRIO, args)?
         };
-        process.wait_ready("Sandboxes:")?;
+        process.wait_ready("No systemd watchdog enabled")?;
 
         Ok(Box::new(Self {
             process,

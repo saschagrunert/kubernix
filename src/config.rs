@@ -1,8 +1,7 @@
 //! Configuration related structures
 use crate::{podman::Podman, system::System};
 use anyhow::{Context, Result};
-use clap::{AppSettings, Clap};
-use getset::{CopyGetters, Getters};
+use clap::{Parser, Subcommand as ClapSubcommand};
 use ipnetwork::Ipv4Network;
 use log::LevelFilter;
 use serde::{Deserialize, Serialize};
@@ -11,121 +10,160 @@ use std::{
     path::PathBuf,
 };
 
-#[derive(Clap, CopyGetters, Getters, Deserialize, Serialize)]
+#[derive(Parser, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
-#[clap(
-    after_help("More info at: https://github.com/saschagrunert/kubernix"),
-    author("Sascha Grunert <mail@saschagrunert.de>"),
-    global_setting(AppSettings::ColoredHelp)
+#[command(
+    after_help = "More info at: https://github.com/saschagrunert/kubernix",
+    author = "Sascha Grunert <mail@saschagrunert.de>",
 )]
 /// The global configuration
 pub struct Config {
-    #[get = "pub"]
-    #[clap(subcommand)]
+    #[command(subcommand)]
     /// All available subcommands
     subcommand: Option<SubCommand>,
 
-    #[get = "pub"]
-    #[clap(
-        default_value("kubernix-run"),
-        env("KUBERNIX_RUN"),
-        global(true),
-        long("root"),
-        short('r'),
-        value_name("PATH")
+    #[arg(
+        default_value = "kubernix-run",
+        env = "KUBERNIX_RUN",
+        global = true,
+        long = "root",
+        short = 'r',
+        value_name = "PATH",
     )]
     /// Path where all the runtime data is stored
     root: PathBuf,
 
-    #[get_copy = "pub"]
-    #[clap(
-        default_value("info"),
-        env("KUBERNIX_LOG_LEVEL"),
-        long("log-level"),
-        possible_values(&["trace", "debug", "info", "warn", "error", "off"]),
-        short('l'),
-        value_name("LEVEL")
+    #[arg(
+        default_value = "info",
+        env = "KUBERNIX_LOG_LEVEL",
+        long = "log-level",
+        short = 'l',
+        value_name = "LEVEL",
     )]
     /// The logging level of the application
     log_level: LevelFilter,
 
-    #[get_copy = "pub"]
-    #[clap(
-        default_value("10.10.0.0/16"),
-        env("KUBERNIX_CIDR"),
-        long("cidr"),
-        short('c'),
-        value_name("CIDR")
+    #[arg(
+        default_value = "10.10.0.0/16",
+        env = "KUBERNIX_CIDR",
+        long = "cidr",
+        short = 'c',
+        value_name = "CIDR",
     )]
     /// The CIDR used for the cluster
     cidr: Ipv4Network,
 
-    #[get = "pub"]
-    #[clap(
-        env("KUBERNIX_OVERLAY"),
-        long("overlay"),
-        short('o'),
-        value_name("PATH")
+    #[arg(
+        env = "KUBERNIX_OVERLAY",
+        long = "overlay",
+        short = 'o',
+        value_name = "PATH",
     )]
     /// The Nix package overlay to be used
     overlay: Option<PathBuf>,
 
-    #[get = "pub"]
-    #[clap(
-        env("KUBERNIX_PACKAGES"),
-        long("packages"),
-        multiple(true),
-        short('p'),
-        value_name("PACKAGE")
+    #[arg(
+        env = "KUBERNIX_PACKAGES",
+        long = "packages",
+        num_args = 1..,
+        short = 'p',
+        value_name = "PACKAGE",
     )]
     /// Additional dependencies to be added to the environment
     packages: Vec<String>,
 
-    #[get = "pub"]
-    #[clap(env("KUBERNIX_SHELL"), long("shell"), short('s'), value_name("SHELL"))]
+    #[arg(env = "KUBERNIX_SHELL", long = "shell", short = 's', value_name = "SHELL")]
     /// The shell executable to be used, defaults to $SHELL, fallback is `sh`
     shell: Option<String>,
 
-    #[get_copy = "pub"]
-    #[clap(
-        default_value("1"),
-        env("KUBERNIX_NODES"),
-        long("nodes"),
-        short('n'),
-        value_name("NODES")
+    #[arg(
+        default_value = "1",
+        env = "KUBERNIX_NODES",
+        long = "nodes",
+        short = 'n',
+        value_name = "NODES",
     )]
     /// The number of nodes to be registered
     nodes: u8,
 
-    #[get = "pub"]
-    #[clap(
-        env("KUBERNIX_CONTAINER_RUNTIME"),
-        long("container-runtime"),
-        default_value(Podman::EXECUTABLE),
-        requires("nodes"),
-        short('u'),
-        value_name("RUNTIME")
+    #[arg(
+        env = "KUBERNIX_CONTAINER_RUNTIME",
+        long = "container-runtime",
+        default_value = Podman::EXECUTABLE,
+        requires = "nodes",
+        short = 'u',
+        value_name = "RUNTIME",
     )]
     /// The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1`
     container_runtime: String,
 
-    #[get = "pub"]
-    #[clap(
-        conflicts_with("shell"),
-        env("KUBERNIX_NO_SHELL"),
-        long("no-shell"),
-        short('e'),
-        takes_value(false)
+    #[arg(
+        conflicts_with = "shell",
+        env = "KUBERNIX_NO_SHELL",
+        long = "no-shell",
+        short = 'e',
     )]
     /// Do not spawn an interactive shell after bootstrap
     no_shell: bool,
 }
 
+impl Config {
+    /// Returns the subcommand
+    pub fn subcommand(&self) -> &Option<SubCommand> {
+        &self.subcommand
+    }
+
+    /// Returns the root path
+    pub fn root(&self) -> &PathBuf {
+        &self.root
+    }
+
+    /// Returns the log level
+    pub fn log_level(&self) -> LevelFilter {
+        self.log_level
+    }
+
+    /// Returns the CIDR
+    pub fn cidr(&self) -> Ipv4Network {
+        self.cidr
+    }
+
+    /// Returns the overlay path
+    pub fn overlay(&self) -> &Option<PathBuf> {
+        &self.overlay
+    }
+
+    /// Returns the packages
+    pub fn packages(&self) -> &Vec<String> {
+        &self.packages
+    }
+
+    /// Returns the shell
+    pub fn shell(&self) -> &Option<String> {
+        &self.shell
+    }
+
+    /// Returns the number of nodes
+    pub fn nodes(&self) -> u8 {
+        self.nodes
+    }
+
+    /// Returns the container runtime
+    pub fn container_runtime(&self) -> &String {
+        &self.container_runtime
+    }
+
+    /// Returns whether to skip the shell
+    pub fn no_shell(&self) -> &bool {
+        &self.no_shell
+    }
+}
+
 /// Possible subcommands
-#[derive(Clap, Deserialize, Serialize)]
+#[derive(ClapSubcommand, Deserialize, Serialize)]
 pub enum SubCommand {
     /// Spawn an additional shell session
-    #[clap(name("shell"))]
+    #[command(name = "shell")]
     Shell,
 }
 
@@ -200,7 +238,7 @@ pub mod tests {
 
     pub fn test_config() -> Result<Config> {
         let mut c = Config::default();
-        c.root = tempdir()?.into_path();
+        c.root = tempdir()?.keep();
         c.canonicalize_root()?;
         Ok(c)
     }
@@ -220,7 +258,7 @@ pub mod tests {
     #[test]
     fn canonicalize_root_success() -> Result<()> {
         let mut c = Config::default();
-        c.root = tempdir()?.into_path();
+        c.root = tempdir()?.keep();
         c.canonicalize_root()
     }
 
@@ -234,7 +272,7 @@ pub mod tests {
     #[test]
     fn to_file_success() -> Result<()> {
         let mut c = Config::default();
-        c.root = tempdir()?.into_path();
+        c.root = tempdir()?.keep();
         c.to_file()
     }
 
@@ -248,7 +286,7 @@ pub mod tests {
     #[test]
     fn try_load_file_success() -> Result<()> {
         let mut c = Config::default();
-        c.root = tempdir()?.into_path();
+        c.root = tempdir()?.keep();
         fs::write(
             c.root.join(Config::FILENAME),
             r#"
@@ -271,7 +309,7 @@ root = "root"
     #[test]
     fn try_load_file_failure() -> Result<()> {
         let mut c = Config::default();
-        c.root = tempdir()?.into_path();
+        c.root = tempdir()?.keep();
         fs::write(c.root.join(Config::FILENAME), "invalid")?;
         assert!(c.try_load_file().is_err());
         Ok(())

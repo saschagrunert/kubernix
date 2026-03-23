@@ -1,6 +1,5 @@
 use crate::Config;
 use anyhow::{bail, Context, Result};
-use getset::Getters;
 use hostname::get;
 use ipnetwork::Ipv4Network;
 use log::{debug, warn};
@@ -9,30 +8,42 @@ use std::{
     process::Command,
 };
 
-#[derive(Getters)]
 pub struct Network {
-    #[get = "pub"]
     cluster_cidr: Ipv4Network,
-
-    #[get = "pub"]
     crio_cidrs: Vec<Ipv4Network>,
-
-    #[get = "pub"]
     service_cidr: Ipv4Network,
-
-    #[get = "pub"]
     etcd_client: SocketAddr,
-
-    #[get = "pub"]
     etcd_peer: SocketAddr,
-
-    #[get = "pub"]
     hostname: String,
 }
 
 impl Network {
     /// The global name for the interface
     pub const INTERFACE_PREFIX: &'static str = "kubernix";
+
+    pub fn cluster_cidr(&self) -> &Ipv4Network {
+        &self.cluster_cidr
+    }
+
+    pub fn crio_cidrs(&self) -> &Vec<Ipv4Network> {
+        &self.crio_cidrs
+    }
+
+    pub fn service_cidr(&self) -> &Ipv4Network {
+        &self.service_cidr
+    }
+
+    pub fn etcd_client(&self) -> &SocketAddr {
+        &self.etcd_client
+    }
+
+    pub fn etcd_peer(&self) -> &SocketAddr {
+        &self.etcd_peer
+    }
+
+    pub fn hostname(&self) -> &String {
+        &self.hostname
+    }
 
     /// Create a new network from the provided config
     pub fn new(config: &Config) -> Result<Self> {

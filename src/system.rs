@@ -78,13 +78,13 @@ impl System {
 
     /// Restore the initial system state
     pub fn cleanup(&self) {
-        if let Some(hosts) = &self.hosts {
-            if let Err(e) = fs::write(Self::hosts(), hosts) {
-                warn!(
-                    "Unable to restore hosts file, may need manual cleanup: {}",
-                    e
-                )
-            }
+        if let Some(hosts) = &self.hosts
+            && let Err(e) = fs::write(Self::hosts(), hosts)
+        {
+            warn!(
+                "Unable to restore hosts file, may need manual cleanup: {}",
+                e
+            )
         }
     }
 
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn find_shell_success() {
-        set_var("SHELL", VALID_EXECUTABLE);
+        unsafe { set_var("SHELL", VALID_EXECUTABLE) };
         assert!(System::shell().is_ok());
     }
 }

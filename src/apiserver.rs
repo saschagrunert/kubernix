@@ -33,7 +33,6 @@ impl ApiServer {
             "API Server",
             "kube-apiserver",
             &[
-                "--allow-privileged=true",
                 "--audit-log-maxage=30",
                 "--audit-log-maxbackup=3",
                 "--audit-log-maxsize=100",
@@ -60,9 +59,14 @@ impl ApiServer {
                 ),
                 &format!("--kubelet-client-key={}", pki.apiserver().key().display()),
                 "--runtime-config=api/all=true",
+                "--service-account-issuer=https://kubernetes.default.svc.cluster.local",
                 &format!(
                     "--service-account-key-file={}",
                     pki.service_account().cert().display()
+                ),
+                &format!(
+                    "--service-account-signing-key-file={}",
+                    pki.service_account().key().display()
                 ),
                 &format!("--service-cluster-ip-range={}", network.service_cidr()),
                 &format!("--tls-cert-file={}", pki.apiserver().cert().display()),
@@ -71,7 +75,7 @@ impl ApiServer {
             ],
         )?;
 
-        process.wait_ready("sending update to cc")?;
+        process.wait_ready("Serving securely")?;
         Self::setup_rbac(&dir, kubectl)?;
         Ok(Box::new(Self { process }))
     }

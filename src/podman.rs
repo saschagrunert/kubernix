@@ -23,7 +23,7 @@ impl Podman {
         let dir = Self::cni_dir(config);
         create_dir_all(&dir)?;
         fs::write(
-            &dir.join("87-podman-bridge.conflist"),
+            dir.join("87-podman-bridge.conflist"),
             include_str!("assets/podman-bridge.json"),
         )?;
 

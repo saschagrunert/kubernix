@@ -1,28 +1,22 @@
 let
-  rustCommit = "8c007b60731c07dd7a052cce508de3bb1ae849b4";
-  overlay = import (
-    builtins.fetchTarball "https://github.com/mozilla/nixpkgs-mozilla/archive/${rustCommit}.tar.gz"
-  );
   pkgs = import ./nixpkgs.nix {
-    overlays = [ overlay ];
+    overlays = [ (import ./overlay.nix) ];
   };
-  ruststable = (pkgs.latest.rustChannels.stable.rust.override {
-    extensions = [
-      "clippy-preview"
-      "rustfmt-preview"
-    ];
-  });
-  deps = with pkgs; (import ./default.nix) ++ [
-    (pkgs.callPackage ./derivations/cargo-kcov.nix { })
+  deps = (import ./packages.nix) ++ (with pkgs; [
+    cargo-llvm-cov
     binutils
+    clippy
     coreutils
     curl
     gcc
     git
-    kcov
     nix-prefetch-git
     procps
-    ruststable
-  ];
+    rustc
+    cargo
+    rustfmt
+  ]);
 in
-deps
+pkgs.mkShell {
+  buildInputs = deps;
+}
