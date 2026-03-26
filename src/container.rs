@@ -44,6 +44,14 @@ impl Container {
             )?;
         }
 
+        // Exclude .git from the container build context since the
+        // runtime nix directory uses a standalone git repo that the
+        // container image does not need.
+        let dockerignore = config.root().join(".dockerignore");
+        if !dockerignore.exists() {
+            fs::write(&dockerignore, "nix/.git\n")?;
+        }
+
         // Prepare the arguments
         let mut args = if Podman::is_configured(config) {
             Podman::build_args(config, &policy_json)?
@@ -145,16 +153,20 @@ impl Container {
         }
 
         let name = Self::prefixed_container_name(container_name);
-        let nix_dir = format!("{}/default.nix", DEFAULT_ROOT);
+        let flake_ref = format!("path:{}", DEFAULT_ROOT);
         let mut cmd_parts = vec![process_name.to_string()];
         cmd_parts.extend(args.iter().map(|a| a.to_string()));
         let run_cmd = cmd_parts.join(" ");
         args_vec.extend(vec![
             "exec",
             &name,
-            "nix-shell",
-            &nix_dir,
-            "--run",
+            "nix",
+            "develop",
+            &flake_ref,
+            "--no-update-lock-file",
+            "--command",
+            "bash",
+            "-c",
             &run_cmd,
         ]);
 

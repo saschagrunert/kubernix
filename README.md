@@ -69,13 +69,16 @@ first-level dependencies.
 #### With Nix
 
 As already mentioned, there is only one single dependency needed to run this
-project: **Nix**. To setup Nix, simply run:
+project: **Nix** (with [flakes][3] enabled). To setup Nix, simply run:
 
 ```shell
 $ curl https://nixos.org/nix/install | sh
 ```
 
-Please make sure to follow the instructions output by the script.
+Please make sure to follow the instructions output by the script and that
+[flakes are enabled][3] in your Nix configuration.
+
+[3]: https://nixos.wiki/wiki/Flakes
 
 ### Getting Started
 

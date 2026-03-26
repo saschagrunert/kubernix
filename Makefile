@@ -32,7 +32,18 @@ help: ## Display this help.
 			} \
 		' $(MAKEFILE_LIST)
 
+##@ Nix targets:
+
+.PHONY: nix-update
+nix-update: ## Update pinned nixpkgs to latest nixos-unstable.
+	nix flake update nixpkgs
+
 ##@ Build targets:
+
+.PHONY: clean
+clean: kill ## Remove runtime data and build artifacts.
+	$(SUDO) rm -rf kubernix-run
+	cargo clean
 
 .PHONY: build
 build: ## Build in debug mode.
@@ -88,6 +99,15 @@ run: build-release ## Run kubernix.
 .PHONY: shell
 shell: build-release ## Run kubernix with a shell.
 	$(KUBERNIX) shell
+
+.PHONY: kill
+kill: ## Kill a running kubernix instance and unmount leftover volumes.
+	@if [ -f kubernix-run/kubernix.pid ]; then \
+		$(SUDO) kill $$(cat kubernix-run/kubernix.pid) 2>/dev/null; \
+		echo "Waiting for kubernix to shut down..."; \
+		timeout 15 sh -c 'while [ -f kubernix-run/kubernix.pid ]; do sleep 1; done' 2>/dev/null; \
+	fi
+	$(SUDO) sh -c 'grep -s kubernix-run /proc/mounts | cut -d" " -f2 | sort -r | xargs -r umount' 2>/dev/null || true
 
 ##@ Test targets:
 
