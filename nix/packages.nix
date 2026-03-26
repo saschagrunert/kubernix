@@ -1,7 +1,6 @@
-let
-  pkgs = import ./nixpkgs.nix { overlays = [ (import ./overlay.nix) ]; };
-in
-with pkgs; [
+{ pkgs }:
+with pkgs;
+[
   cacert
   cfssl
   cni-plugins
@@ -20,4 +19,5 @@ with pkgs; [
   socat
   sysctl
   util-linux
-] ++ [ /* PACKAGES */ ]
+]
+++ [ /* PACKAGES */ ]
