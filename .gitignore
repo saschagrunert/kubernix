@@ -4,4 +4,4 @@
 /build
 /target
 /test-*
-kubernix*
+/kubernix-run
