@@ -160,7 +160,7 @@ impl Process {
                         self.command
                     )
                 }
-                sleep(Duration::from_millis(50));
+                sleep(Duration::from_millis(10));
                 continue;
             }
 

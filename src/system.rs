@@ -126,8 +126,23 @@ impl System {
         ))
     }
 
-    /// Load a single kernel module via 'modprobe'
+    /// Check if a kernel module is already loaded
+    fn module_loaded(module: &str) -> bool {
+        read_to_string(PathBuf::from("/proc/modules"))
+            .map(|content| {
+                content
+                    .lines()
+                    .any(|l| l.split_whitespace().next() == Some(module))
+            })
+            .unwrap_or(false)
+    }
+
+    /// Load a single kernel module via 'modprobe', skipping if already loaded
     fn modprobe(module: &str) -> Result<()> {
+        if Self::module_loaded(module) {
+            debug!("Kernel module '{}' already loaded, skipping", module);
+            return Ok(());
+        }
         debug!("Loading kernel module '{}'", module);
         let output = Command::new("modprobe").arg(module).output()?;
         if !output.status.success() {
@@ -140,8 +155,20 @@ impl System {
         Ok(())
     }
 
-    /// Enable a single sysctl by setting it to '1'
+    /// Check if a sysctl is already enabled (value is "1")
+    fn sysctl_enabled(key: &str) -> bool {
+        let path = format!("/proc/sys/{}", key.replace('.', "/"));
+        read_to_string(&path)
+            .map(|v| v.trim() == "1")
+            .unwrap_or(false)
+    }
+
+    /// Enable a single sysctl by setting it to '1', skipping if already set
     fn sysctl_enable(key: &str) -> Result<()> {
+        if Self::sysctl_enabled(key) {
+            debug!("Sysctl '{}' already enabled, skipping", key);
+            return Ok(());
+        }
         debug!("Enabling sysctl '{}'", key);
         let enable_arg = format!("{}=1", key);
         let output = Command::new("sysctl").arg("-w").arg(&enable_arg).output()?;

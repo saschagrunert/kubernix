@@ -13,9 +13,10 @@ use crate::{
     node::Node,
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
+    write_if_changed,
 };
 use anyhow::{Context, Result, bail};
-use std::fs::{self, create_dir_all};
+use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup (per-node).
 pub struct KubeletComponent {
@@ -97,10 +98,7 @@ impl Kubelet {
             healthzPort = 12250 + u16::from(node),
         );
         let cfg = dir.join("config.yml");
-
-        if !cfg.exists() {
-            fs::write(&cfg, yml)?;
-        }
+        write_if_changed(&cfg, &yml)?;
 
         let args = &[
             &format!("--config={}", cfg.display()),

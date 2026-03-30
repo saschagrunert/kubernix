@@ -10,9 +10,10 @@ use crate::{
     network::Network,
     node::Node,
     process::{Process, ProcessState, Stoppable},
+    write_if_changed,
 };
 use anyhow::Result;
-use std::fs::{self, create_dir_all};
+use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
 pub struct ProxyComponent;
@@ -23,7 +24,9 @@ impl Component for ProxyComponent {
     }
 
     fn phase(&self) -> Phase {
-        Phase::NodeAgent
+        // Proxy only needs the API server to sync caches, not the
+        // kubelets, so it starts in the Controller phase.
+        Phase::Controller
     }
 
     fn start(&self, ctx: &ClusterContext<'_>) -> ProcessState {
@@ -48,10 +51,7 @@ impl Proxy {
             network.cluster_cidr(),
         );
         let cfg = dir.join("config.yml");
-
-        if !cfg.exists() {
-            fs::write(&cfg, yml)?;
-        }
+        write_if_changed(&cfg, &yml)?;
 
         let mut process = Process::start(
             &dir,

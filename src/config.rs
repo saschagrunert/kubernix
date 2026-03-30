@@ -31,7 +31,7 @@ impl fmt::Display for LogFormat {
     }
 }
 
-#[derive(Parser, Deserialize, Serialize)]
+#[derive(Clone, Parser, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[command(
     after_help = "More info at: https://github.com/saschagrunert/kubernix",
@@ -237,7 +237,7 @@ impl Config {
 }
 
 /// Possible subcommands
-#[derive(ClapSubcommand, Deserialize, Serialize)]
+#[derive(Clone, ClapSubcommand, Deserialize, Serialize)]
 pub enum SubCommand {
     /// Spawn an additional shell session
     #[command(name = "shell")]

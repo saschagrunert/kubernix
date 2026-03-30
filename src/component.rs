@@ -18,17 +18,21 @@ use rayon::prelude::*;
 
 /// Boot phases control the startup order of cluster components.
 /// Components in the same phase start concurrently; phases run sequentially.
+///
+/// Phase ordering is optimized so that independent components overlap:
+/// - CRI-O starts alongside controllers (it only needs etcd/apiserver, not controllers)
+/// - Proxy starts alongside kubelets (it only needs the API server to sync caches)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Phase {
     /// Infrastructure services (etcd)
     Infrastructure,
     /// Control plane services (API server)
     ControlPlane,
-    /// Controllers that depend on the API server (scheduler, controller-manager)
+    /// Controllers, node runtimes, and proxy all start together since they
+    /// only depend on the API server, not on each other.
+    /// Contains: scheduler, controller-manager, CRI-O (per node), proxy.
     Controller,
-    /// Node-level container runtimes (CRI-O); must be ready before NodeAgent
-    NodeRuntime,
-    /// Node agents that require a running runtime (kubelet, proxy)
+    /// Node agents that require a running CRI-O runtime (kubelet).
     NodeAgent,
 }
 
@@ -108,9 +112,8 @@ impl ComponentRegistry {
     /// If any component in a phase fails, subsequent phases are skipped
     /// (later phases depend on earlier ones).
     ///
-    /// Note: components within the same phase start concurrently, so
-    /// CRI-O (NodeRuntime) does not overlap with the control plane.
-    /// This trades some startup speed for simpler, predictable ordering.
+    /// The Controller phase runs controllers, CRI-O, and proxy in parallel
+    /// since they all only depend on the API server.
     ///
     /// Returns stoppable handles in reverse phase order (for proper
     /// shutdown: node agents before runtimes, runtimes before control

@@ -8,9 +8,10 @@ use crate::{
     config::Config,
     kubeconfig::KubeConfig,
     process::{Process, ProcessState, Stoppable},
+    write_if_changed,
 };
 use anyhow::Result;
-use std::fs::{self, create_dir_all};
+use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
 pub struct SchedulerComponent;
@@ -45,10 +46,7 @@ impl Scheduler {
             kubeconfig.scheduler().display()
         );
         let cfg = &dir.join("config.yml");
-
-        if !cfg.exists() {
-            fs::write(cfg, yml)?;
-        }
+        write_if_changed(cfg, &yml)?;
 
         let mut process = Process::start(
             &dir,

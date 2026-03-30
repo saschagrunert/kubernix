@@ -28,6 +28,21 @@ mod system;
 pub use config::{Config, LogFormat};
 pub use logger::Logger;
 
+/// Write `content` to `path` only if the file does not exist or its
+/// current contents differ. Avoids unnecessary filesystem writes and
+/// inode updates on warm restarts.
+pub(crate) fn write_if_changed(path: &std::path::Path, content: &str) -> anyhow::Result<()> {
+    if path.exists() {
+        if let Ok(existing) = std::fs::read_to_string(path) {
+            if existing == content {
+                return Ok(());
+            }
+        }
+    }
+    std::fs::write(path, content)?;
+    Ok(())
+}
+
 use crate::nix::Nix;
 use component::{ClusterContext, ComponentRegistry};
 use container::Container;
@@ -61,7 +76,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    thread::sleep,
+    thread::{self, sleep},
     time::{Duration, Instant},
 };
 
@@ -69,6 +84,8 @@ const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
 /// The main entry point for the application
 pub struct Kubernix {
+    addon_shutdown: Arc<AtomicBool>,
+    addon_thread: Option<thread::JoinHandle<()>>,
     config: Config,
     network: Network,
     kubectl: Kubectl,
@@ -199,7 +216,10 @@ impl Kubernix {
 
         // Setup the main instance
         let spawn_shell = !config.no_shell();
+        let addon_shutdown = Arc::new(AtomicBool::new(false));
         let mut kubernix = Kubernix {
+            addon_shutdown: Arc::clone(&addon_shutdown),
+            addon_thread: None,
             config,
             network,
             kubectl,
@@ -209,15 +229,33 @@ impl Kubernix {
 
         // No dead processes
         if all_ok {
-            // Apply all cluster addons
-            if let Err(e) = kubernix
-                .apply_addons()
-                .and_then(|_| kubernix.write_env_file())
-            {
+            if let Err(e) = kubernix.write_env_file() {
                 p.reset();
-                error!("Unable to start all processes: {}", e);
+                error!("Unable to write environment file: {}", e);
                 return Err(e);
             }
+
+            // Deploy addons asynchronously so the shell is available
+            // sooner. Failures are logged but do not block startup.
+            // The thread handle is stored so Drop can join it before
+            // tearing down cluster processes.
+            let addon_config = kubernix.config.clone();
+            let addon_network = kubernix.network.clone();
+            let addon_kubeconfig = kubernix.kubectl.kubeconfig().to_path_buf();
+            kubernix.addon_thread = Some(thread::spawn(move || {
+                let kubectl = Kubectl::new(&addon_kubeconfig);
+                if addon_shutdown.load(Ordering::Relaxed) {
+                    return;
+                }
+                if addon_config.addons().iter().any(|a| a == "coredns") {
+                    if let Err(e) = CoreDns::apply(&addon_config, &addon_network, &kubectl) {
+                        if !addon_shutdown.load(Ordering::Relaxed) {
+                            error!("Failed to deploy CoreDNS addon: {}", e);
+                        }
+                    }
+                }
+            }));
+
             info!("Everything is up and running");
             p.reset();
 
@@ -231,15 +269,6 @@ impl Kubernix {
             bail!("Unable to start all processes")
         }
 
-        Ok(())
-    }
-
-    /// Apply needed workloads to the running cluster. This method stops the cluster on any error.
-    fn apply_addons(&mut self) -> Result<()> {
-        info!("Applying cluster addons");
-        if self.config.addons().iter().any(|a| a == "coredns") {
-            CoreDns::apply(&self.config, &self.network, &self.kubectl)?;
-        }
         Ok(())
     }
 
@@ -364,6 +393,24 @@ impl Drop for Kubernix {
         let p = Progress::new(Self::processes(&self.config), self.config.log_level());
 
         info!("Cleaning up");
+
+        // Signal the addon thread to stop and give it a short window
+        // to finish. If it does not complete in time, proceed with
+        // shutdown rather than blocking for up to 120s.
+        self.addon_shutdown.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.addon_thread.take() {
+            debug!("Waiting for addon deployment to finish");
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !handle.is_finished() && Instant::now() < deadline {
+                sleep(Duration::from_millis(100));
+            }
+            if handle.is_finished() {
+                let _ = handle.join();
+            } else {
+                debug!("Addon thread did not finish in time, proceeding with shutdown");
+            }
+        }
+
         self.stop();
         self.umount();
         self.system.cleanup();
