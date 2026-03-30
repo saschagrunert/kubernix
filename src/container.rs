@@ -35,6 +35,15 @@ impl Container {
             return Ok(());
         }
 
+        // Skip rebuild if the image already exists
+        if Self::image_exists(config) {
+            info!(
+                "Container image '{}' already exists, skipping build",
+                DEFAULT_IMAGE
+            );
+            return Ok(());
+        }
+
         // Build the base container image
         info!("Building base container image '{}'", DEFAULT_IMAGE);
 
@@ -223,6 +232,17 @@ impl Container {
         } else {
             Stdio::null()
         }
+    }
+
+    /// Check whether the base container image already exists.
+    /// Uses `image inspect` which works for both podman and docker.
+    fn image_exists(config: &Config) -> bool {
+        Command::new(config.container_runtime())
+            .args(["image", "inspect", DEFAULT_IMAGE])
+            .stderr(Stdio::null())
+            .stdout(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
     }
 
     /// Retrieve a prefixed container name

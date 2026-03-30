@@ -45,7 +45,9 @@ impl Component for CrioComponent {
     }
 
     fn phase(&self) -> Phase {
-        Phase::NodeRuntime
+        // CRI-O only needs etcd/apiserver to be up, not the controllers,
+        // so it starts in the Controller phase alongside scheduler/CM.
+        Phase::Controller
     }
 
     fn start(&self, ctx: &ClusterContext<'_>) -> ProcessState {

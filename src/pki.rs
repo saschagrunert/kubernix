@@ -7,6 +7,7 @@
 use crate::{Config, network::Network, node::Node};
 use anyhow::{Context, Result, bail};
 use log::{debug, info};
+use rayon::prelude::*;
 use serde_json::{json, to_string_pretty};
 use std::{
     fs::{self, create_dir_all},
@@ -215,25 +216,60 @@ impl Pki {
                 hostnames: &hostnames.join(","),
             };
 
-            let kubelets = if config.multi_node() {
-                // Multiple nodes get identified via their node name
-                nodes
-                    .iter()
-                    .map(|n| Self::setup_kubelet(pki_config, n))
-                    .collect::<Result<Vec<_>, _>>()?
+            // Generate all leaf certificates in parallel since they
+            // only depend on the CA, not on each other.
+            let kubelet_nodes: Vec<&str> = if config.multi_node() {
+                nodes.iter().map(|n| n.as_str()).collect()
             } else {
-                // Single node gets identified via its hostname
-                vec![Self::setup_kubelet(pki_config, network.hostname())?]
+                vec![network.hostname()]
             };
 
+            let (left, right) = rayon::join(
+                || {
+                    rayon::join(
+                        || {
+                            rayon::join(
+                                || Self::setup_admin(pki_config),
+                                || Self::setup_apiserver(pki_config),
+                            )
+                        },
+                        || {
+                            rayon::join(
+                                || Self::setup_controller_manager(pki_config),
+                                || Self::setup_proxy(pki_config),
+                            )
+                        },
+                    )
+                },
+                || {
+                    rayon::join(
+                        || {
+                            rayon::join(
+                                || Self::setup_scheduler(pki_config),
+                                || Self::setup_service_account(pki_config),
+                            )
+                        },
+                        || {
+                            kubelet_nodes
+                                .par_iter()
+                                .map(|n| Self::setup_kubelet(pki_config, n))
+                                .collect::<Result<Vec<_>, _>>()
+                        },
+                    )
+                },
+            );
+
+            let ((admin, apiserver), (controller_manager, proxy)) = left;
+            let ((scheduler, service_account), kubelets) = right;
+
             Ok(Pki {
-                admin: Self::setup_admin(pki_config)?,
-                apiserver: Self::setup_apiserver(pki_config)?,
-                controller_manager: Self::setup_controller_manager(pki_config)?,
-                kubelets,
-                proxy: Self::setup_proxy(pki_config)?,
-                scheduler: Self::setup_scheduler(pki_config)?,
-                service_account: Self::setup_service_account(pki_config)?,
+                admin: admin?,
+                apiserver: apiserver?,
+                controller_manager: controller_manager?,
+                kubelets: kubelets?,
+                proxy: proxy?,
+                scheduler: scheduler?,
+                service_account: service_account?,
                 ca,
             })
         }

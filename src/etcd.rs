@@ -47,10 +47,13 @@ impl Etcd {
             ETCD,
             ETCD,
             &[
+                "--auto-compaction-mode=periodic",
+                "--auto-compaction-retention=1h",
                 "--client-cert-auth",
                 "--initial-cluster-state=new",
                 "--initial-cluster-token=etcd-cluster",
                 "--peer-client-cert-auth",
+                "--snapshot-count=5000",
                 &format!(
                     "--initial-advertise-peer-urls=https://{}",
                     network.etcd_peer()

@@ -14,6 +14,7 @@ use std::{
     process::Command,
 };
 
+#[derive(Clone)]
 #[must_use]
 pub struct Network {
     cluster_cidr: Ipv4Network,

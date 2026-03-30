@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{Context, Result};
 use log::{debug, info};
 use nix::sys::stat::{Mode, fchmod};
+use rayon::prelude::*;
 use std::{
     fs::{File, create_dir_all},
     net::Ipv4Addr,
@@ -78,22 +79,44 @@ impl KubeConfig {
             info!("Creating kubeconfigs");
             create_dir_all(&dir)?;
 
-            let kubelets = pki
-                .kubelets()
-                .iter()
-                .map(|x| Self::setup_kubeconfig(&dir, x, pki.ca().cert()))
-                .collect::<Result<Vec<_>, _>>()?;
+            let ca = pki.ca().cert();
+
+            // Generate all kubeconfig files in parallel since they are
+            // independent of each other.
+            let (left, right) = rayon::join(
+                || {
+                    rayon::join(
+                        || Self::setup_kubeconfig(&dir, pki.proxy(), ca),
+                        || Self::setup_kubeconfig(&dir, pki.controller_manager(), ca),
+                    )
+                },
+                || {
+                    rayon::join(
+                        || {
+                            rayon::join(
+                                || Self::setup_kubeconfig(&dir, pki.scheduler(), ca),
+                                || Self::setup_kubeconfig(&dir, pki.admin(), ca),
+                            )
+                        },
+                        || {
+                            pki.kubelets()
+                                .par_iter()
+                                .map(|id| Self::setup_kubeconfig(&dir, id, ca))
+                                .collect::<Result<Vec<_>, _>>()
+                        },
+                    )
+                },
+            );
+
+            let (proxy, controller_manager) = left;
+            let ((scheduler, admin), kubelets) = right;
 
             Ok(KubeConfig {
-                kubelets,
-                proxy: Self::setup_kubeconfig(&dir, pki.proxy(), pki.ca().cert())?,
-                controller_manager: Self::setup_kubeconfig(
-                    &dir,
-                    pki.controller_manager(),
-                    pki.ca().cert(),
-                )?,
-                scheduler: Self::setup_kubeconfig(&dir, pki.scheduler(), pki.ca().cert())?,
-                admin: Self::setup_kubeconfig(&dir, pki.admin(), pki.ca().cert())?,
+                kubelets: kubelets?,
+                proxy: proxy?,
+                controller_manager: controller_manager?,
+                scheduler: scheduler?,
+                admin: admin?,
             })
         }
     }

@@ -11,13 +11,11 @@ use crate::{
     network::Network,
     pki::Pki,
     process::{Process, ProcessState, Stoppable},
+    write_if_changed,
 };
 use anyhow::{Context, Result};
 use log::debug;
-use std::{
-    fs::{self, create_dir_all},
-    path::Path,
-};
+use std::{fs::create_dir_all, path::Path};
 
 /// Component wrapper for registry-based startup.
 pub struct ApiServerComponent;
@@ -114,10 +112,7 @@ impl ApiServer {
     fn setup_rbac(dir: &Path, kubectl: &Kubectl) -> Result<()> {
         debug!("Creating API Server RBAC rule for kubelet");
         let file = dir.join("rbac.yml");
-
-        if !file.exists() {
-            fs::write(&file, include_str!("assets/apiserver.yml"))?;
-        }
+        write_if_changed(&file, include_str!("assets/apiserver.yml"))?;
 
         kubectl
             .apply(&file)
