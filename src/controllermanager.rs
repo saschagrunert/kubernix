@@ -80,3 +80,15 @@ impl Stoppable for ControllerManager {
         self.process.stop()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn component_metadata() {
+        let c = ControllerManagerComponent;
+        assert_eq!(c.name(), "Controller Manager");
+        assert_eq!(c.phase(), Phase::Controller);
+    }
+}

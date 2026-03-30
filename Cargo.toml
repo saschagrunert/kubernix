@@ -23,11 +23,10 @@ base64 = "0.22.1"
 clap = { version = "4.6.0", features = ["derive", "wrap_help", "env", "color"] }
 console = "0.16.3"
 crossbeam-channel = "0.5.15"
-hostname = "0.4.2"
 indicatif = "0.18.4"
 ipnetwork = { version = "0.21.1", features = ["serde"] }
 log = { version = "0.4.29", features = ["serde", "std"] }
-nix = { version = "0.31.2", features = ["fs", "signal", "mount", "sched", "process", "user"] }
+nix = { version = "0.31.2", features = ["fs", "hostname", "signal", "mount", "process", "user"] }
 rand = "0.10.0"
 rayon = "1.11.0"
 serde = { version = "1.0.228", features = ["derive"] }

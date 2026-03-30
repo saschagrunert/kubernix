@@ -128,3 +128,25 @@ impl Stoppable for ApiServer {
         self.process.stop()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rbac_asset_contains_expected_rules() {
+        let rbac = include_str!("assets/apiserver.yml");
+        assert!(rbac.contains("kind: ClusterRole"));
+        assert!(rbac.contains("kind: ClusterRoleBinding"));
+        assert!(rbac.contains("system:kube-apiserver-to-kubelet"));
+        assert!(rbac.contains("nodes/proxy"));
+        assert!(rbac.contains("nodes/stats"));
+    }
+
+    #[test]
+    fn component_metadata() {
+        let c = ApiServerComponent;
+        assert_eq!(c.name(), "API Server");
+        assert_eq!(c.phase(), Phase::ControlPlane);
+    }
+}

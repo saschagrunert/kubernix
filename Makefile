@@ -134,5 +134,9 @@ kill: ## Kill a running kubernix instance and unmount leftover volumes.
 test-unit: ## Run unit tests.
 	cargo test --lib
 
+.PHONY: test-coverage
+test-coverage: ## Generate local LCOV coverage report.
+	cargo llvm-cov --all-features --lib --lcov --output-path lcov.info
+
 .PHONY: test
 test: test-unit ## Run all tests.

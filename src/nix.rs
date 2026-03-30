@@ -270,17 +270,15 @@ mod tests {
         assert!(parsed["nodes"]["nixpkgs"]["locked"]["rev"].is_string());
     }
 
+    /// Tests env marker set/unset in a single test to avoid racing
+    /// on the shared IN_NIX environment variable in parallel runs.
     #[test]
-    fn is_active_false_by_default() {
-        // IN_NIX should not be set during tests
+    fn is_active_toggle() {
         Nix::remove_env_marker();
         assert!(!Nix::is_active());
-    }
-
-    #[test]
-    fn is_active_true_when_set() {
         Nix::set_env_marker();
         assert!(Nix::is_active());
         Nix::remove_env_marker();
+        assert!(!Nix::is_active());
     }
 }

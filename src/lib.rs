@@ -388,6 +388,71 @@ impl Kubernix {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn write_if_changed_creates_new_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.txt");
+        write_if_changed(&path, "hello").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "hello");
+    }
+
+    #[test]
+    fn write_if_changed_skips_identical() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.txt");
+        fs::write(&path, "hello").unwrap();
+        let before = fs::metadata(&path).unwrap().modified().unwrap();
+
+        // Small delay so mtime would differ if rewritten
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        write_if_changed(&path, "hello").unwrap();
+        let after = fs::metadata(&path).unwrap().modified().unwrap();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn write_if_changed_updates_different() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("test.txt");
+        fs::write(&path, "old").unwrap();
+        write_if_changed(&path, "new").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "new");
+    }
+
+    #[test]
+    fn apply_env_file_parses_exports() {
+        let dir = tempdir().unwrap();
+        let env_file = dir.path().join("test.env");
+        let mut f = fs::File::create(&env_file).unwrap();
+        writeln!(f, "export FOO=bar").unwrap();
+        writeln!(f, "BAZ=qux").unwrap();
+        writeln!(f, "QUOTED=\"hello world\"").unwrap();
+        writeln!(f, "SINGLE='single'").unwrap();
+
+        let mut cmd = Command::new("echo");
+        Kubernix::apply_env_file(&env_file, &mut cmd).unwrap();
+    }
+
+    #[test]
+    fn read_mount_points_empty_for_nonexistent_root() {
+        let points = Kubernix::read_mount_points(Path::new("/nonexistent")).unwrap();
+        assert!(points.is_empty());
+    }
+
+    #[test]
+    fn read_mount_points_excludes_root_itself() {
+        let dir = tempdir().unwrap();
+        let points = Kubernix::read_mount_points(dir.path()).unwrap();
+        assert!(points.is_empty());
+    }
+}
+
 impl Drop for Kubernix {
     fn drop(&mut self) {
         let p = Progress::new(Self::processes(&self.config), self.config.log_level());

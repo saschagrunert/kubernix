@@ -65,3 +65,26 @@ impl Stoppable for Scheduler {
         self.process.stop()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_template_renders() {
+        let yml = format!(
+            include_str!("assets/scheduler.yml"),
+            "/tmp/scheduler.kubeconfig"
+        );
+        assert!(yml.contains("apiVersion: kubescheduler.config.k8s.io/v1"));
+        assert!(yml.contains("kubeconfig: \"/tmp/scheduler.kubeconfig\""));
+        assert!(yml.contains("leaderElect: false"));
+    }
+
+    #[test]
+    fn component_metadata() {
+        let c = SchedulerComponent;
+        assert_eq!(c.name(), "Scheduler");
+        assert_eq!(c.phase(), Phase::Controller);
+    }
+}

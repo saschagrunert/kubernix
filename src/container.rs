@@ -250,3 +250,31 @@ impl Container {
         format!("{}-{}", DEFAULT_ROOT, name)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prefixed_container_name_format() {
+        assert_eq!(
+            Container::prefixed_container_name("node-0"),
+            "kubernix-node-0"
+        );
+    }
+
+    #[test]
+    fn volume_arg_format() {
+        assert_eq!(
+            Container::volume_arg("/some/path"),
+            "--volume=/some/path:/some/path"
+        );
+    }
+
+    #[test]
+    fn policy_json_path() {
+        let c = crate::config::tests::test_config().unwrap();
+        let path = Container::policy_json(&c);
+        assert!(path.ends_with("policy.json"));
+    }
+}

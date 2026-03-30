@@ -147,9 +147,10 @@ impl Process {
         let now = Instant::now();
         let file = File::open(&self.log_file)?;
         let mut reader = BufReader::new(file);
+        let mut line = String::new();
 
         while now.elapsed().as_secs() < self.readiness_timeout {
-            let mut line = String::new();
+            line.clear();
             reader.read_line(&mut line)?;
 
             if line.is_empty() {
