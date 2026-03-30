@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"struct":["Config","Kubernix","Logger"]};
+window.SIDEBAR_ITEMS = {"enum":["LogFormat"],"struct":["Config","Kubernix","Logger"]};

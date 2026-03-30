@@ -165,30 +165,30 @@
 <a href=#165 id=165 data-nosnippet>165</a>            }
 <a href=#166 id=166 data-nosnippet>166</a>        }
 <a href=#167 id=167 data-nosnippet>167</a>
-<a href=#168 id=168 data-nosnippet>168</a>        <span class="comment">// Cleanup since process is not ready
-<a href=#169 id=169 data-nosnippet>169</a>        </span><span class="self">self</span>.stop()<span class="question-mark">?</span>;
-<a href=#170 id=170 data-nosnippet>170</a>        <span class="macro">error!</span>(
-<a href=#171 id=171 data-nosnippet>171</a>            <span class="string">"Timed out waiting for process '{}' ({}) to become ready"</span>,
-<a href=#172 id=172 data-nosnippet>172</a>            <span class="self">self</span>.name, <span class="self">self</span>.command
-<a href=#173 id=173 data-nosnippet>173</a>        );
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="macro">bail!</span>(<span class="string">"Process timeout"</span>)
-<a href=#175 id=175 data-nosnippet>175</a>    }
-<a href=#176 id=176 data-nosnippet>176</a>
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="doccomment">/// Dump the last lines of a process log file for debugging
-<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="kw">fn </span>dump_log_tail(log_file: <span class="kw-2">&amp;</span>Path, name: <span class="kw-2">&amp;</span>str) {
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(content) = fs::read_to_string(log_file) {
-<a href=#180 id=180 data-nosnippet>180</a>            <span class="kw">let </span>lines: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = content.lines().collect();
-<a href=#181 id=181 data-nosnippet>181</a>            <span class="kw">let </span>start = lines.len().saturating_sub(<span class="number">20</span>);
-<a href=#182 id=182 data-nosnippet>182</a>            <span class="macro">error!</span>(<span class="string">"Last log lines of {}:"</span>, name);
-<a href=#183 id=183 data-nosnippet>183</a>            <span class="kw">for </span>line <span class="kw">in </span><span class="kw-2">&amp;</span>lines[start..] {
-<a href=#184 id=184 data-nosnippet>184</a>                <span class="macro">error!</span>(<span class="string">"  {}"</span>, line);
-<a href=#185 id=185 data-nosnippet>185</a>            }
-<a href=#186 id=186 data-nosnippet>186</a>        }
-<a href=#187 id=187 data-nosnippet>187</a>    }
-<a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="doccomment">/// Retrieve a pseudo state for stopped processes
-<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">pub fn </span>stopped() -&gt; ProcessState {
-<a href=#191 id=191 data-nosnippet>191</a>        <span class="macro">bail!</span>(<span class="string">"Process not started yet"</span>)
+<a href=#168 id=168 data-nosnippet>168</a>        <span class="comment">// Dump log before stopping so the file is still intact
+<a href=#169 id=169 data-nosnippet>169</a>        </span><span class="self">Self</span>::dump_log_tail(<span class="kw-2">&amp;</span><span class="self">self</span>.log_file, <span class="kw-2">&amp;</span><span class="self">self</span>.name);
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="self">self</span>.stop()<span class="question-mark">?</span>;
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="macro">bail!</span>(
+<a href=#172 id=172 data-nosnippet>172</a>            <span class="string">"Timed out after {}s waiting for process '{}' ({}) to become ready \
+<a href=#173 id=173 data-nosnippet>173</a>             with pattern '{}' (log: {})"</span>,
+<a href=#174 id=174 data-nosnippet>174</a>            <span class="self">self</span>.readyness_timeout,
+<a href=#175 id=175 data-nosnippet>175</a>            <span class="self">self</span>.name,
+<a href=#176 id=176 data-nosnippet>176</a>            <span class="self">self</span>.command,
+<a href=#177 id=177 data-nosnippet>177</a>            pattern,
+<a href=#178 id=178 data-nosnippet>178</a>            <span class="self">self</span>.log_file.display(),
+<a href=#179 id=179 data-nosnippet>179</a>        )
+<a href=#180 id=180 data-nosnippet>180</a>    }
+<a href=#181 id=181 data-nosnippet>181</a>
+<a href=#182 id=182 data-nosnippet>182</a>    <span class="doccomment">/// Dump the last lines of a process log file for debugging
+<a href=#183 id=183 data-nosnippet>183</a>    </span><span class="kw">fn </span>dump_log_tail(log_file: <span class="kw-2">&amp;</span>Path, name: <span class="kw-2">&amp;</span>str) {
+<a href=#184 id=184 data-nosnippet>184</a>        <span class="kw">if let </span><span class="prelude-val">Ok</span>(content) = fs::read_to_string(log_file) {
+<a href=#185 id=185 data-nosnippet>185</a>            <span class="kw">let </span>lines: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = content.lines().collect();
+<a href=#186 id=186 data-nosnippet>186</a>            <span class="kw">let </span>start = lines.len().saturating_sub(<span class="number">20</span>);
+<a href=#187 id=187 data-nosnippet>187</a>            <span class="macro">error!</span>(<span class="string">"Last log lines of {}:"</span>, name);
+<a href=#188 id=188 data-nosnippet>188</a>            <span class="kw">for </span>line <span class="kw">in </span><span class="kw-2">&amp;</span>lines[start..] {
+<a href=#189 id=189 data-nosnippet>189</a>                <span class="macro">error!</span>(<span class="string">"  {}"</span>, line);
+<a href=#190 id=190 data-nosnippet>190</a>            }
+<a href=#191 id=191 data-nosnippet>191</a>        }
 <a href=#192 id=192 data-nosnippet>192</a>    }
 <a href=#193 id=193 data-nosnippet>193</a>}
 <a href=#194 id=194 data-nosnippet>194</a>
@@ -229,54 +229,49 @@
 <a href=#229 id=229 data-nosnippet>229</a>    <span class="kw">use </span>tempfile::tempdir;
 <a href=#230 id=230 data-nosnippet>230</a>
 <a href=#231 id=231 data-nosnippet>231</a>    <span class="attr">#[test]
-<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">fn </span>stopped() {
-<a href=#233 id=233 data-nosnippet>233</a>        <span class="macro">assert!</span>(Process::stopped().is_err())
-<a href=#234 id=234 data-nosnippet>234</a>    }
-<a href=#235 id=235 data-nosnippet>235</a>
-<a href=#236 id=236 data-nosnippet>236</a>    <span class="attr">#[test]
-<a href=#237 id=237 data-nosnippet>237</a>    </span><span class="kw">fn </span>start_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#238 id=238 data-nosnippet>238</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
-<a href=#239 id=239 data-nosnippet>239</a>        Process::start(d.path(), <span class="string">""</span>, <span class="string">"echo"</span>, <span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>;
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="prelude-val">Ok</span>(())
-<a href=#241 id=241 data-nosnippet>241</a>    }
-<a href=#242 id=242 data-nosnippet>242</a>
-<a href=#243 id=243 data-nosnippet>243</a>    <span class="attr">#[test]
-<a href=#244 id=244 data-nosnippet>244</a>    </span><span class="kw">fn </span>start_failure_no_command() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#245 id=245 data-nosnippet>245</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
-<a href=#246 id=246 data-nosnippet>246</a>        <span class="macro">assert!</span>(Process::start(d.path(), <span class="string">""</span>, <span class="string">""</span>, <span class="kw-2">&amp;</span>[]).is_err());
-<a href=#247 id=247 data-nosnippet>247</a>        <span class="prelude-val">Ok</span>(())
-<a href=#248 id=248 data-nosnippet>248</a>    }
-<a href=#249 id=249 data-nosnippet>249</a>
-<a href=#250 id=250 data-nosnippet>250</a>    <span class="attr">#[test]
-<a href=#251 id=251 data-nosnippet>251</a>    </span><span class="kw">fn </span>start_failure_invalid_command() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
-<a href=#253 id=253 data-nosnippet>253</a>        <span class="macro">assert!</span>(Process::start(d.path(), <span class="string">""</span>, <span class="string">"invalid_command"</span>, <span class="kw-2">&amp;</span>[]).is_err());
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="prelude-val">Ok</span>(())
-<a href=#255 id=255 data-nosnippet>255</a>    }
-<a href=#256 id=256 data-nosnippet>256</a>
-<a href=#257 id=257 data-nosnippet>257</a>    <span class="attr">#[test]
-<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">fn </span>wait_ready_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">let </span><span class="kw-2">mut </span>p = Process::start(d.path(), <span class="string">""</span>, <span class="string">"echo"</span>, <span class="kw-2">&amp;</span>[<span class="string">"test"</span>])<span class="question-mark">?</span>;
-<a href=#261 id=261 data-nosnippet>261</a>        p.wait_ready(<span class="string">"test"</span>)<span class="question-mark">?</span>;
-<a href=#262 id=262 data-nosnippet>262</a>        <span class="prelude-val">Ok</span>(())
-<a href=#263 id=263 data-nosnippet>263</a>    }
-<a href=#264 id=264 data-nosnippet>264</a>
-<a href=#265 id=265 data-nosnippet>265</a>    <span class="attr">#[test]
-<a href=#266 id=266 data-nosnippet>266</a>    </span><span class="kw">fn </span>wait_ready_failure() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span><span class="kw-2">mut </span>p = Process::start(d.path(), <span class="string">""</span>, <span class="string">"echo"</span>, <span class="kw-2">&amp;</span>[<span class="string">"test"</span>])<span class="question-mark">?</span>;
-<a href=#269 id=269 data-nosnippet>269</a>        p.readyness_timeout = <span class="number">1</span>;
-<a href=#270 id=270 data-nosnippet>270</a>        <span class="macro">assert!</span>(p.wait_ready(<span class="string">"invalid"</span>).is_err());
-<a href=#271 id=271 data-nosnippet>271</a>        <span class="prelude-val">Ok</span>(())
-<a href=#272 id=272 data-nosnippet>272</a>    }
-<a href=#273 id=273 data-nosnippet>273</a>
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="attr">#[test]
-<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="kw">fn </span>stop_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
-<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">let </span><span class="kw-2">mut </span>p = Process::start(d.path(), <span class="string">""</span>, <span class="string">"sleep"</span>, <span class="kw-2">&amp;</span>[<span class="string">"500"</span>])<span class="question-mark">?</span>;
-<a href=#278 id=278 data-nosnippet>278</a>        p.stop()<span class="question-mark">?</span>;
-<a href=#279 id=279 data-nosnippet>279</a>        <span class="prelude-val">Ok</span>(())
-<a href=#280 id=280 data-nosnippet>280</a>    }
-<a href=#281 id=281 data-nosnippet>281</a>}
+<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">fn </span>start_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
+<a href=#234 id=234 data-nosnippet>234</a>        Process::start(d.path(), <span class="string">""</span>, <span class="string">"echo"</span>, <span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>;
+<a href=#235 id=235 data-nosnippet>235</a>        <span class="prelude-val">Ok</span>(())
+<a href=#236 id=236 data-nosnippet>236</a>    }
+<a href=#237 id=237 data-nosnippet>237</a>
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="attr">#[test]
+<a href=#239 id=239 data-nosnippet>239</a>    </span><span class="kw">fn </span>start_failure_no_command() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="macro">assert!</span>(Process::start(d.path(), <span class="string">""</span>, <span class="string">""</span>, <span class="kw-2">&amp;</span>[]).is_err());
+<a href=#242 id=242 data-nosnippet>242</a>        <span class="prelude-val">Ok</span>(())
+<a href=#243 id=243 data-nosnippet>243</a>    }
+<a href=#244 id=244 data-nosnippet>244</a>
+<a href=#245 id=245 data-nosnippet>245</a>    <span class="attr">#[test]
+<a href=#246 id=246 data-nosnippet>246</a>    </span><span class="kw">fn </span>start_failure_invalid_command() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
+<a href=#248 id=248 data-nosnippet>248</a>        <span class="macro">assert!</span>(Process::start(d.path(), <span class="string">""</span>, <span class="string">"invalid_command"</span>, <span class="kw-2">&amp;</span>[]).is_err());
+<a href=#249 id=249 data-nosnippet>249</a>        <span class="prelude-val">Ok</span>(())
+<a href=#250 id=250 data-nosnippet>250</a>    }
+<a href=#251 id=251 data-nosnippet>251</a>
+<a href=#252 id=252 data-nosnippet>252</a>    <span class="attr">#[test]
+<a href=#253 id=253 data-nosnippet>253</a>    </span><span class="kw">fn </span>wait_ready_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="kw">let </span><span class="kw-2">mut </span>p = Process::start(d.path(), <span class="string">""</span>, <span class="string">"echo"</span>, <span class="kw-2">&amp;</span>[<span class="string">"test"</span>])<span class="question-mark">?</span>;
+<a href=#256 id=256 data-nosnippet>256</a>        p.wait_ready(<span class="string">"test"</span>)<span class="question-mark">?</span>;
+<a href=#257 id=257 data-nosnippet>257</a>        <span class="prelude-val">Ok</span>(())
+<a href=#258 id=258 data-nosnippet>258</a>    }
+<a href=#259 id=259 data-nosnippet>259</a>
+<a href=#260 id=260 data-nosnippet>260</a>    <span class="attr">#[test]
+<a href=#261 id=261 data-nosnippet>261</a>    </span><span class="kw">fn </span>wait_ready_failure() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
+<a href=#263 id=263 data-nosnippet>263</a>        <span class="kw">let </span><span class="kw-2">mut </span>p = Process::start(d.path(), <span class="string">""</span>, <span class="string">"echo"</span>, <span class="kw-2">&amp;</span>[<span class="string">"test"</span>])<span class="question-mark">?</span>;
+<a href=#264 id=264 data-nosnippet>264</a>        p.readyness_timeout = <span class="number">1</span>;
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="macro">assert!</span>(p.wait_ready(<span class="string">"invalid"</span>).is_err());
+<a href=#266 id=266 data-nosnippet>266</a>        <span class="prelude-val">Ok</span>(())
+<a href=#267 id=267 data-nosnippet>267</a>    }
+<a href=#268 id=268 data-nosnippet>268</a>
+<a href=#269 id=269 data-nosnippet>269</a>    <span class="attr">#[test]
+<a href=#270 id=270 data-nosnippet>270</a>    </span><span class="kw">fn </span>stop_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">let </span>d = tempdir()<span class="question-mark">?</span>;
+<a href=#272 id=272 data-nosnippet>272</a>        <span class="kw">let </span><span class="kw-2">mut </span>p = Process::start(d.path(), <span class="string">""</span>, <span class="string">"sleep"</span>, <span class="kw-2">&amp;</span>[<span class="string">"500"</span>])<span class="question-mark">?</span>;
+<a href=#273 id=273 data-nosnippet>273</a>        p.stop()<span class="question-mark">?</span>;
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="prelude-val">Ok</span>(())
+<a href=#275 id=275 data-nosnippet>275</a>    }
+<a href=#276 id=276 data-nosnippet>276</a>}
 </code></pre></div></section></main></body></html>
