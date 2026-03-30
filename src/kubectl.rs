@@ -12,7 +12,7 @@ pub struct Kubectl {
 }
 
 impl Kubectl {
-    pub fn kubeconfig(&self) -> &PathBuf {
+    pub fn kubeconfig(&self) -> &Path {
         &self.kubeconfig
     }
 

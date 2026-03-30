@@ -253,7 +253,7 @@ impl Stoppable for Crio {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
 
     #[test]

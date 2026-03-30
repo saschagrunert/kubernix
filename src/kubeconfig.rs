@@ -21,23 +21,23 @@ pub struct KubeConfig {
 }
 
 impl KubeConfig {
-    pub fn kubelets(&self) -> &Vec<PathBuf> {
+    pub fn kubelets(&self) -> &[PathBuf] {
         &self.kubelets
     }
 
-    pub fn proxy(&self) -> &PathBuf {
+    pub fn proxy(&self) -> &Path {
         &self.proxy
     }
 
-    pub fn controller_manager(&self) -> &PathBuf {
+    pub fn controller_manager(&self) -> &Path {
         &self.controller_manager
     }
 
-    pub fn scheduler(&self) -> &PathBuf {
+    pub fn scheduler(&self) -> &Path {
         &self.scheduler
     }
 
-    pub fn admin(&self) -> &PathBuf {
+    pub fn admin(&self) -> &Path {
         &self.admin
     }
 

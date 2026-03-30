@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fs::{self, canonicalize, create_dir_all, read_to_string},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 /// Output format for log messages
@@ -176,7 +176,7 @@ impl Config {
     }
 
     /// Returns the root path
-    pub fn root(&self) -> &PathBuf {
+    pub fn root(&self) -> &Path {
         &self.root
     }
 
@@ -196,18 +196,18 @@ impl Config {
     }
 
     /// Returns the overlay path
-    pub fn overlay(&self) -> &Option<PathBuf> {
-        &self.overlay
+    pub fn overlay(&self) -> Option<&Path> {
+        self.overlay.as_deref()
     }
 
     /// Returns the packages
-    pub fn packages(&self) -> &Vec<String> {
+    pub fn packages(&self) -> &[String] {
         &self.packages
     }
 
     /// Returns the shell
-    pub fn shell(&self) -> &Option<String> {
-        &self.shell
+    pub fn shell(&self) -> Option<&str> {
+        self.shell.as_deref()
     }
 
     /// Returns the number of nodes
@@ -216,22 +216,22 @@ impl Config {
     }
 
     /// Returns the container runtime
-    pub fn container_runtime(&self) -> &String {
+    pub fn container_runtime(&self) -> &str {
         &self.container_runtime
     }
 
     /// Returns whether to skip the shell
-    pub fn no_shell(&self) -> &bool {
-        &self.no_shell
+    pub fn no_shell(&self) -> bool {
+        self.no_shell
     }
 
     /// Returns the custom Dockerfile path
-    pub fn dockerfile(&self) -> &Option<PathBuf> {
-        &self.dockerfile
+    pub fn dockerfile(&self) -> Option<&Path> {
+        self.dockerfile.as_deref()
     }
 
     /// Returns the addons to deploy
-    pub fn addons(&self) -> &Vec<String> {
+    pub fn addons(&self) -> &[String] {
         &self.addons
     }
 }
@@ -420,10 +420,7 @@ root = "root"
         )?;
         c.try_load_file()?;
         assert_eq!(c.log_format(), LogFormat::Json);
-        assert_eq!(
-            c.dockerfile().as_deref(),
-            Some(Path::new("/tmp/MyDockerfile"))
-        );
+        assert_eq!(c.dockerfile(), Some(Path::new("/tmp/MyDockerfile")));
         Ok(())
     }
 
