@@ -6,12 +6,6 @@ dependencies:
       - path: .github/workflows/ci.yml
         match: cfssl@v
 
-  - name: etcd
-    version: 3.6.9
-    refPaths:
-      - path: .github/workflows/ci.yml
-        match: ETCD_VER
-
   - name: zeitgeist
     version: 0.5.4
     refPaths:

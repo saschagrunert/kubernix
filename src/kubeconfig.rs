@@ -3,7 +3,7 @@ use crate::{
     kubectl::Kubectl,
     pki::{Identity, Pki},
 };
-use anyhow::{Context, Result, format_err};
+use anyhow::{Context, Result};
 use log::{debug, info};
 use nix::sys::stat::{Mode, fchmod};
 use std::{
@@ -118,14 +118,11 @@ impl KubeConfig {
 
         kubectl.config(&["use-context", context])?;
 
-        // Make kubeconfig readable for non-root users spawning additional
-        // shell sessions via `kubernix shell`
+        // Make kubeconfig readable for non-root users spawning
+        // additional shell sessions via `kubernix shell`.
         let file = File::open(&kubeconfig).context("unable to open kubeconfig")?;
-        fchmod(
-            &file,
-            Mode::from_bits(0o644).ok_or_else(|| format_err!("unable to get mode bits"))?,
-        )
-        .context("unable to set kubeconfig permissions")?;
+        fchmod(&file, Mode::from_bits_truncate(0o644))
+            .context("unable to set kubeconfig permissions")?;
 
         debug!("Kubeconfig created for {}", identity.name());
         Ok(kubeconfig)

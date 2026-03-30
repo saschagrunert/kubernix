@@ -28,7 +28,6 @@ indicatif = "0.18.4"
 ipnetwork = { version = "0.21.1", features = ["serde"] }
 log = { version = "0.4.29", features = ["serde", "std"] }
 nix = { version = "0.31.2", features = ["fs", "signal", "mount", "sched", "process", "user"] }
-parking_lot = "0.12.5"
 rand = "0.10.0"
 rayon = "1.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
