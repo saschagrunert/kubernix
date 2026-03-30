@@ -227,12 +227,14 @@ KuberNix has some configuration possibilities, which are currently:
 | ------------------------- | ----------------------------------------------------------------------------------- | -------------- | ---------------------------- |
 | `-r, --root`              | Path where all the runtime data is stored                                           | `kubernix-run` | `KUBERNIX_ROOT`              |
 | `-l, --log-level`         | Logging verbosity                                                                   | `info`         | `KUBERNIX_LOG_LEVEL`         |
+| `-f, --log-format`        | Log output format (`text` or `json`)                                                | `text`         | `KUBERNIX_LOG_FORMAT`        |
 | `-c, --cidr`              | CIDR used for the cluster network                                                   | `10.10.0.0/16` | `KUBERNIX_CIDR`              |
 | `-s, --shell`             | The shell executable to be used                                                     | `$SHELL`/`sh`  | `KUBERNIX_SHELL`             |
 | `-e, --no-shell`          | Do not spawn an interactive shell after bootstrap                                   | `false`        | `KUBERNIX_NO_SHELL`          |
 | `-n, --nodes`             | The number of nodes to be registered                                                | `1`            | `KUBERNIX_NODES`             |
 | `-u, --container-runtime` | The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1` | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
 | `-o, --overlay`           | Nix package overlay to be used                                                      |                | `KUBERNIX_OVERLAY`           |
+| `-d, --dockerfile`        | Custom Dockerfile for multi-node container image builds                             |                | `KUBERNIX_DOCKERFILE`        |
 | `-p, --packages`          | Additional Nix dependencies to be added to the environment                          |                | `KUBERNIX_PACKAGES`          |
 | `-a, --addons`            | Cluster addons to deploy (available: coredns)                                       | `coredns`      | `KUBERNIX_ADDONS`            |
 

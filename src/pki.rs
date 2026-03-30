@@ -224,7 +224,7 @@ impl Pki {
             .arg("-initca")
             .arg(csr)
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()?;
 
         let pipe = cfssl.stdout.take().context("unable to get stdout")?;
@@ -233,8 +233,14 @@ impl Pki {
             .arg(dir.join(CA_NAME))
             .stdin(pipe)
             .output()?;
+
+        let cfssl_output = cfssl.wait_with_output()?;
         if !output.status.success() {
-            debug!("cfssl/json: {:?}", output);
+            debug!(
+                "cfssl stderr: {}",
+                String::from_utf8_lossy(&cfssl_output.stderr)
+            );
+            debug!("cfssljson output: {:?}", output);
             bail!("CA certificate generation failed");
         }
         debug!("CA certificates created");
@@ -306,7 +312,7 @@ impl Pki {
             .arg(format!("-hostname={}", pki_config.hostnames()))
             .arg(csr)
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            .stderr(Stdio::piped())
             .spawn()?;
 
         let pipe = cfssl.stdout.take().context("unable to get stdout")?;
@@ -315,9 +321,15 @@ impl Pki {
             .arg(pki_config.dir().join(name))
             .stdin(pipe)
             .output()?;
+
+        let cfssl_output = cfssl.wait_with_output()?;
         if !output.status.success() {
-            debug!("cfssl/json: {:?}", output.stdout);
-            bail!("cfssl command failed");
+            debug!(
+                "cfssl stderr: {}",
+                String::from_utf8_lossy(&cfssl_output.stderr)
+            );
+            debug!("cfssljson output: {:?}", output);
+            bail!("Certificate generation failed for {}", name);
         }
         debug!("Certificate created for {}", name);
 

@@ -174,19 +174,12 @@ jobs:
             ~/go/bin
             ~/go/pkg
             ~/bin
-          key: ${{ runner.os }}-test-tools-cfssl-1.6.5-etcd-3.6.9
+          key: ${{ runner.os }}-test-tools-cfssl-1.6.5
       - name: Install test dependencies
         run: |
-          mkdir -p ~/bin
           go install github.com/cloudflare/cfssl/cmd/cfssl@v1.6.5
           go install github.com/cloudflare/cfssl/cmd/cfssljson@v1.6.5
-          ETCD_VER=v3.6.9
-          if [ ! -f ~/bin/etcd ]; then
-            curl -fsSL https://github.com/etcd-io/etcd/releases/download/${ETCD_VER}/etcd-${ETCD_VER}-linux-amd64.tar.gz | \
-              tar xzf - -C ~/bin --strip-components=1 etcd-${ETCD_VER}-linux-amd64/etcd
-          fi
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-          echo "$HOME/bin" >> $GITHUB_PATH
       - name: Generate code coverage
         run: cargo llvm-cov --all-features --lib --lcov --output-path lcov.info
       - name: Upload Results

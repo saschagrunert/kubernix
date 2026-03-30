@@ -47,35 +47,14 @@ impl Log for Logger {
 impl Logger {
     fn log_json(&self, record: &Record<'_>) {
         let level = record.metadata().level().as_str().to_lowercase();
-        let message = Self::escape_json(&record.args().to_string());
-        let target = Self::escape_json(record.target());
-        let line = format!(
-            r#"{{"level":"{}","message":"{}","target":"{}"}}"#,
-            level, message, target,
-        );
+        let message = record.args().to_string();
+        let target = record.target();
+        let line = serde_json::json!({
+            "level": level,
+            "message": message,
+            "target": target,
+        });
         writeln!(stderr(), "{}", line).ok();
-    }
-
-    /// Escape a string for safe embedding in a JSON value.
-    fn escape_json(s: &str) -> String {
-        let mut out = String::with_capacity(s.len());
-        for ch in s.chars() {
-            match ch {
-                '\\' => out.push_str("\\\\"),
-                '"' => out.push_str("\\\""),
-                '\n' => out.push_str("\\n"),
-                '\r' => out.push_str("\\r"),
-                '\t' => out.push_str("\\t"),
-                c if c.is_control() => {
-                    // Unicode escape for other control chars
-                    for unit in c.encode_utf16(&mut [0; 2]) {
-                        out.push_str(&format!("\\u{:04x}", unit));
-                    }
-                }
-                c => out.push(c),
-            }
-        }
-        out
     }
 
     fn log_text(&self, record: &Record<'_>) {

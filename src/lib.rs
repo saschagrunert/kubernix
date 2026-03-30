@@ -228,7 +228,7 @@ impl Kubernix {
             }
         } else {
             p.reset();
-            error!("Unable to start all processes")
+            bail!("Unable to start all processes")
         }
 
         Ok(())
@@ -276,13 +276,20 @@ impl Kubernix {
         Ok(())
     }
 
-    /// Parse the env file and apply its variables to a Command
+    /// Parse the env file and apply its variables to a Command.
+    /// Handles `export KEY=VALUE` and `KEY=VALUE` formats, stripping
+    /// surrounding single or double quotes from values.
     fn apply_env_file(env_file: &Path, cmd: &mut Command) -> Result<()> {
         let content = fs::read_to_string(env_file)
             .with_context(|| format!("Unable to read env file '{}'", env_file.display()))?;
         for line in content.lines() {
             let line = line.strip_prefix("export ").unwrap_or(line);
             if let Some((key, value)) = line.split_once('=') {
+                let value = value
+                    .strip_prefix('"')
+                    .and_then(|v| v.strip_suffix('"'))
+                    .or_else(|| value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')))
+                    .unwrap_or(value);
                 cmd.env(key, value);
             }
         }

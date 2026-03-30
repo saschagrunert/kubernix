@@ -1,9 +1,8 @@
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::LevelFilter;
-use parking_lot::RwLock;
 use std::{
-    sync::{Arc, OnceLock, Weak},
+    sync::{Arc, Mutex, OnceLock, Weak},
     time::Duration,
 };
 
@@ -11,10 +10,10 @@ pub struct Progress {
     inner: Option<Arc<ProgressBar>>,
 }
 
-static PROGRESS_BAR: OnceLock<RwLock<Option<Weak<ProgressBar>>>> = OnceLock::new();
+static PROGRESS_BAR: OnceLock<Mutex<Option<Weak<ProgressBar>>>> = OnceLock::new();
 
-fn progress_bar() -> &'static RwLock<Option<Weak<ProgressBar>>> {
-    PROGRESS_BAR.get_or_init(|| RwLock::new(None))
+fn progress_bar() -> &'static Mutex<Option<Weak<ProgressBar>>> {
+    PROGRESS_BAR.get_or_init(|| Mutex::new(None))
 }
 
 impl Progress {
@@ -41,14 +40,18 @@ impl Progress {
         p.enable_steady_tick(Duration::from_millis(80));
 
         // Set the global instance
-        *progress_bar().write() = Some(Arc::downgrade(&p));
+        *progress_bar().lock().expect("progress bar mutex poisoned") = Some(Arc::downgrade(&p));
 
         Progress { inner: Some(p) }
     }
 
     // Get the progress bar
     pub fn get() -> Option<Arc<ProgressBar>> {
-        progress_bar().read().as_ref()?.upgrade()
+        progress_bar()
+            .lock()
+            .expect("progress bar mutex poisoned")
+            .as_ref()?
+            .upgrade()
     }
 
     // Reset and consume the progress bar
@@ -56,7 +59,7 @@ impl Progress {
         if let Some(p) = self.inner {
             p.finish()
         }
-        *progress_bar().write() = None;
+        *progress_bar().lock().expect("progress bar mutex poisoned") = None;
     }
 }
 

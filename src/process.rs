@@ -24,7 +24,7 @@ pub struct Process {
     log_file: PathBuf,
     name: String,
     pid: u32,
-    readyness_timeout: u64,
+    readiness_timeout: u64,
     watch: Option<JoinHandle<Result<()>>>,
 }
 
@@ -126,7 +126,7 @@ impl Process {
             log_file,
             name: identifier.into(),
             pid,
-            readyness_timeout: 120,
+            readiness_timeout: 120,
             watch: Some(watch),
         })
     }
@@ -142,7 +142,7 @@ impl Process {
         let file = File::open(&self.log_file)?;
         let mut reader = BufReader::new(file);
 
-        while now.elapsed().as_secs() < self.readyness_timeout {
+        while now.elapsed().as_secs() < self.readiness_timeout {
             let mut line = String::new();
             reader.read_line(&mut line)?;
 
@@ -171,7 +171,7 @@ impl Process {
         bail!(
             "Timed out after {}s waiting for process '{}' ({}) to become ready \
              with pattern '{}' (log: {})",
-            self.readyness_timeout,
+            self.readiness_timeout,
             self.name,
             self.command,
             pattern,
@@ -206,7 +206,9 @@ impl Stoppable for Process {
         })?;
 
         // Send SIGTERM to the process
-        kill(Pid::from_raw(self.pid as i32), Signal::SIGTERM)?;
+        let pid = i32::try_from(self.pid)
+            .with_context(|| format!("PID {} exceeds i32 range", self.pid))?;
+        kill(Pid::from_raw(pid), Signal::SIGTERM)?;
 
         // Join the waiting thread
         if let Some(handle) = self.watch.take()
@@ -261,7 +263,7 @@ mod tests {
     fn wait_ready_failure() -> Result<()> {
         let d = tempdir()?;
         let mut p = Process::start(d.path(), "", "echo", &["test"])?;
-        p.readyness_timeout = 1;
+        p.readiness_timeout = 1;
         assert!(p.wait_ready("invalid").is_err());
         Ok(())
     }

@@ -103,7 +103,7 @@ impl Container {
         args: &[&str],
     ) -> Result<Process> {
         // Cleanup possible containers
-        Self::remove(config, container_name)?;
+        Self::remove(config, container_name);
 
         // Prepare the arguments
         let arg_hostname = &format!("--hostname={}", container_name);
@@ -186,16 +186,27 @@ impl Container {
         Process::start(dir, identifier, config.container_runtime(), &args_vec)
     }
 
-    /// Remove the provided (maybe running) container
-    fn remove(config: &Config, name: &str) -> Result<()> {
-        Command::new(config.container_runtime())
+    /// Remove the provided (maybe running) container.
+    /// Failures are logged but not propagated since the container may not
+    /// exist yet (first run).
+    fn remove(config: &Config, name: &str) {
+        let prefixed = Self::prefixed_container_name(name);
+        match Command::new(config.container_runtime())
             .arg("rm")
             .arg("-f")
-            .arg(Self::prefixed_container_name(name))
+            .arg(&prefixed)
             .stderr(Stdio::null())
             .stdout(Stdio::null())
-            .status()?;
-        Ok(())
+            .status()
+        {
+            Ok(status) if !status.success() => {
+                debug!("Container '{}' removal exited with {}", prefixed, status);
+            }
+            Err(e) => {
+                debug!("Failed to run container rm for '{}': {}", prefixed, e);
+            }
+            _ => {}
+        }
     }
 
     /// Retrieve a stdio for the provided config log level
