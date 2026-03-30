@@ -1,4 +1,5 @@
 use crate::{
+    component::{ClusterContext, Component, Phase},
     config::Config,
     container::Container,
     crio::{Crio, MAX_SOCKET_PATH_LEN},
@@ -10,6 +11,36 @@ use crate::{
 };
 use anyhow::{Context, Result, bail};
 use std::fs::{self, create_dir_all};
+
+/// Component wrapper for registry-based startup (per-node).
+pub struct KubeletComponent {
+    node: u8,
+    name: String,
+}
+
+impl KubeletComponent {
+    /// Create a new Kubelet component for the given node index.
+    pub fn new(node: u8) -> Self {
+        Self {
+            node,
+            name: format!("Kubelet (node {})", node),
+        }
+    }
+}
+
+impl Component for KubeletComponent {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn phase(&self) -> Phase {
+        Phase::NodeAgent
+    }
+
+    fn start(&self, ctx: &ClusterContext<'_>) -> ProcessState {
+        Kubelet::start(ctx.config, self.node, ctx.network, ctx.pki, ctx.kubeconfig)
+    }
+}
 
 pub struct Kubelet {
     process: Process,

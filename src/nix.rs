@@ -63,6 +63,7 @@ impl Nix {
         let exe = format!("{}", current_exe()?.display());
         let root = format!("{}", config.root().display());
         let log_level = format!("{}", config.log_level());
+        let log_format = format!("{}", config.log_format());
         let cidr = format!("{}", config.cidr());
         let nodes = format!("{}", config.nodes());
         let container_runtime = config.container_runtime();
@@ -79,6 +80,8 @@ impl Nix {
             root.as_str(),
             "--log-level",
             log_level.as_str(),
+            "--log-format",
+            log_format.as_str(),
             "--cidr",
             cidr.as_str(),
             "--nodes",
@@ -90,6 +93,15 @@ impl Nix {
         if let Some(ref overlay) = overlay_val {
             args.push("--overlay");
             args.push(overlay.as_str());
+        }
+
+        let dockerfile_val = config
+            .dockerfile()
+            .as_ref()
+            .map(|d| format!("{}", d.display()));
+        if let Some(ref dockerfile) = dockerfile_val {
+            args.push("--dockerfile");
+            args.push(dockerfile.as_str());
         }
 
         for pkg in &package_vals {
@@ -119,7 +131,7 @@ impl Nix {
         let flake_ref = format!("path:{}", nix_dir.display());
 
         let status = Command::new(System::find_executable("nix")?)
-            .env(Self::NIX_ENV, "true")
+            .env(Nix::NIX_ENV, "true")
             .arg("develop")
             .arg(&flake_ref)
             .arg("--no-update-lock-file")
@@ -169,6 +181,26 @@ impl Nix {
     /// Returns true if running in nix environment
     pub fn is_active() -> bool {
         var(Nix::NIX_ENV).is_ok()
+    }
+
+    /// Set the NIX_ENV marker so re-exec knows we are inside Nix.
+    ///
+    /// # Safety
+    /// Callers must ensure no other threads are concurrently reading
+    /// or writing environment variables.
+    #[cfg(test)]
+    pub fn set_env_marker() {
+        unsafe { std::env::set_var(Self::NIX_ENV, "true") };
+    }
+
+    /// Remove the NIX_ENV marker.
+    ///
+    /// # Safety
+    /// Callers must ensure no other threads are concurrently reading
+    /// or writing environment variables.
+    #[cfg(test)]
+    pub fn remove_env_marker() {
+        unsafe { std::env::remove_var(Self::NIX_ENV) };
     }
 }
 
@@ -241,14 +273,14 @@ mod tests {
     #[test]
     fn is_active_false_by_default() {
         // IN_NIX should not be set during tests
-        unsafe { std::env::remove_var(Nix::NIX_ENV) };
+        Nix::remove_env_marker();
         assert!(!Nix::is_active());
     }
 
     #[test]
     fn is_active_true_when_set() {
-        unsafe { std::env::set_var(Nix::NIX_ENV, "true") };
+        Nix::set_env_marker();
         assert!(Nix::is_active());
-        unsafe { std::env::remove_var(Nix::NIX_ENV) };
+        Nix::remove_env_marker();
     }
 }

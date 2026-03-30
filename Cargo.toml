@@ -3,6 +3,7 @@ name = "kubernix"
 version = "0.3.0"
 authors = ["Sascha Grunert <mail@saschagrunert.de>"]
 edition = "2024"
+rust-version = "1.85"
 license = "Apache-2.0"
 categories = ["command-line-utilities"]
 description = "Kubernetes development cluster bootstrapping with Nix packages"

@@ -2,6 +2,7 @@
 #![deny(missing_docs)]
 
 mod apiserver;
+mod component;
 mod config;
 mod container;
 mod controllermanager;
@@ -24,26 +25,21 @@ mod proxy;
 mod scheduler;
 mod system;
 
-pub use config::Config;
+pub use config::{Config, LogFormat};
 pub use logger::Logger;
 
 use crate::nix::Nix;
-use apiserver::ApiServer;
+use component::{ClusterContext, ComponentRegistry};
 use container::Container;
-use controllermanager::ControllerManager;
 use coredns::CoreDns;
 use crio::Crio;
 use encryptionconfig::EncryptionConfig;
-use etcd::Etcd;
 use kubeconfig::KubeConfig;
 use kubectl::Kubectl;
-use kubelet::Kubelet;
 use network::Network;
 use pki::Pki;
-use process::{Process, Stoppables};
+use process::Stoppables;
 use progress::Progress;
-use proxy::Proxy;
-use scheduler::Scheduler;
 use system::System;
 
 use ::nix::{
@@ -52,7 +48,6 @@ use ::nix::{
 };
 use anyhow::{Context, Result, bail};
 use log::{debug, error, info, set_boxed_logger};
-use rayon::{prelude::*, scope};
 use signal_hook::{
     consts::signal::{SIGHUP, SIGINT, SIGTERM},
     flag,
@@ -134,7 +129,8 @@ impl Kubernix {
         config.canonicalize_root()?;
 
         // Setup the logger
-        set_boxed_logger(Logger::new(config.log_level())).context("Unable to set logger")
+        set_boxed_logger(Logger::new(config.log_level(), config.log_format()))
+            .context("Unable to set logger")
     }
 
     /// Stop kubernix by cleaning up all running processes
@@ -178,70 +174,28 @@ impl Kubernix {
         let kubectl = Kubectl::new(kubeconfig.admin());
         let encryptionconfig = EncryptionConfig::new(&config)?;
 
-        // All processes
-        info!("Starting processes");
-        let mut api_server = Process::stopped();
-        let mut controller_manager = Process::stopped();
-        let mut etcd = Process::stopped();
-        let mut scheduler = Process::stopped();
-        let mut proxy = Process::stopped();
-        let mut crios = (0..config.nodes())
-            .map(|_| Process::stopped())
-            .collect::<Vec<_>>();
-        let mut kubelets = (0..config.nodes())
-            .map(|_| Process::stopped())
-            .collect::<Vec<_>>();
+        // Build the component registry
+        let ctx = ClusterContext {
+            config: &config,
+            network: &network,
+            pki: &pki,
+            kubeconfig: &kubeconfig,
+            encryptionconfig: &encryptionconfig,
+            kubectl: &kubectl,
+        };
 
-        // Spawn the processes
-        scope(|a| {
-            // Control plane
-            a.spawn(|b| {
-                etcd = Etcd::start(&config, &network, &pki);
-                b.spawn(|c| {
-                    api_server =
-                        ApiServer::start(&config, &network, &pki, &encryptionconfig, &kubectl);
-                    c.spawn(|_| {
-                        controller_manager =
-                            ControllerManager::start(&config, &network, &pki, &kubeconfig)
-                    });
-                    c.spawn(|_| scheduler = Scheduler::start(&config, &kubeconfig));
-                });
-            });
-
-            // Node processes
-            a.spawn(|c| {
-                crios
-                    .par_iter_mut()
-                    .zip(kubelets.par_iter_mut())
-                    .enumerate()
-                    .for_each(|(i, (c, k))| {
-                        *c = Crio::start(&config, i as u8, &network);
-                        if c.is_ok() {
-                            *k = Kubelet::start(&config, i as u8, &network, &pki, &kubeconfig);
-                        }
-                    });
-                c.spawn(|_| proxy = Proxy::start(&config, &network, &kubeconfig));
-            });
-        });
-
-        // This order is important since we will shut down the processes in order.
-        // Kubelets must be stopped before CRI-O because in multi-node mode
-        // kubelets run as exec sessions inside CRI-O containers.
-        let mut results = vec![scheduler, proxy, controller_manager];
-        results.extend(kubelets);
-        results.extend(crios);
-        results.push(api_server);
-        results.push(etcd);
-        let all_ok = results.iter().all(|x| x.is_ok());
-
-        // Note: wait for `drain_filter()` to be stable and make it more straightforward
-        let mut processes = vec![];
-        for process in results {
-            match process {
-                Ok(p) => processes.push(p),
-                Err(e) => debug!("{}", e),
-            }
+        let mut registry = ComponentRegistry::new();
+        registry.register(Box::new(etcd::EtcdComponent));
+        registry.register(Box::new(apiserver::ApiServerComponent));
+        registry.register(Box::new(controllermanager::ControllerManagerComponent));
+        registry.register(Box::new(scheduler::SchedulerComponent));
+        for node in 0..config.nodes() {
+            registry.register(Box::new(crio::CrioComponent::new(node)));
+            registry.register(Box::new(kubelet::KubeletComponent::new(node)));
         }
+        registry.register(Box::new(proxy::ProxyComponent));
+
+        let (processes, all_ok) = registry.run(&ctx);
 
         // Setup the main instance
         let spawn_shell = !config.no_shell();

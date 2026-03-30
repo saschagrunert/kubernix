@@ -1,4 +1,5 @@
 use crate::{
+    component::{ClusterContext, Component, Phase},
     config::Config,
     network::Network,
     pki::Pki,
@@ -6,6 +7,23 @@ use crate::{
 };
 use anyhow::Result;
 use std::fs::create_dir_all;
+
+/// Component wrapper for registry-based startup.
+pub struct EtcdComponent;
+
+impl Component for EtcdComponent {
+    fn name(&self) -> &str {
+        "etcd"
+    }
+
+    fn phase(&self) -> Phase {
+        Phase::Infrastructure
+    }
+
+    fn start(&self, ctx: &ClusterContext<'_>) -> ProcessState {
+        Etcd::start(ctx.config, ctx.network, ctx.pki)
+    }
+}
 
 pub struct Etcd {
     process: Process,
@@ -61,8 +79,11 @@ mod tests {
     use super::*;
     use crate::{config::tests::test_config, network::tests::test_network};
 
+    /// Integration test: requires etcd and cfssl binaries in $PATH.
+    /// Run with: cargo test -- --ignored
     #[test]
-    fn new_success() -> Result<()> {
+    #[ignore]
+    fn start_and_stop() -> Result<()> {
         let c = test_config()?;
         let n = test_network()?;
         let p = Pki::new(&c, &n)?;

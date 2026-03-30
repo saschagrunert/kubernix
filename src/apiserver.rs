@@ -1,4 +1,5 @@
 use crate::{
+    component::{ClusterContext, Component, Phase},
     config::Config,
     encryptionconfig::EncryptionConfig,
     kubectl::Kubectl,
@@ -12,6 +13,29 @@ use std::{
     fs::{self, create_dir_all},
     path::Path,
 };
+
+/// Component wrapper for registry-based startup.
+pub struct ApiServerComponent;
+
+impl Component for ApiServerComponent {
+    fn name(&self) -> &str {
+        "API Server"
+    }
+
+    fn phase(&self) -> Phase {
+        Phase::ControlPlane
+    }
+
+    fn start(&self, ctx: &ClusterContext<'_>) -> ProcessState {
+        ApiServer::start(
+            ctx.config,
+            ctx.network,
+            ctx.pki,
+            ctx.encryptionconfig,
+            ctx.kubectl,
+        )
+    }
+}
 
 pub struct ApiServer {
     process: Process,

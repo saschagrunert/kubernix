@@ -45,19 +45,34 @@ impl Network {
         &self.hostname
     }
 
+    /// Calculate the subnet prefix to use for splitting the parent CIDR.
+    ///
+    /// We need (2 + nodes) subnets: cluster, service, and one per CRI-O node.
+    /// The prefix is chosen so that all subnets fit inside the parent CIDR.
+    fn subnet_prefix(parent_prefix: u8, nodes: u8) -> Result<u8> {
+        let required = 2 + u32::from(nodes); // cluster + service + N nodes
+        // Find the smallest prefix (largest subnet) that still fits
+        for prefix in parent_prefix..=30 {
+            let subnets_available = 1u32 << (prefix - parent_prefix);
+            if subnets_available >= required {
+                return Ok(prefix);
+            }
+        }
+        bail!(
+            "CIDR /{} is too small to fit {} required subnets",
+            parent_prefix,
+            required,
+        )
+    }
+
     /// Create a new network from the provided config
     pub fn new(config: &Config) -> Result<Self> {
-        // Preflight checks
-        if config.cidr().prefix() > 24 {
-            bail!(
-                "Specified IP network {} is too small, please use at least a /24 subnet",
-                config.cidr()
-            )
-        }
+        // subnet_prefix() fails if the CIDR cannot fit all required subnets
+        let subnet_prefix = Self::subnet_prefix(config.cidr().prefix(), config.nodes())?;
         Self::warn_overlapping_route(config.cidr())?;
 
-        // Calculate the CIDRs
-        let cluster_cidr = Ipv4Network::new(config.cidr().ip(), 24)?;
+        // Calculate the CIDRs using the dynamic subnet prefix
+        let cluster_cidr = Ipv4Network::new(config.cidr().ip(), subnet_prefix)?;
         debug!("Using cluster CIDR {}", cluster_cidr);
 
         let service_cidr = Ipv4Network::new(
@@ -65,7 +80,7 @@ impl Network {
                 .cidr()
                 .nth(cluster_cidr.size())
                 .context("Unable to retrieve service CIDR start IP")?,
-            24,
+            subnet_prefix,
         )?;
         debug!("Using service CIDR {}", service_cidr);
 
@@ -77,7 +92,7 @@ impl Network {
                     .cidr()
                     .nth(offset)
                     .context("Unable to retrieve CRI-O CIDR start IP")?,
-                24,
+                subnet_prefix,
             )?;
             offset += cidr.size();
             debug!("Using CRI-O ({}) CIDR {}", node, cidr);
@@ -105,9 +120,16 @@ impl Network {
 
     /// Check if there are overlapping routes and warn
     fn warn_overlapping_route(cidr: Ipv4Network) -> Result<()> {
-        let cmd = Command::new("ip").arg("route").output()?;
+        let cmd = Command::new("ip")
+            .arg("route")
+            .output()
+            .context("Failed to run 'ip route'; is iproute2 installed?")?;
         if !cmd.status.success() {
-            bail!("Unable to obtain `ip` routes")
+            bail!(
+                "'ip route' exited with status {} (stderr: {})",
+                cmd.status,
+                String::from_utf8_lossy(&cmd.stderr),
+            )
         }
         String::from_utf8(cmd.stdout)?
             .lines()
@@ -173,7 +195,32 @@ pub mod tests {
     fn dns_success() -> Result<()> {
         let c = test_config()?;
         let n = Network::new(&c)?;
-        assert_eq!(n.dns()?, Ipv4Addr::new(10, 10, 1, 2));
+        // /16 with 1 node -> /18 subnets
+        // cluster = 10.10.0.0/18, service = 10.10.64.0/18
+        // dns = service_cidr.nth(2) = 10.10.64.2
+        assert_eq!(n.dns()?, Ipv4Addr::new(10, 10, 64, 2));
         Ok(())
+    }
+
+    #[test]
+    fn subnet_prefix_single_node() -> Result<()> {
+        // 1 node needs 3 subnets (cluster + service + 1 node)
+        // From /16: need 2 bits -> /18
+        assert_eq!(Network::subnet_prefix(16, 1)?, 18);
+        Ok(())
+    }
+
+    #[test]
+    fn subnet_prefix_many_nodes() -> Result<()> {
+        // 6 nodes needs 8 subnets (cluster + service + 6 nodes)
+        // From /16: need 3 bits -> /19
+        assert_eq!(Network::subnet_prefix(16, 6)?, 19);
+        Ok(())
+    }
+
+    #[test]
+    fn subnet_prefix_too_small() {
+        // /30 can hold 4 IPs; need 3 subnets, impossible
+        assert!(Network::subnet_prefix(30, 1).is_err());
     }
 }

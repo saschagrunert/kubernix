@@ -1,10 +1,28 @@
 use crate::{
+    component::{ClusterContext, Component, Phase},
     config::Config,
     kubeconfig::KubeConfig,
     process::{Process, ProcessState, Stoppable},
 };
 use anyhow::Result;
 use std::fs::{self, create_dir_all};
+
+/// Component wrapper for registry-based startup.
+pub struct SchedulerComponent;
+
+impl Component for SchedulerComponent {
+    fn name(&self) -> &str {
+        "Scheduler"
+    }
+
+    fn phase(&self) -> Phase {
+        Phase::Controller
+    }
+
+    fn start(&self, ctx: &ClusterContext<'_>) -> ProcessState {
+        Scheduler::start(ctx.config, ctx.kubeconfig)
+    }
+}
 
 pub struct Scheduler {
     process: Process,

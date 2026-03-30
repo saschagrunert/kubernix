@@ -165,13 +165,18 @@ impl Process {
             }
         }
 
-        // Cleanup since process is not ready
+        // Dump log before stopping so the file is still intact
+        Self::dump_log_tail(&self.log_file, &self.name);
         self.stop()?;
-        error!(
-            "Timed out waiting for process '{}' ({}) to become ready",
-            self.name, self.command
-        );
-        bail!("Process timeout")
+        bail!(
+            "Timed out after {}s waiting for process '{}' ({}) to become ready \
+             with pattern '{}' (log: {})",
+            self.readyness_timeout,
+            self.name,
+            self.command,
+            pattern,
+            self.log_file.display(),
+        )
     }
 
     /// Dump the last lines of a process log file for debugging
@@ -184,11 +189,6 @@ impl Process {
                 error!("  {}", line);
             }
         }
-    }
-
-    /// Retrieve a pseudo state for stopped processes
-    pub fn stopped() -> ProcessState {
-        bail!("Process not started yet")
     }
 }
 
@@ -227,11 +227,6 @@ impl Stoppable for Process {
 mod tests {
     use super::*;
     use tempfile::tempdir;
-
-    #[test]
-    fn stopped() {
-        assert!(Process::stopped().is_err())
-    }
 
     #[test]
     fn start_success() -> Result<()> {
