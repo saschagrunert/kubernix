@@ -1,3 +1,8 @@
+//! Kubernetes controller manager component.
+//!
+//! Runs `kube-controller-manager` which watches cluster state via the
+//! API server and drives the actual state toward the desired state.
+
 use crate::{
     component::{ClusterContext, Component, Phase},
     config::Config,
@@ -26,11 +31,13 @@ impl Component for ControllerManagerComponent {
     }
 }
 
+/// Manages the `kube-controller-manager` process lifecycle.
 pub struct ControllerManager {
     process: Process,
 }
 
 impl ControllerManager {
+    /// Start the controller manager with the given cluster configuration.
     pub fn start(
         config: &Config,
         network: &Network,

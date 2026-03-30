@@ -1,3 +1,9 @@
+//! Public key infrastructure (PKI) for cluster TLS.
+//!
+//! Generates a self-signed CA and per-component certificates using
+//! `cfssl`/`cfssljson`. Certificates cover the API server, kubelet
+//! nodes, controller-manager, scheduler, proxy, and service accounts.
+
 use crate::{Config, network::Network, node::Node};
 use anyhow::{Context, Result, bail};
 use log::{debug, info};
@@ -9,6 +15,7 @@ use std::{
     process::{Command, Stdio},
 };
 
+#[must_use]
 pub struct Pki {
     admin: Identity,
     apiserver: Identity,
@@ -21,39 +28,48 @@ pub struct Pki {
 }
 
 impl Pki {
+    /// Cluster administrator identity (system:masters group).
     pub fn admin(&self) -> &Identity {
         &self.admin
     }
 
+    /// API server TLS and etcd client identity.
     pub fn apiserver(&self) -> &Identity {
         &self.apiserver
     }
 
+    /// Certificate authority used to sign all other certificates.
     pub fn ca(&self) -> &Identity {
         &self.ca
     }
 
+    /// Controller manager identity (system:kube-controller-manager).
     pub fn controller_manager(&self) -> &Identity {
         &self.controller_manager
     }
 
+    /// Per-node kubelet identities (system:node:<name>).
     pub fn kubelets(&self) -> &[Identity] {
         &self.kubelets
     }
 
+    /// Kube-proxy identity (system:kube-proxy).
     pub fn proxy(&self) -> &Identity {
         &self.proxy
     }
 
+    /// Scheduler identity (system:kube-scheduler).
     pub fn scheduler(&self) -> &Identity {
         &self.scheduler
     }
 
+    /// Key pair used to sign and verify ServiceAccount tokens.
     pub fn service_account(&self) -> &Identity {
         &self.service_account
     }
 }
 
+#[must_use]
 pub struct Identity {
     name: String,
     user: String,
@@ -62,22 +78,27 @@ pub struct Identity {
 }
 
 impl Identity {
+    /// Short identifier used for file naming (e.g. `admin`, `kube-proxy`).
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Kubernetes user or CN embedded in the certificate.
     pub fn user(&self) -> &str {
         &self.user
     }
 
+    /// Path to the PEM-encoded certificate file.
     pub fn cert(&self) -> &Path {
         &self.cert
     }
 
+    /// Path to the PEM-encoded private key file.
     pub fn key(&self) -> &Path {
         &self.key
     }
 
+    /// Create a new identity with derived cert/key paths under `dir`.
     pub fn new(dir: &Path, name: &str, user: &str) -> Identity {
         Identity {
             cert: dir.join(format!("{}.pem", name)),
@@ -125,6 +146,11 @@ const SCHEDULER_USER: &str = "system:kube-scheduler";
 const SERVICE_ACCOUNT_NAME: &str = "service-account";
 
 impl Pki {
+    /// Generate or load all cluster certificates.
+    ///
+    /// If the PKI directory already exists, identities are loaded from
+    /// the existing files. Otherwise, a new CA and all component
+    /// certificates are generated via cfssl.
     pub fn new(config: &Config, network: &Network) -> Result<Pki> {
         let dir = &config.root().join("pki");
         let nodes = (0..config.nodes())
@@ -394,7 +420,7 @@ mod tests {
     fn new_success() -> Result<()> {
         let c = test_config()?;
         let n = test_network()?;
-        Pki::new(&c, &n)?;
+        let _pki = Pki::new(&c, &n)?;
         Ok(())
     }
 

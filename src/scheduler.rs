@@ -1,3 +1,8 @@
+//! Kubernetes scheduler component.
+//!
+//! Runs `kube-scheduler` which assigns pods to nodes based on resource
+//! availability, constraints, and scheduling policies.
+
 use crate::{
     component::{ClusterContext, Component, Phase},
     config::Config,
@@ -24,11 +29,13 @@ impl Component for SchedulerComponent {
     }
 }
 
+/// Manages the `kube-scheduler` process lifecycle.
 pub struct Scheduler {
     process: Process,
 }
 
 impl Scheduler {
+    /// Start the scheduler with the given cluster configuration.
     pub fn start(config: &Config, kubeconfig: &KubeConfig) -> ProcessState {
         let dir = config.root().join("scheduler");
         create_dir_all(&dir)?;

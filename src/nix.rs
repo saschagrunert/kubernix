@@ -1,3 +1,10 @@
+//! Nix environment bootstrapping.
+//!
+//! Manages the `nix develop` shell that provides all runtime
+//! dependencies (etcd, kubernetes, CRI-O, etc.) at pinned versions.
+//! Re-executes the kubernix binary inside the Nix shell, forwarding
+//! all CLI options.
+
 use crate::{Config, system::System};
 use anyhow::{Result, bail};
 use log::{debug, info};
@@ -7,6 +14,7 @@ use std::{
     process::Command,
 };
 
+/// Handles Nix shell bootstrapping and command execution.
 pub struct Nix;
 
 impl Nix {

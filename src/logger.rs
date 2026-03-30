@@ -1,3 +1,9 @@
+//! Logging facade with text and JSON output.
+//!
+//! Integrates with the progress bar so that log messages are printed
+//! alongside (or in place of) the progress indicator, depending on the
+//! log level and terminal capabilities.
+
 use crate::{config::LogFormat, progress::Progress};
 use console::{Color, style};
 use log::{Level, LevelFilter, Log, Metadata, Record, set_max_level};

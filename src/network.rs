@@ -1,3 +1,9 @@
+//! Cluster network topology and CIDR allocation.
+//!
+//! Splits a parent CIDR into non-overlapping subnets for the cluster
+//! network, service network, and per-node CRI-O pod networks. Also
+//! checks for conflicts with existing system routes.
+
 use crate::Config;
 use anyhow::{Context, Result, bail};
 use hostname::get;
@@ -8,6 +14,7 @@ use std::{
     process::Command,
 };
 
+#[must_use]
 pub struct Network {
     cluster_cidr: Ipv4Network,
     crio_cidrs: Vec<Ipv4Network>,
@@ -21,26 +28,32 @@ impl Network {
     /// The global name for the interface
     pub const INTERFACE_PREFIX: &'static str = "kubernix";
 
+    /// Subnet used for pod-to-pod communication across the cluster.
     pub fn cluster_cidr(&self) -> &Ipv4Network {
         &self.cluster_cidr
     }
 
+    /// Per-node CRI-O pod network subnets, one per configured node.
     pub fn crio_cidrs(&self) -> &[Ipv4Network] {
         &self.crio_cidrs
     }
 
+    /// Subnet reserved for Kubernetes Service ClusterIPs.
     pub fn service_cidr(&self) -> &Ipv4Network {
         &self.service_cidr
     }
 
+    /// etcd client endpoint (localhost:2379).
     pub fn etcd_client(&self) -> &SocketAddr {
         &self.etcd_client
     }
 
+    /// etcd peer endpoint (localhost:2380).
     pub fn etcd_peer(&self) -> &SocketAddr {
         &self.etcd_peer
     }
 
+    /// System hostname used as the node name in single-node mode.
     pub fn hostname(&self) -> &str {
         &self.hostname
     }
@@ -180,7 +193,29 @@ pub mod tests {
     #[test]
     fn new_success() -> Result<()> {
         let c = test_config()?;
-        Network::new(&c)?;
+        let n = Network::new(&c)?;
+
+        // Default config: 10.10.0.0/16 with 1 node -> /18 subnets
+        assert_eq!(
+            n.cluster_cidr().to_string(),
+            "10.10.0.0/18",
+            "cluster CIDR should be the first /18 subnet"
+        );
+        assert_eq!(
+            n.service_cidr().to_string(),
+            "10.10.64.0/18",
+            "service CIDR should be the second /18 subnet"
+        );
+        assert_eq!(
+            n.crio_cidrs().len(),
+            1,
+            "single node should have one CRI-O CIDR"
+        );
+        assert_eq!(
+            n.crio_cidrs()[0].to_string(),
+            "10.10.128.0/18",
+            "CRI-O CIDR should be the third /18 subnet"
+        );
         Ok(())
     }
 
@@ -192,12 +227,19 @@ pub mod tests {
     }
 
     #[test]
+    fn api_success() -> Result<()> {
+        let c = test_config()?;
+        let n = Network::new(&c)?;
+        // service CIDR = 10.10.64.0/18, api = nth(1)
+        assert_eq!(n.api()?, Ipv4Addr::new(10, 10, 64, 1));
+        Ok(())
+    }
+
+    #[test]
     fn dns_success() -> Result<()> {
         let c = test_config()?;
         let n = Network::new(&c)?;
-        // /16 with 1 node -> /18 subnets
-        // cluster = 10.10.0.0/18, service = 10.10.64.0/18
-        // dns = service_cidr.nth(2) = 10.10.64.2
+        // service CIDR = 10.10.64.0/18, dns = nth(2)
         assert_eq!(n.dns()?, Ipv4Addr::new(10, 10, 64, 2));
         Ok(())
     }

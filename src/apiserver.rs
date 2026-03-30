@@ -1,3 +1,8 @@
+//! Kubernetes API server component.
+//!
+//! Starts `kube-apiserver` with TLS, etcd connectivity, RBAC authorization,
+//! and encryption-at-rest, then applies the kubelet API RBAC rules.
+
 use crate::{
     component::{ClusterContext, Component, Phase},
     config::Config,
@@ -37,11 +42,13 @@ impl Component for ApiServerComponent {
     }
 }
 
+/// Manages the `kube-apiserver` process lifecycle.
 pub struct ApiServer {
     process: Process,
 }
 
 impl ApiServer {
+    /// Start the API server with the given cluster configuration.
     pub fn start(
         config: &Config,
         network: &Network,

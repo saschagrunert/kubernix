@@ -1,3 +1,8 @@
+//! Kubernetes kubelet node agent component.
+//!
+//! Runs `kubelet` on each node, responsible for managing pods and
+//! containers via the CRI-O container runtime.
+
 use crate::{
     component::{ClusterContext, Component, Phase},
     config::Config,
@@ -42,11 +47,13 @@ impl Component for KubeletComponent {
     }
 }
 
+/// Manages the kubelet process lifecycle for a single node.
 pub struct Kubelet {
     process: Process,
 }
 
 impl Kubelet {
+    /// Start the kubelet for the given node index.
     pub fn start(
         config: &Config,
         node: u8,

@@ -1,3 +1,8 @@
+//! Kubectl command wrapper.
+//!
+//! Provides a typed interface around the `kubectl` binary for applying
+//! manifests, configuring kubeconfig files, and waiting for pod readiness.
+
 use anyhow::{Result, bail};
 use log::{debug, trace};
 use std::{
@@ -7,11 +12,13 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Wraps the `kubectl` binary with a fixed kubeconfig path.
 pub struct Kubectl {
     kubeconfig: PathBuf,
 }
 
 impl Kubectl {
+    /// The kubeconfig file path used for all kubectl invocations.
     pub fn kubeconfig(&self) -> &Path {
         &self.kubeconfig
     }

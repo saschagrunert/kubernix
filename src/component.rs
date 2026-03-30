@@ -64,6 +64,7 @@ pub trait Component: Send + Sync {
 }
 
 /// A registry that collects components and groups them by phase.
+#[must_use]
 pub struct ComponentRegistry {
     components: Vec<Box<dyn Component>>,
 }

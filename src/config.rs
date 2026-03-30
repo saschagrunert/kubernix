@@ -170,67 +170,67 @@ pub struct Config {
 }
 
 impl Config {
-    /// Returns the subcommand
+    /// The active subcommand, if any (e.g. `shell`).
     pub fn subcommand(&self) -> &Option<SubCommand> {
         &self.subcommand
     }
 
-    /// Returns the root path
+    /// Directory where all runtime data is stored.
     pub fn root(&self) -> &Path {
         &self.root
     }
 
-    /// Returns the log level
+    /// Configured log verbosity level.
     pub fn log_level(&self) -> LevelFilter {
         self.log_level
     }
 
-    /// Returns the log format
+    /// Output format for log messages (text or JSON).
     pub fn log_format(&self) -> LogFormat {
         self.log_format
     }
 
-    /// Returns the CIDR
+    /// Parent CIDR from which cluster, service, and pod subnets are carved.
     pub fn cidr(&self) -> Ipv4Network {
         self.cidr
     }
 
-    /// Returns the overlay path
+    /// Custom Nix package overlay path, if provided via `--overlay`.
     pub fn overlay(&self) -> Option<&Path> {
         self.overlay.as_deref()
     }
 
-    /// Returns the packages
+    /// Additional Nix packages to include in the runtime environment.
     pub fn packages(&self) -> &[String] {
         &self.packages
     }
 
-    /// Returns the shell
+    /// Interactive shell executable (defaults to `$SHELL`, fallback `sh`).
     pub fn shell(&self) -> Option<&str> {
         self.shell.as_deref()
     }
 
-    /// Returns the number of nodes
+    /// Number of cluster nodes to register.
     pub fn nodes(&self) -> u8 {
         self.nodes
     }
 
-    /// Returns the container runtime
+    /// Container runtime executable used for multi-node setups.
     pub fn container_runtime(&self) -> &str {
         &self.container_runtime
     }
 
-    /// Returns whether to skip the shell
+    /// Whether to skip spawning an interactive shell after bootstrap.
     pub fn no_shell(&self) -> bool {
         self.no_shell
     }
 
-    /// Returns the custom Dockerfile path
+    /// Custom Dockerfile path for multi-node container image builds.
     pub fn dockerfile(&self) -> Option<&Path> {
         self.dockerfile.as_deref()
     }
 
-    /// Returns the addons to deploy
+    /// Cluster addons to deploy after bootstrap (e.g. `coredns`).
     pub fn addons(&self) -> &[String] {
         &self.addons
     }
