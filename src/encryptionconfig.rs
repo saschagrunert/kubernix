@@ -5,7 +5,7 @@ use log::info;
 use rand::random;
 use std::{
     fs::{self, create_dir_all},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 pub struct EncryptionConfig {
@@ -13,7 +13,7 @@ pub struct EncryptionConfig {
 }
 
 impl EncryptionConfig {
-    pub fn path(&self) -> &PathBuf {
+    pub fn path(&self) -> &Path {
         &self.path
     }
 

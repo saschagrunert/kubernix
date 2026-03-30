@@ -25,7 +25,7 @@ impl Network {
         &self.cluster_cidr
     }
 
-    pub fn crio_cidrs(&self) -> &Vec<Ipv4Network> {
+    pub fn crio_cidrs(&self) -> &[Ipv4Network] {
         &self.crio_cidrs
     }
 
@@ -41,7 +41,7 @@ impl Network {
         &self.etcd_peer
     }
 
-    pub fn hostname(&self) -> &String {
+    pub fn hostname(&self) -> &str {
         &self.hostname
     }
 
@@ -146,7 +146,7 @@ impl Network {
         Ok(())
     }
 
-    /// Retrieve the DNS address from the service CIDR
+    /// Retrieve the API server address from the service CIDR
     pub fn api(&self) -> Result<Ipv4Addr> {
         self.service_cidr().nth(1).with_context(|| {
             format!(

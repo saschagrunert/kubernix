@@ -95,7 +95,7 @@ impl Logger {
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
     use log::{MetadataBuilder, Record};
 

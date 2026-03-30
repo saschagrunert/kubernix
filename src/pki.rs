@@ -37,7 +37,7 @@ impl Pki {
         &self.controller_manager
     }
 
-    pub fn kubelets(&self) -> &Vec<Identity> {
+    pub fn kubelets(&self) -> &[Identity] {
         &self.kubelets
     }
 
@@ -62,19 +62,19 @@ pub struct Identity {
 }
 
 impl Identity {
-    pub fn name(&self) -> &String {
+    pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn user(&self) -> &String {
+    pub fn user(&self) -> &str {
         &self.user
     }
 
-    pub fn cert(&self) -> &PathBuf {
+    pub fn cert(&self) -> &Path {
         &self.cert
     }
 
-    pub fn key(&self) -> &PathBuf {
+    pub fn key(&self) -> &Path {
         &self.key
     }
 

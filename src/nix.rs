@@ -68,12 +68,8 @@ impl Nix {
         let nodes = format!("{}", config.nodes());
         let container_runtime = config.container_runtime();
 
-        let shell_val = config.shell().clone().unwrap_or_default();
-        let overlay_val = config
-            .overlay()
-            .as_ref()
-            .map(|o| format!("{}", o.display()));
-        let package_vals: Vec<String> = config.packages().clone();
+        let shell_val: String = config.shell().unwrap_or_default().to_owned();
+        let overlay_val = config.overlay().map(|o| format!("{}", o.display()));
         let mut args = vec![
             exe.as_str(),
             "--root",
@@ -87,7 +83,7 @@ impl Nix {
             "--nodes",
             nodes.as_str(),
             "--container-runtime",
-            container_runtime.as_str(),
+            container_runtime,
         ];
 
         if let Some(ref overlay) = overlay_val {
@@ -95,27 +91,23 @@ impl Nix {
             args.push(overlay.as_str());
         }
 
-        let dockerfile_val = config
-            .dockerfile()
-            .as_ref()
-            .map(|d| format!("{}", d.display()));
+        let dockerfile_val = config.dockerfile().map(|d| format!("{}", d.display()));
         if let Some(ref dockerfile) = dockerfile_val {
             args.push("--dockerfile");
             args.push(dockerfile.as_str());
         }
 
-        for pkg in &package_vals {
+        for pkg in config.packages() {
             args.push("--packages");
             args.push(pkg.as_str());
         }
 
-        let addon_vals: Vec<String> = config.addons().clone();
-        for addon in &addon_vals {
+        for addon in config.addons() {
             args.push("--addons");
             args.push(addon.as_str());
         }
 
-        if *config.no_shell() {
+        if config.no_shell() {
             args.push("--no-shell");
         } else if !shell_val.is_empty() {
             args.push("--shell");
