@@ -103,7 +103,7 @@
 <a href=#103 id=103 data-nosnippet>103</a>        args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str],
 <a href=#104 id=104 data-nosnippet>104</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;Process&gt; {
 <a href=#105 id=105 data-nosnippet>105</a>        <span class="comment">// Cleanup possible containers
-<a href=#106 id=106 data-nosnippet>106</a>        </span><span class="self">Self</span>::remove(config, container_name)<span class="question-mark">?</span>;
+<a href=#106 id=106 data-nosnippet>106</a>        </span><span class="self">Self</span>::remove(config, container_name);
 <a href=#107 id=107 data-nosnippet>107</a>
 <a href=#108 id=108 data-nosnippet>108</a>        <span class="comment">// Prepare the arguments
 <a href=#109 id=109 data-nosnippet>109</a>        </span><span class="kw">let </span>arg_hostname = <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"--hostname={}"</span>, container_name);
@@ -186,30 +186,41 @@
 <a href=#186 id=186 data-nosnippet>186</a>        Process::start(dir, identifier, config.container_runtime(), <span class="kw-2">&amp;</span>args_vec)
 <a href=#187 id=187 data-nosnippet>187</a>    }
 <a href=#188 id=188 data-nosnippet>188</a>
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="doccomment">/// Remove the provided (maybe running) container
-<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="kw">fn </span>remove(config: <span class="kw-2">&amp;</span>Config, name: <span class="kw-2">&amp;</span>str) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#191 id=191 data-nosnippet>191</a>        Command::new(config.container_runtime())
-<a href=#192 id=192 data-nosnippet>192</a>            .arg(<span class="string">"rm"</span>)
-<a href=#193 id=193 data-nosnippet>193</a>            .arg(<span class="string">"-f"</span>)
-<a href=#194 id=194 data-nosnippet>194</a>            .arg(<span class="self">Self</span>::prefixed_container_name(name))
-<a href=#195 id=195 data-nosnippet>195</a>            .stderr(Stdio::null())
-<a href=#196 id=196 data-nosnippet>196</a>            .stdout(Stdio::null())
-<a href=#197 id=197 data-nosnippet>197</a>            .status()<span class="question-mark">?</span>;
-<a href=#198 id=198 data-nosnippet>198</a>        <span class="prelude-val">Ok</span>(())
-<a href=#199 id=199 data-nosnippet>199</a>    }
-<a href=#200 id=200 data-nosnippet>200</a>
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="doccomment">/// Retrieve a stdio for the provided config log level
-<a href=#202 id=202 data-nosnippet>202</a>    </span><span class="kw">fn </span>stdio(config: <span class="kw-2">&amp;</span>Config) -&gt; Stdio {
-<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">if </span>config.log_level() &gt; LevelFilter::Info {
-<a href=#204 id=204 data-nosnippet>204</a>            Stdio::inherit()
-<a href=#205 id=205 data-nosnippet>205</a>        } <span class="kw">else </span>{
-<a href=#206 id=206 data-nosnippet>206</a>            Stdio::null()
-<a href=#207 id=207 data-nosnippet>207</a>        }
-<a href=#208 id=208 data-nosnippet>208</a>    }
-<a href=#209 id=209 data-nosnippet>209</a>
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="doccomment">/// Retrieve a prefixed container name
-<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="kw">fn </span>prefixed_container_name(name: <span class="kw-2">&amp;</span>str) -&gt; String {
-<a href=#212 id=212 data-nosnippet>212</a>        <span class="macro">format!</span>(<span class="string">"{}-{}"</span>, DEFAULT_ROOT, name)
-<a href=#213 id=213 data-nosnippet>213</a>    }
-<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#189 id=189 data-nosnippet>189</a>    <span class="doccomment">/// Remove the provided (maybe running) container.
+<a href=#190 id=190 data-nosnippet>190</a>    /// Failures are logged but not propagated since the container may not
+<a href=#191 id=191 data-nosnippet>191</a>    /// exist yet (first run).
+<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">fn </span>remove(config: <span class="kw-2">&amp;</span>Config, name: <span class="kw-2">&amp;</span>str) {
+<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>prefixed = <span class="self">Self</span>::prefixed_container_name(name);
+<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">match </span>Command::new(config.container_runtime())
+<a href=#195 id=195 data-nosnippet>195</a>            .arg(<span class="string">"rm"</span>)
+<a href=#196 id=196 data-nosnippet>196</a>            .arg(<span class="string">"-f"</span>)
+<a href=#197 id=197 data-nosnippet>197</a>            .arg(<span class="kw-2">&amp;</span>prefixed)
+<a href=#198 id=198 data-nosnippet>198</a>            .stderr(Stdio::null())
+<a href=#199 id=199 data-nosnippet>199</a>            .stdout(Stdio::null())
+<a href=#200 id=200 data-nosnippet>200</a>            .status()
+<a href=#201 id=201 data-nosnippet>201</a>        {
+<a href=#202 id=202 data-nosnippet>202</a>            <span class="prelude-val">Ok</span>(status) <span class="kw">if </span>!status.success() =&gt; {
+<a href=#203 id=203 data-nosnippet>203</a>                <span class="macro">debug!</span>(<span class="string">"Container '{}' removal exited with {}"</span>, prefixed, status);
+<a href=#204 id=204 data-nosnippet>204</a>            }
+<a href=#205 id=205 data-nosnippet>205</a>            <span class="prelude-val">Err</span>(e) =&gt; {
+<a href=#206 id=206 data-nosnippet>206</a>                <span class="macro">debug!</span>(<span class="string">"Failed to run container rm for '{}': {}"</span>, prefixed, e);
+<a href=#207 id=207 data-nosnippet>207</a>            }
+<a href=#208 id=208 data-nosnippet>208</a>            <span class="kw">_ </span>=&gt; {}
+<a href=#209 id=209 data-nosnippet>209</a>        }
+<a href=#210 id=210 data-nosnippet>210</a>    }
+<a href=#211 id=211 data-nosnippet>211</a>
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="doccomment">/// Retrieve a stdio for the provided config log level
+<a href=#213 id=213 data-nosnippet>213</a>    </span><span class="kw">fn </span>stdio(config: <span class="kw-2">&amp;</span>Config) -&gt; Stdio {
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">if </span>config.log_level() &gt; LevelFilter::Info {
+<a href=#215 id=215 data-nosnippet>215</a>            Stdio::inherit()
+<a href=#216 id=216 data-nosnippet>216</a>        } <span class="kw">else </span>{
+<a href=#217 id=217 data-nosnippet>217</a>            Stdio::null()
+<a href=#218 id=218 data-nosnippet>218</a>        }
+<a href=#219 id=219 data-nosnippet>219</a>    }
+<a href=#220 id=220 data-nosnippet>220</a>
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="doccomment">/// Retrieve a prefixed container name
+<a href=#222 id=222 data-nosnippet>222</a>    </span><span class="kw">fn </span>prefixed_container_name(name: <span class="kw-2">&amp;</span>str) -&gt; String {
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="macro">format!</span>(<span class="string">"{}-{}"</span>, DEFAULT_ROOT, name)
+<a href=#224 id=224 data-nosnippet>224</a>    }
+<a href=#225 id=225 data-nosnippet>225</a>}
 </code></pre></div></section></main></body></html>
