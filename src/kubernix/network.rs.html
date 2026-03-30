@@ -6,9 +6,9 @@
 <a href=#6 id=6 data-nosnippet>6</a>
 <a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span><span class="kw">crate</span>::Config;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>, bail};
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>hostname::get;
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>ipnetwork::Ipv4Network;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>log::{debug, warn};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>ipnetwork::Ipv4Network;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>log::{debug, warn};
+<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>nix::unistd::gethostname;
 <a href=#12 id=12 data-nosnippet>12</a><span class="kw">use </span>std::{
 <a href=#13 id=13 data-nosnippet>13</a>    net::{Ipv4Addr, SocketAddr},
 <a href=#14 id=14 data-nosnippet>14</a>    process::Command,
@@ -116,7 +116,7 @@
 <a href=#116 id=116 data-nosnippet>116</a>        <span class="comment">// Set the rest of the networking related adresses and paths
 <a href=#117 id=117 data-nosnippet>117</a>        </span><span class="kw">let </span>etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), <span class="number">2379</span>);
 <a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">let </span>etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), <span class="number">2380</span>);
-<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">let </span>hostname = get()
+<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">let </span>hostname = gethostname()
 <a href=#120 id=120 data-nosnippet>120</a>            .context(<span class="string">"Unable to get hostname"</span>)<span class="question-mark">?
 <a href=#121 id=121 data-nosnippet>121</a>            </span>.to_str()
 <a href=#122 id=122 data-nosnippet>122</a>            .context(<span class="string">"Unable to convert hostname into string"</span>)<span class="question-mark">?

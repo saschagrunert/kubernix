@@ -89,17 +89,24 @@
 <a href=#89 id=89 data-nosnippet>89</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
 <a href=#90 id=90 data-nosnippet>90</a>    <span class="kw">use </span>crate::{config::tests::test_config, network::tests::test_network};
 <a href=#91 id=91 data-nosnippet>91</a>
-<a href=#92 id=92 data-nosnippet>92</a>    <span class="doccomment">/// Integration test: requires etcd and cfssl binaries in $PATH.
-<a href=#93 id=93 data-nosnippet>93</a>    /// Run with: cargo test -- --ignored
-<a href=#94 id=94 data-nosnippet>94</a>    </span><span class="attr">#[test]
-<a href=#95 id=95 data-nosnippet>95</a>    #[ignore]
-<a href=#96 id=96 data-nosnippet>96</a>    </span><span class="kw">fn </span>start_and_stop() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw">let </span>c = test_config()<span class="question-mark">?</span>;
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let </span>n = test_network()<span class="question-mark">?</span>;
-<a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>p = Pki::new(<span class="kw-2">&amp;</span>c, <span class="kw-2">&amp;</span>n)<span class="question-mark">?</span>;
-<a href=#100 id=100 data-nosnippet>100</a>
-<a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">let </span><span class="kw-2">mut </span>etcd = Etcd::start(<span class="kw-2">&amp;</span>c, <span class="kw-2">&amp;</span>n, <span class="kw-2">&amp;</span>p)<span class="question-mark">?</span>;
-<a href=#102 id=102 data-nosnippet>102</a>        etcd.stop()
-<a href=#103 id=103 data-nosnippet>103</a>    }
-<a href=#104 id=104 data-nosnippet>104</a>}
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="attr">#[test]
+<a href=#93 id=93 data-nosnippet>93</a>    </span><span class="kw">fn </span>component_metadata() {
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span>c = EtcdComponent;
+<a href=#95 id=95 data-nosnippet>95</a>        <span class="macro">assert_eq!</span>(c.name(), <span class="string">"etcd"</span>);
+<a href=#96 id=96 data-nosnippet>96</a>        <span class="macro">assert_eq!</span>(c.phase(), Phase::Infrastructure);
+<a href=#97 id=97 data-nosnippet>97</a>    }
+<a href=#98 id=98 data-nosnippet>98</a>
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="doccomment">/// Integration test: requires etcd and cfssl binaries in $PATH.
+<a href=#100 id=100 data-nosnippet>100</a>    /// Run with: cargo test -- --ignored
+<a href=#101 id=101 data-nosnippet>101</a>    </span><span class="attr">#[test]
+<a href=#102 id=102 data-nosnippet>102</a>    #[ignore]
+<a href=#103 id=103 data-nosnippet>103</a>    </span><span class="kw">fn </span>start_and_stop() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let </span>c = test_config()<span class="question-mark">?</span>;
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">let </span>n = test_network()<span class="question-mark">?</span>;
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">let </span>p = Pki::new(<span class="kw-2">&amp;</span>c, <span class="kw-2">&amp;</span>n)<span class="question-mark">?</span>;
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">let </span><span class="kw-2">mut </span>etcd = Etcd::start(<span class="kw-2">&amp;</span>c, <span class="kw-2">&amp;</span>n, <span class="kw-2">&amp;</span>p)<span class="question-mark">?</span>;
+<a href=#109 id=109 data-nosnippet>109</a>        etcd.stop()
+<a href=#110 id=110 data-nosnippet>110</a>    }
+<a href=#111 id=111 data-nosnippet>111</a>}
 </code></pre></div></section></main></body></html>

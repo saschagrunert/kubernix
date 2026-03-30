@@ -80,4 +80,16 @@
 <a href=#80 id=80 data-nosnippet>80</a>        <span class="self">self</span>.process.stop()
 <a href=#81 id=81 data-nosnippet>81</a>    }
 <a href=#82 id=82 data-nosnippet>82</a>}
+<a href=#83 id=83 data-nosnippet>83</a>
+<a href=#84 id=84 data-nosnippet>84</a><span class="attr">#[cfg(test)]
+<a href=#85 id=85 data-nosnippet>85</a></span><span class="kw">mod </span>tests {
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="attr">#[test]
+<a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">fn </span>component_metadata() {
+<a href=#90 id=90 data-nosnippet>90</a>        <span class="kw">let </span>c = ControllerManagerComponent;
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="macro">assert_eq!</span>(c.name(), <span class="string">"Controller Manager"</span>);
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="macro">assert_eq!</span>(c.phase(), Phase::Controller);
+<a href=#93 id=93 data-nosnippet>93</a>    }
+<a href=#94 id=94 data-nosnippet>94</a>}
 </code></pre></div></section></main></body></html>

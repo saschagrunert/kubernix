@@ -148,4 +148,52 @@
 <a href=#148 id=148 data-nosnippet>148</a>        <span class="self">self</span>.process.stop()
 <a href=#149 id=149 data-nosnippet>149</a>    }
 <a href=#150 id=150 data-nosnippet>150</a>}
+<a href=#151 id=151 data-nosnippet>151</a>
+<a href=#152 id=152 data-nosnippet>152</a><span class="attr">#[cfg(test)]
+<a href=#153 id=153 data-nosnippet>153</a></span><span class="kw">mod </span>tests {
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="kw">use </span><span class="kw">crate</span>::crio::MAX_SOCKET_PATH_LEN;
+<a href=#156 id=156 data-nosnippet>156</a>
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="attr">#[test]
+<a href=#158 id=158 data-nosnippet>158</a>    </span><span class="kw">fn </span>config_template_renders() {
+<a href=#159 id=159 data-nosnippet>159</a>        <span class="kw">let </span>yml = <span class="macro">format!</span>(
+<a href=#160 id=160 data-nosnippet>160</a>            <span class="macro">include_str!</span>(<span class="string">"assets/kubelet.yml"</span>),
+<a href=#161 id=161 data-nosnippet>161</a>            ca = <span class="string">"/tmp/ca.pem"</span>,
+<a href=#162 id=162 data-nosnippet>162</a>            dns = <span class="string">"10.10.64.2"</span>,
+<a href=#163 id=163 data-nosnippet>163</a>            cidr = <span class="string">"10.10.128.0/18"</span>,
+<a href=#164 id=164 data-nosnippet>164</a>            cert = <span class="string">"/tmp/kubelet.pem"</span>,
+<a href=#165 id=165 data-nosnippet>165</a>            key = <span class="string">"/tmp/kubelet-key.pem"</span>,
+<a href=#166 id=166 data-nosnippet>166</a>            port = <span class="number">11250</span>,
+<a href=#167 id=167 data-nosnippet>167</a>            healthzPort = <span class="number">12250</span>,
+<a href=#168 id=168 data-nosnippet>168</a>        );
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"kind: KubeletConfiguration"</span>));
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"clientCAFile: \"/tmp/ca.pem\""</span>));
+<a href=#171 id=171 data-nosnippet>171</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"clusterDNS:"</span>));
+<a href=#172 id=172 data-nosnippet>172</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"- \"10.10.64.2\""</span>));
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"podCIDR: \"10.10.128.0/18\""</span>));
+<a href=#174 id=174 data-nosnippet>174</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"port: 11250"</span>));
+<a href=#175 id=175 data-nosnippet>175</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"healthzPort: 12250"</span>));
+<a href=#176 id=176 data-nosnippet>176</a>    }
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="attr">#[test]
+<a href=#179 id=179 data-nosnippet>179</a>    </span><span class="kw">fn </span>socket_path_too_long() {
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="comment">// A very long root_dir path should fail validation
+<a href=#181 id=181 data-nosnippet>181</a>        </span><span class="kw">let </span>long_path = <span class="string">"a"</span>.repeat(MAX_SOCKET_PATH_LEN);
+<a href=#182 id=182 data-nosnippet>182</a>        <span class="kw">let </span>total = long_path.len() + <span class="string">"pod-resources/1234567890"</span>.len();
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="macro">assert!</span>(total &gt; MAX_SOCKET_PATH_LEN);
+<a href=#184 id=184 data-nosnippet>184</a>    }
+<a href=#185 id=185 data-nosnippet>185</a>
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="attr">#[test]
+<a href=#187 id=187 data-nosnippet>187</a>    </span><span class="kw">fn </span>component_metadata() {
+<a href=#188 id=188 data-nosnippet>188</a>        <span class="kw">let </span>c = KubeletComponent::new(<span class="number">0</span>);
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="macro">assert_eq!</span>(c.name(), <span class="string">"Kubelet (node 0)"</span>);
+<a href=#190 id=190 data-nosnippet>190</a>        <span class="macro">assert_eq!</span>(c.phase(), Phase::NodeAgent);
+<a href=#191 id=191 data-nosnippet>191</a>    }
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="attr">#[test]
+<a href=#194 id=194 data-nosnippet>194</a>    </span><span class="kw">fn </span>component_name_per_node() {
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="macro">assert_eq!</span>(KubeletComponent::new(<span class="number">0</span>).name(), <span class="string">"Kubelet (node 0)"</span>);
+<a href=#196 id=196 data-nosnippet>196</a>        <span class="macro">assert_eq!</span>(KubeletComponent::new(<span class="number">3</span>).name(), <span class="string">"Kubelet (node 3)"</span>);
+<a href=#197 id=197 data-nosnippet>197</a>    }
+<a href=#198 id=198 data-nosnippet>198</a>}
 </code></pre></div></section></main></body></html>

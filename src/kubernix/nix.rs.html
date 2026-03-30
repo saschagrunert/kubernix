@@ -270,18 +270,16 @@
 <a href=#270 id=270 data-nosnippet>270</a>        <span class="macro">assert!</span>(parsed[<span class="string">"nodes"</span>][<span class="string">"nixpkgs"</span>][<span class="string">"locked"</span>][<span class="string">"rev"</span>].is_string());
 <a href=#271 id=271 data-nosnippet>271</a>    }
 <a href=#272 id=272 data-nosnippet>272</a>
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="attr">#[test]
-<a href=#274 id=274 data-nosnippet>274</a>    </span><span class="kw">fn </span>is_active_false_by_default() {
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="comment">// IN_NIX should not be set during tests
-<a href=#276 id=276 data-nosnippet>276</a>        </span>Nix::remove_env_marker();
-<a href=#277 id=277 data-nosnippet>277</a>        <span class="macro">assert!</span>(!Nix::is_active());
-<a href=#278 id=278 data-nosnippet>278</a>    }
-<a href=#279 id=279 data-nosnippet>279</a>
-<a href=#280 id=280 data-nosnippet>280</a>    <span class="attr">#[test]
-<a href=#281 id=281 data-nosnippet>281</a>    </span><span class="kw">fn </span>is_active_true_when_set() {
-<a href=#282 id=282 data-nosnippet>282</a>        Nix::set_env_marker();
-<a href=#283 id=283 data-nosnippet>283</a>        <span class="macro">assert!</span>(Nix::is_active());
-<a href=#284 id=284 data-nosnippet>284</a>        Nix::remove_env_marker();
-<a href=#285 id=285 data-nosnippet>285</a>    }
-<a href=#286 id=286 data-nosnippet>286</a>}
+<a href=#273 id=273 data-nosnippet>273</a>    <span class="doccomment">/// Tests env marker set/unset in a single test to avoid racing
+<a href=#274 id=274 data-nosnippet>274</a>    /// on the shared IN_NIX environment variable in parallel runs.
+<a href=#275 id=275 data-nosnippet>275</a>    </span><span class="attr">#[test]
+<a href=#276 id=276 data-nosnippet>276</a>    </span><span class="kw">fn </span>is_active_toggle() {
+<a href=#277 id=277 data-nosnippet>277</a>        Nix::remove_env_marker();
+<a href=#278 id=278 data-nosnippet>278</a>        <span class="macro">assert!</span>(!Nix::is_active());
+<a href=#279 id=279 data-nosnippet>279</a>        Nix::set_env_marker();
+<a href=#280 id=280 data-nosnippet>280</a>        <span class="macro">assert!</span>(Nix::is_active());
+<a href=#281 id=281 data-nosnippet>281</a>        Nix::remove_env_marker();
+<a href=#282 id=282 data-nosnippet>282</a>        <span class="macro">assert!</span>(!Nix::is_active());
+<a href=#283 id=283 data-nosnippet>283</a>    }
+<a href=#284 id=284 data-nosnippet>284</a>}
 </code></pre></div></section></main></body></html>
