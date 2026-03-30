@@ -25,7 +25,7 @@
 <a href=#25 id=25 data-nosnippet>25</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.cluster_cidr
 <a href=#26 id=26 data-nosnippet>26</a>    }
 <a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">pub fn </span>crio_cidrs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Vec&lt;Ipv4Network&gt; {
+<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">pub fn </span>crio_cidrs(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Ipv4Network] {
 <a href=#29 id=29 data-nosnippet>29</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.crio_cidrs
 <a href=#30 id=30 data-nosnippet>30</a>    }
 <a href=#31 id=31 data-nosnippet>31</a>
@@ -41,7 +41,7 @@
 <a href=#41 id=41 data-nosnippet>41</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.etcd_peer
 <a href=#42 id=42 data-nosnippet>42</a>    }
 <a href=#43 id=43 data-nosnippet>43</a>
-<a href=#44 id=44 data-nosnippet>44</a>    <span class="kw">pub fn </span>hostname(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>String {
+<a href=#44 id=44 data-nosnippet>44</a>    <span class="kw">pub fn </span>hostname(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>str {
 <a href=#45 id=45 data-nosnippet>45</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.hostname
 <a href=#46 id=46 data-nosnippet>46</a>    }
 <a href=#47 id=47 data-nosnippet>47</a>
@@ -146,7 +146,7 @@
 <a href=#146 id=146 data-nosnippet>146</a>        <span class="prelude-val">Ok</span>(())
 <a href=#147 id=147 data-nosnippet>147</a>    }
 <a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="doccomment">/// Retrieve the DNS address from the service CIDR
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="doccomment">/// Retrieve the API server address from the service CIDR
 <a href=#150 id=150 data-nosnippet>150</a>    </span><span class="kw">pub fn </span>api(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;Ipv4Addr&gt; {
 <a href=#151 id=151 data-nosnippet>151</a>        <span class="self">self</span>.service_cidr().nth(<span class="number">1</span>).with_context(|| {
 <a href=#152 id=152 data-nosnippet>152</a>            <span class="macro">format!</span>(

@@ -68,220 +68,212 @@
 <a href=#68 id=68 data-nosnippet>68</a>        <span class="kw">let </span>nodes = <span class="macro">format!</span>(<span class="string">"{}"</span>, config.nodes());
 <a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">let </span>container_runtime = config.container_runtime();
 <a href=#70 id=70 data-nosnippet>70</a>
-<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw">let </span>shell_val = config.shell().clone().unwrap_or_default();
-<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw">let </span>overlay_val = config
-<a href=#73 id=73 data-nosnippet>73</a>            .overlay()
-<a href=#74 id=74 data-nosnippet>74</a>            .as_ref()
-<a href=#75 id=75 data-nosnippet>75</a>            .map(|o| <span class="macro">format!</span>(<span class="string">"{}"</span>, o.display()));
-<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">let </span>package_vals: Vec&lt;String&gt; = config.packages().clone();
-<a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">let </span><span class="kw-2">mut </span>args = <span class="macro">vec!</span>[
-<a href=#78 id=78 data-nosnippet>78</a>            exe.as_str(),
-<a href=#79 id=79 data-nosnippet>79</a>            <span class="string">"--root"</span>,
-<a href=#80 id=80 data-nosnippet>80</a>            root.as_str(),
-<a href=#81 id=81 data-nosnippet>81</a>            <span class="string">"--log-level"</span>,
-<a href=#82 id=82 data-nosnippet>82</a>            log_level.as_str(),
-<a href=#83 id=83 data-nosnippet>83</a>            <span class="string">"--log-format"</span>,
-<a href=#84 id=84 data-nosnippet>84</a>            log_format.as_str(),
-<a href=#85 id=85 data-nosnippet>85</a>            <span class="string">"--cidr"</span>,
-<a href=#86 id=86 data-nosnippet>86</a>            cidr.as_str(),
-<a href=#87 id=87 data-nosnippet>87</a>            <span class="string">"--nodes"</span>,
-<a href=#88 id=88 data-nosnippet>88</a>            nodes.as_str(),
-<a href=#89 id=89 data-nosnippet>89</a>            <span class="string">"--container-runtime"</span>,
-<a href=#90 id=90 data-nosnippet>90</a>            container_runtime.as_str(),
-<a href=#91 id=91 data-nosnippet>91</a>        ];
-<a href=#92 id=92 data-nosnippet>92</a>
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>overlay) = overlay_val {
-<a href=#94 id=94 data-nosnippet>94</a>            args.push(<span class="string">"--overlay"</span>);
-<a href=#95 id=95 data-nosnippet>95</a>            args.push(overlay.as_str());
-<a href=#96 id=96 data-nosnippet>96</a>        }
-<a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">let </span>dockerfile_val = config
-<a href=#99 id=99 data-nosnippet>99</a>            .dockerfile()
-<a href=#100 id=100 data-nosnippet>100</a>            .as_ref()
-<a href=#101 id=101 data-nosnippet>101</a>            .map(|d| <span class="macro">format!</span>(<span class="string">"{}"</span>, d.display()));
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>dockerfile) = dockerfile_val {
-<a href=#103 id=103 data-nosnippet>103</a>            args.push(<span class="string">"--dockerfile"</span>);
-<a href=#104 id=104 data-nosnippet>104</a>            args.push(dockerfile.as_str());
-<a href=#105 id=105 data-nosnippet>105</a>        }
-<a href=#106 id=106 data-nosnippet>106</a>
-<a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">for </span>pkg <span class="kw">in </span><span class="kw-2">&amp;</span>package_vals {
-<a href=#108 id=108 data-nosnippet>108</a>            args.push(<span class="string">"--packages"</span>);
-<a href=#109 id=109 data-nosnippet>109</a>            args.push(pkg.as_str());
-<a href=#110 id=110 data-nosnippet>110</a>        }
-<a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="kw">let </span>addon_vals: Vec&lt;String&gt; = config.addons().clone();
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="kw">for </span>addon <span class="kw">in </span><span class="kw-2">&amp;</span>addon_vals {
-<a href=#114 id=114 data-nosnippet>114</a>            args.push(<span class="string">"--addons"</span>);
-<a href=#115 id=115 data-nosnippet>115</a>            args.push(addon.as_str());
-<a href=#116 id=116 data-nosnippet>116</a>        }
-<a href=#117 id=117 data-nosnippet>117</a>
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">if </span><span class="kw-2">*</span>config.no_shell() {
-<a href=#119 id=119 data-nosnippet>119</a>            args.push(<span class="string">"--no-shell"</span>);
-<a href=#120 id=120 data-nosnippet>120</a>        } <span class="kw">else if </span>!shell_val.is_empty() {
-<a href=#121 id=121 data-nosnippet>121</a>            args.push(<span class="string">"--shell"</span>);
-<a href=#122 id=122 data-nosnippet>122</a>            args.push(<span class="kw-2">&amp;</span>shell_val);
-<a href=#123 id=123 data-nosnippet>123</a>        }
+<a href=#71 id=71 data-nosnippet>71</a>        <span class="kw">let </span>shell_val: String = config.shell().unwrap_or_default().to_owned();
+<a href=#72 id=72 data-nosnippet>72</a>        <span class="kw">let </span>overlay_val = config.overlay().map(|o| <span class="macro">format!</span>(<span class="string">"{}"</span>, o.display()));
+<a href=#73 id=73 data-nosnippet>73</a>        <span class="kw">let </span><span class="kw-2">mut </span>args = <span class="macro">vec!</span>[
+<a href=#74 id=74 data-nosnippet>74</a>            exe.as_str(),
+<a href=#75 id=75 data-nosnippet>75</a>            <span class="string">"--root"</span>,
+<a href=#76 id=76 data-nosnippet>76</a>            root.as_str(),
+<a href=#77 id=77 data-nosnippet>77</a>            <span class="string">"--log-level"</span>,
+<a href=#78 id=78 data-nosnippet>78</a>            log_level.as_str(),
+<a href=#79 id=79 data-nosnippet>79</a>            <span class="string">"--log-format"</span>,
+<a href=#80 id=80 data-nosnippet>80</a>            log_format.as_str(),
+<a href=#81 id=81 data-nosnippet>81</a>            <span class="string">"--cidr"</span>,
+<a href=#82 id=82 data-nosnippet>82</a>            cidr.as_str(),
+<a href=#83 id=83 data-nosnippet>83</a>            <span class="string">"--nodes"</span>,
+<a href=#84 id=84 data-nosnippet>84</a>            nodes.as_str(),
+<a href=#85 id=85 data-nosnippet>85</a>            <span class="string">"--container-runtime"</span>,
+<a href=#86 id=86 data-nosnippet>86</a>            container_runtime,
+<a href=#87 id=87 data-nosnippet>87</a>        ];
+<a href=#88 id=88 data-nosnippet>88</a>
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>overlay) = overlay_val {
+<a href=#90 id=90 data-nosnippet>90</a>            args.push(<span class="string">"--overlay"</span>);
+<a href=#91 id=91 data-nosnippet>91</a>            args.push(overlay.as_str());
+<a href=#92 id=92 data-nosnippet>92</a>        }
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span>dockerfile_val = config.dockerfile().map(|d| <span class="macro">format!</span>(<span class="string">"{}"</span>, d.display()));
+<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>dockerfile) = dockerfile_val {
+<a href=#96 id=96 data-nosnippet>96</a>            args.push(<span class="string">"--dockerfile"</span>);
+<a href=#97 id=97 data-nosnippet>97</a>            args.push(dockerfile.as_str());
+<a href=#98 id=98 data-nosnippet>98</a>        }
+<a href=#99 id=99 data-nosnippet>99</a>
+<a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">for </span>pkg <span class="kw">in </span>config.packages() {
+<a href=#101 id=101 data-nosnippet>101</a>            args.push(<span class="string">"--packages"</span>);
+<a href=#102 id=102 data-nosnippet>102</a>            args.push(pkg.as_str());
+<a href=#103 id=103 data-nosnippet>103</a>        }
+<a href=#104 id=104 data-nosnippet>104</a>
+<a href=#105 id=105 data-nosnippet>105</a>        <span class="kw">for </span>addon <span class="kw">in </span>config.addons() {
+<a href=#106 id=106 data-nosnippet>106</a>            args.push(<span class="string">"--addons"</span>);
+<a href=#107 id=107 data-nosnippet>107</a>            args.push(addon.as_str());
+<a href=#108 id=108 data-nosnippet>108</a>        }
+<a href=#109 id=109 data-nosnippet>109</a>
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="kw">if </span>config.no_shell() {
+<a href=#111 id=111 data-nosnippet>111</a>            args.push(<span class="string">"--no-shell"</span>);
+<a href=#112 id=112 data-nosnippet>112</a>        } <span class="kw">else if </span>!shell_val.is_empty() {
+<a href=#113 id=113 data-nosnippet>113</a>            args.push(<span class="string">"--shell"</span>);
+<a href=#114 id=114 data-nosnippet>114</a>            args.push(<span class="kw-2">&amp;</span>shell_val);
+<a href=#115 id=115 data-nosnippet>115</a>        }
+<a href=#116 id=116 data-nosnippet>116</a>
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="self">Self</span>::run(<span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>args)
+<a href=#118 id=118 data-nosnippet>118</a>    }
+<a href=#119 id=119 data-nosnippet>119</a>
+<a href=#120 id=120 data-nosnippet>120</a>    <span class="doccomment">/// Run a command inside the nix develop shell
+<a href=#121 id=121 data-nosnippet>121</a>    </span><span class="kw">pub fn </span>run(config: <span class="kw-2">&amp;</span>Config, args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">let </span>nix_dir = config.root().join(<span class="self">Self</span>::DIR);
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="kw">let </span>flake_ref = <span class="macro">format!</span>(<span class="string">"path:{}"</span>, nix_dir.display());
 <a href=#124 id=124 data-nosnippet>124</a>
-<a href=#125 id=125 data-nosnippet>125</a>        <span class="self">Self</span>::run(<span class="kw-2">&amp;</span>config, <span class="kw-2">&amp;</span>args)
-<a href=#126 id=126 data-nosnippet>126</a>    }
-<a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a>    <span class="doccomment">/// Run a command inside the nix develop shell
-<a href=#129 id=129 data-nosnippet>129</a>    </span><span class="kw">pub fn </span>run(config: <span class="kw-2">&amp;</span>Config, args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span>nix_dir = config.root().join(<span class="self">Self</span>::DIR);
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="kw">let </span>flake_ref = <span class="macro">format!</span>(<span class="string">"path:{}"</span>, nix_dir.display());
-<a href=#132 id=132 data-nosnippet>132</a>
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">let </span>status = Command::new(System::find_executable(<span class="string">"nix"</span>)<span class="question-mark">?</span>)
-<a href=#134 id=134 data-nosnippet>134</a>            .env(Nix::NIX_ENV, <span class="string">"true"</span>)
-<a href=#135 id=135 data-nosnippet>135</a>            .arg(<span class="string">"develop"</span>)
-<a href=#136 id=136 data-nosnippet>136</a>            .arg(<span class="kw-2">&amp;</span>flake_ref)
-<a href=#137 id=137 data-nosnippet>137</a>            .arg(<span class="string">"--no-update-lock-file"</span>)
-<a href=#138 id=138 data-nosnippet>138</a>            .arg(<span class="string">"--command"</span>)
-<a href=#139 id=139 data-nosnippet>139</a>            .arg(<span class="string">"bash"</span>)
-<a href=#140 id=140 data-nosnippet>140</a>            .arg(<span class="string">"-c"</span>)
-<a href=#141 id=141 data-nosnippet>141</a>            .arg(args.join(<span class="string">" "</span>))
-<a href=#142 id=142 data-nosnippet>142</a>            .status()<span class="question-mark">?</span>;
-<a href=#143 id=143 data-nosnippet>143</a>        <span class="kw">if </span>!status.success() {
-<a href=#144 id=144 data-nosnippet>144</a>            <span class="macro">bail!</span>(<span class="string">"nix develop exited with status {}"</span>, status);
-<a href=#145 id=145 data-nosnippet>145</a>        }
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="prelude-val">Ok</span>(())
-<a href=#147 id=147 data-nosnippet>147</a>    }
-<a href=#148 id=148 data-nosnippet>148</a>
-<a href=#149 id=149 data-nosnippet>149</a>    <span class="doccomment">/// Initialize a git repo in the given directory so Nix flakes
-<a href=#150 id=150 data-nosnippet>150</a>    /// treats it as a standalone source tree.
-<a href=#151 id=151 data-nosnippet>151</a>    </span><span class="kw">fn </span>git_init(dir: <span class="kw-2">&amp;</span>std::path::Path) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#152 id=152 data-nosnippet>152</a>        <span class="kw">let </span>git = System::find_executable(<span class="string">"git"</span>)<span class="question-mark">?</span>;
-<a href=#153 id=153 data-nosnippet>153</a>        <span class="kw">let </span>run = |args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]| -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#154 id=154 data-nosnippet>154</a>            <span class="kw">let </span>status = Command::new(<span class="kw-2">&amp;</span>git).arg(<span class="string">"-C"</span>).arg(dir).args(args).status()<span class="question-mark">?</span>;
-<a href=#155 id=155 data-nosnippet>155</a>            <span class="kw">if </span>!status.success() {
-<a href=#156 id=156 data-nosnippet>156</a>                <span class="macro">bail!</span>(<span class="string">"git {} failed with status {}"</span>, args.join(<span class="string">" "</span>), status,);
-<a href=#157 id=157 data-nosnippet>157</a>            }
-<a href=#158 id=158 data-nosnippet>158</a>            <span class="prelude-val">Ok</span>(())
-<a href=#159 id=159 data-nosnippet>159</a>        };
-<a href=#160 id=160 data-nosnippet>160</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"init"</span>, <span class="string">"-q"</span>])<span class="question-mark">?</span>;
-<a href=#161 id=161 data-nosnippet>161</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"config"</span>, <span class="string">"user.email"</span>, <span class="string">"kubernix@localhost"</span>])<span class="question-mark">?</span>;
-<a href=#162 id=162 data-nosnippet>162</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"config"</span>, <span class="string">"user.name"</span>, <span class="string">"kubernix"</span>])<span class="question-mark">?</span>;
-<a href=#163 id=163 data-nosnippet>163</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"config"</span>, <span class="string">"commit.gpgsign"</span>, <span class="string">"false"</span>])<span class="question-mark">?</span>;
-<a href=#164 id=164 data-nosnippet>164</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"add"</span>, <span class="string">"."</span>])<span class="question-mark">?</span>;
-<a href=#165 id=165 data-nosnippet>165</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"commit"</span>, <span class="string">"-q"</span>, <span class="string">"-m"</span>, <span class="string">"init"</span>, <span class="string">"--allow-empty"</span>])<span class="question-mark">?</span>;
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="prelude-val">Ok</span>(())
-<a href=#167 id=167 data-nosnippet>167</a>    }
-<a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="doccomment">/// Returns the Nix system string for the current architecture.
-<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">fn </span>nix_system() -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
-<a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">match </span>std::env::consts::ARCH {
-<a href=#172 id=172 data-nosnippet>172</a>            <span class="string">"x86_64" </span>=&gt; <span class="prelude-val">Ok</span>(<span class="string">"x86_64-linux"</span>),
-<a href=#173 id=173 data-nosnippet>173</a>            <span class="string">"aarch64" </span>=&gt; <span class="prelude-val">Ok</span>(<span class="string">"aarch64-linux"</span>),
-<a href=#174 id=174 data-nosnippet>174</a>            arch =&gt; <span class="macro">bail!</span>(
-<a href=#175 id=175 data-nosnippet>175</a>                <span class="string">"unsupported architecture '{}' (only x86_64 and aarch64 Linux are supported)"</span>,
-<a href=#176 id=176 data-nosnippet>176</a>                arch,
-<a href=#177 id=177 data-nosnippet>177</a>            ),
-<a href=#178 id=178 data-nosnippet>178</a>        }
-<a href=#179 id=179 data-nosnippet>179</a>    }
-<a href=#180 id=180 data-nosnippet>180</a>
-<a href=#181 id=181 data-nosnippet>181</a>    <span class="doccomment">/// Returns true if running in nix environment
-<a href=#182 id=182 data-nosnippet>182</a>    </span><span class="kw">pub fn </span>is_active() -&gt; bool {
-<a href=#183 id=183 data-nosnippet>183</a>        var(Nix::NIX_ENV).is_ok()
-<a href=#184 id=184 data-nosnippet>184</a>    }
-<a href=#185 id=185 data-nosnippet>185</a>
-<a href=#186 id=186 data-nosnippet>186</a>    <span class="doccomment">/// Set the NIX_ENV marker so re-exec knows we are inside Nix.
-<a href=#187 id=187 data-nosnippet>187</a>    ///
-<a href=#188 id=188 data-nosnippet>188</a>    /// # Safety
-<a href=#189 id=189 data-nosnippet>189</a>    /// Callers must ensure no other threads are concurrently reading
-<a href=#190 id=190 data-nosnippet>190</a>    /// or writing environment variables.
-<a href=#191 id=191 data-nosnippet>191</a>    </span><span class="attr">#[cfg(test)]
-<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">pub fn </span>set_env_marker() {
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">unsafe </span>{ std::env::set_var(<span class="self">Self</span>::NIX_ENV, <span class="string">"true"</span>) };
-<a href=#194 id=194 data-nosnippet>194</a>    }
-<a href=#195 id=195 data-nosnippet>195</a>
-<a href=#196 id=196 data-nosnippet>196</a>    <span class="doccomment">/// Remove the NIX_ENV marker.
-<a href=#197 id=197 data-nosnippet>197</a>    ///
-<a href=#198 id=198 data-nosnippet>198</a>    /// # Safety
-<a href=#199 id=199 data-nosnippet>199</a>    /// Callers must ensure no other threads are concurrently reading
-<a href=#200 id=200 data-nosnippet>200</a>    /// or writing environment variables.
-<a href=#201 id=201 data-nosnippet>201</a>    </span><span class="attr">#[cfg(test)]
-<a href=#202 id=202 data-nosnippet>202</a>    </span><span class="kw">pub fn </span>remove_env_marker() {
-<a href=#203 id=203 data-nosnippet>203</a>        <span class="kw">unsafe </span>{ std::env::remove_var(<span class="self">Self</span>::NIX_ENV) };
-<a href=#204 id=204 data-nosnippet>204</a>    }
-<a href=#205 id=205 data-nosnippet>205</a>}
-<a href=#206 id=206 data-nosnippet>206</a>
-<a href=#207 id=207 data-nosnippet>207</a><span class="attr">#[cfg(test)]
-<a href=#208 id=208 data-nosnippet>208</a></span><span class="kw">mod </span>tests {
-<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">use </span>std::path::Path;
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">use </span>tempfile::tempdir;
-<a href=#212 id=212 data-nosnippet>212</a>
-<a href=#213 id=213 data-nosnippet>213</a>    <span class="attr">#[test]
-<a href=#214 id=214 data-nosnippet>214</a>    </span><span class="kw">fn </span>nix_system_success() {
-<a href=#215 id=215 data-nosnippet>215</a>        <span class="kw">let </span>system = Nix::nix_system().unwrap();
-<a href=#216 id=216 data-nosnippet>216</a>        <span class="macro">assert!</span>(
-<a href=#217 id=217 data-nosnippet>217</a>            system == <span class="string">"x86_64-linux" </span>|| system == <span class="string">"aarch64-linux"</span>,
-<a href=#218 id=218 data-nosnippet>218</a>            <span class="string">"unexpected system: {}"</span>,
-<a href=#219 id=219 data-nosnippet>219</a>            system,
-<a href=#220 id=220 data-nosnippet>220</a>        );
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="macro">assert!</span>(system.ends_with(<span class="string">"-linux"</span>));
+<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw">let </span>status = Command::new(System::find_executable(<span class="string">"nix"</span>)<span class="question-mark">?</span>)
+<a href=#126 id=126 data-nosnippet>126</a>            .env(Nix::NIX_ENV, <span class="string">"true"</span>)
+<a href=#127 id=127 data-nosnippet>127</a>            .arg(<span class="string">"develop"</span>)
+<a href=#128 id=128 data-nosnippet>128</a>            .arg(<span class="kw-2">&amp;</span>flake_ref)
+<a href=#129 id=129 data-nosnippet>129</a>            .arg(<span class="string">"--no-update-lock-file"</span>)
+<a href=#130 id=130 data-nosnippet>130</a>            .arg(<span class="string">"--command"</span>)
+<a href=#131 id=131 data-nosnippet>131</a>            .arg(<span class="string">"bash"</span>)
+<a href=#132 id=132 data-nosnippet>132</a>            .arg(<span class="string">"-c"</span>)
+<a href=#133 id=133 data-nosnippet>133</a>            .arg(args.join(<span class="string">" "</span>))
+<a href=#134 id=134 data-nosnippet>134</a>            .status()<span class="question-mark">?</span>;
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="kw">if </span>!status.success() {
+<a href=#136 id=136 data-nosnippet>136</a>            <span class="macro">bail!</span>(<span class="string">"nix develop exited with status {}"</span>, status);
+<a href=#137 id=137 data-nosnippet>137</a>        }
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="prelude-val">Ok</span>(())
+<a href=#139 id=139 data-nosnippet>139</a>    }
+<a href=#140 id=140 data-nosnippet>140</a>
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="doccomment">/// Initialize a git repo in the given directory so Nix flakes
+<a href=#142 id=142 data-nosnippet>142</a>    /// treats it as a standalone source tree.
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">fn </span>git_init(dir: <span class="kw-2">&amp;</span>std::path::Path) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>git = System::find_executable(<span class="string">"git"</span>)<span class="question-mark">?</span>;
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">let </span>run = |args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]| -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#146 id=146 data-nosnippet>146</a>            <span class="kw">let </span>status = Command::new(<span class="kw-2">&amp;</span>git).arg(<span class="string">"-C"</span>).arg(dir).args(args).status()<span class="question-mark">?</span>;
+<a href=#147 id=147 data-nosnippet>147</a>            <span class="kw">if </span>!status.success() {
+<a href=#148 id=148 data-nosnippet>148</a>                <span class="macro">bail!</span>(<span class="string">"git {} failed with status {}"</span>, args.join(<span class="string">" "</span>), status,);
+<a href=#149 id=149 data-nosnippet>149</a>            }
+<a href=#150 id=150 data-nosnippet>150</a>            <span class="prelude-val">Ok</span>(())
+<a href=#151 id=151 data-nosnippet>151</a>        };
+<a href=#152 id=152 data-nosnippet>152</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"init"</span>, <span class="string">"-q"</span>])<span class="question-mark">?</span>;
+<a href=#153 id=153 data-nosnippet>153</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"config"</span>, <span class="string">"user.email"</span>, <span class="string">"kubernix@localhost"</span>])<span class="question-mark">?</span>;
+<a href=#154 id=154 data-nosnippet>154</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"config"</span>, <span class="string">"user.name"</span>, <span class="string">"kubernix"</span>])<span class="question-mark">?</span>;
+<a href=#155 id=155 data-nosnippet>155</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"config"</span>, <span class="string">"commit.gpgsign"</span>, <span class="string">"false"</span>])<span class="question-mark">?</span>;
+<a href=#156 id=156 data-nosnippet>156</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"add"</span>, <span class="string">"."</span>])<span class="question-mark">?</span>;
+<a href=#157 id=157 data-nosnippet>157</a>        run(<span class="kw-2">&amp;</span>[<span class="string">"commit"</span>, <span class="string">"-q"</span>, <span class="string">"-m"</span>, <span class="string">"init"</span>, <span class="string">"--allow-empty"</span>])<span class="question-mark">?</span>;
+<a href=#158 id=158 data-nosnippet>158</a>        <span class="prelude-val">Ok</span>(())
+<a href=#159 id=159 data-nosnippet>159</a>    }
+<a href=#160 id=160 data-nosnippet>160</a>
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="doccomment">/// Returns the Nix system string for the current architecture.
+<a href=#162 id=162 data-nosnippet>162</a>    </span><span class="kw">fn </span>nix_system() -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span><span class="lifetime">'static </span>str&gt; {
+<a href=#163 id=163 data-nosnippet>163</a>        <span class="kw">match </span>std::env::consts::ARCH {
+<a href=#164 id=164 data-nosnippet>164</a>            <span class="string">"x86_64" </span>=&gt; <span class="prelude-val">Ok</span>(<span class="string">"x86_64-linux"</span>),
+<a href=#165 id=165 data-nosnippet>165</a>            <span class="string">"aarch64" </span>=&gt; <span class="prelude-val">Ok</span>(<span class="string">"aarch64-linux"</span>),
+<a href=#166 id=166 data-nosnippet>166</a>            arch =&gt; <span class="macro">bail!</span>(
+<a href=#167 id=167 data-nosnippet>167</a>                <span class="string">"unsupported architecture '{}' (only x86_64 and aarch64 Linux are supported)"</span>,
+<a href=#168 id=168 data-nosnippet>168</a>                arch,
+<a href=#169 id=169 data-nosnippet>169</a>            ),
+<a href=#170 id=170 data-nosnippet>170</a>        }
+<a href=#171 id=171 data-nosnippet>171</a>    }
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="doccomment">/// Returns true if running in nix environment
+<a href=#174 id=174 data-nosnippet>174</a>    </span><span class="kw">pub fn </span>is_active() -&gt; bool {
+<a href=#175 id=175 data-nosnippet>175</a>        var(Nix::NIX_ENV).is_ok()
+<a href=#176 id=176 data-nosnippet>176</a>    }
+<a href=#177 id=177 data-nosnippet>177</a>
+<a href=#178 id=178 data-nosnippet>178</a>    <span class="doccomment">/// Set the NIX_ENV marker so re-exec knows we are inside Nix.
+<a href=#179 id=179 data-nosnippet>179</a>    ///
+<a href=#180 id=180 data-nosnippet>180</a>    /// # Safety
+<a href=#181 id=181 data-nosnippet>181</a>    /// Callers must ensure no other threads are concurrently reading
+<a href=#182 id=182 data-nosnippet>182</a>    /// or writing environment variables.
+<a href=#183 id=183 data-nosnippet>183</a>    </span><span class="attr">#[cfg(test)]
+<a href=#184 id=184 data-nosnippet>184</a>    </span><span class="kw">pub fn </span>set_env_marker() {
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="kw">unsafe </span>{ std::env::set_var(<span class="self">Self</span>::NIX_ENV, <span class="string">"true"</span>) };
+<a href=#186 id=186 data-nosnippet>186</a>    }
+<a href=#187 id=187 data-nosnippet>187</a>
+<a href=#188 id=188 data-nosnippet>188</a>    <span class="doccomment">/// Remove the NIX_ENV marker.
+<a href=#189 id=189 data-nosnippet>189</a>    ///
+<a href=#190 id=190 data-nosnippet>190</a>    /// # Safety
+<a href=#191 id=191 data-nosnippet>191</a>    /// Callers must ensure no other threads are concurrently reading
+<a href=#192 id=192 data-nosnippet>192</a>    /// or writing environment variables.
+<a href=#193 id=193 data-nosnippet>193</a>    </span><span class="attr">#[cfg(test)]
+<a href=#194 id=194 data-nosnippet>194</a>    </span><span class="kw">pub fn </span>remove_env_marker() {
+<a href=#195 id=195 data-nosnippet>195</a>        <span class="kw">unsafe </span>{ std::env::remove_var(<span class="self">Self</span>::NIX_ENV) };
+<a href=#196 id=196 data-nosnippet>196</a>    }
+<a href=#197 id=197 data-nosnippet>197</a>}
+<a href=#198 id=198 data-nosnippet>198</a>
+<a href=#199 id=199 data-nosnippet>199</a><span class="attr">#[cfg(test)]
+<a href=#200 id=200 data-nosnippet>200</a></span><span class="kw">mod </span>tests {
+<a href=#201 id=201 data-nosnippet>201</a>    <span class="kw">use </span>super::<span class="kw-2">*</span>;
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="kw">use </span>std::path::Path;
+<a href=#203 id=203 data-nosnippet>203</a>    <span class="kw">use </span>tempfile::tempdir;
+<a href=#204 id=204 data-nosnippet>204</a>
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="attr">#[test]
+<a href=#206 id=206 data-nosnippet>206</a>    </span><span class="kw">fn </span>nix_system_success() {
+<a href=#207 id=207 data-nosnippet>207</a>        <span class="kw">let </span>system = Nix::nix_system().unwrap();
+<a href=#208 id=208 data-nosnippet>208</a>        <span class="macro">assert!</span>(
+<a href=#209 id=209 data-nosnippet>209</a>            system == <span class="string">"x86_64-linux" </span>|| system == <span class="string">"aarch64-linux"</span>,
+<a href=#210 id=210 data-nosnippet>210</a>            <span class="string">"unexpected system: {}"</span>,
+<a href=#211 id=211 data-nosnippet>211</a>            system,
+<a href=#212 id=212 data-nosnippet>212</a>        );
+<a href=#213 id=213 data-nosnippet>213</a>        <span class="macro">assert!</span>(system.ends_with(<span class="string">"-linux"</span>));
+<a href=#214 id=214 data-nosnippet>214</a>    }
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="attr">#[test]
+<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">fn </span>git_init_success() {
+<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw">let </span>dir = tempdir().unwrap().keep();
+<a href=#219 id=219 data-nosnippet>219</a>        std::fs::write(dir.join(<span class="string">"test.txt"</span>), <span class="string">"hello"</span>).unwrap();
+<a href=#220 id=220 data-nosnippet>220</a>        Nix::git_init(<span class="kw-2">&amp;</span>dir).unwrap();
+<a href=#221 id=221 data-nosnippet>221</a>        <span class="macro">assert!</span>(dir.join(<span class="string">".git"</span>).exists());
 <a href=#222 id=222 data-nosnippet>222</a>    }
 <a href=#223 id=223 data-nosnippet>223</a>
 <a href=#224 id=224 data-nosnippet>224</a>    <span class="attr">#[test]
-<a href=#225 id=225 data-nosnippet>225</a>    </span><span class="kw">fn </span>git_init_success() {
-<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span>dir = tempdir().unwrap().keep();
-<a href=#227 id=227 data-nosnippet>227</a>        std::fs::write(dir.join(<span class="string">"test.txt"</span>), <span class="string">"hello"</span>).unwrap();
-<a href=#228 id=228 data-nosnippet>228</a>        Nix::git_init(<span class="kw-2">&amp;</span>dir).unwrap();
-<a href=#229 id=229 data-nosnippet>229</a>        <span class="macro">assert!</span>(dir.join(<span class="string">".git"</span>).exists());
-<a href=#230 id=230 data-nosnippet>230</a>    }
-<a href=#231 id=231 data-nosnippet>231</a>
-<a href=#232 id=232 data-nosnippet>232</a>    <span class="attr">#[test]
-<a href=#233 id=233 data-nosnippet>233</a>    </span><span class="kw">fn </span>git_init_invalid_dir() {
-<a href=#234 id=234 data-nosnippet>234</a>        <span class="kw">let </span>dir = Path::new(<span class="string">"/nonexistent/path"</span>);
-<a href=#235 id=235 data-nosnippet>235</a>        <span class="macro">assert!</span>(Nix::git_init(dir).is_err());
-<a href=#236 id=236 data-nosnippet>236</a>    }
-<a href=#237 id=237 data-nosnippet>237</a>
-<a href=#238 id=238 data-nosnippet>238</a>    <span class="attr">#[test]
-<a href=#239 id=239 data-nosnippet>239</a>    </span><span class="kw">fn </span>runtime_flake_template_contains_placeholder() {
-<a href=#240 id=240 data-nosnippet>240</a>        <span class="kw">let </span>template = <span class="macro">include_str!</span>(<span class="string">"../nix/runtime-flake.nix"</span>);
-<a href=#241 id=241 data-nosnippet>241</a>        <span class="macro">assert!</span>(template.contains(<span class="string">"KUBERNIX_SYSTEM"</span>));
+<a href=#225 id=225 data-nosnippet>225</a>    </span><span class="kw">fn </span>git_init_invalid_dir() {
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">let </span>dir = Path::new(<span class="string">"/nonexistent/path"</span>);
+<a href=#227 id=227 data-nosnippet>227</a>        <span class="macro">assert!</span>(Nix::git_init(dir).is_err());
+<a href=#228 id=228 data-nosnippet>228</a>    }
+<a href=#229 id=229 data-nosnippet>229</a>
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="attr">#[test]
+<a href=#231 id=231 data-nosnippet>231</a>    </span><span class="kw">fn </span>runtime_flake_template_contains_placeholder() {
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="kw">let </span>template = <span class="macro">include_str!</span>(<span class="string">"../nix/runtime-flake.nix"</span>);
+<a href=#233 id=233 data-nosnippet>233</a>        <span class="macro">assert!</span>(template.contains(<span class="string">"KUBERNIX_SYSTEM"</span>));
+<a href=#234 id=234 data-nosnippet>234</a>    }
+<a href=#235 id=235 data-nosnippet>235</a>
+<a href=#236 id=236 data-nosnippet>236</a>    <span class="attr">#[test]
+<a href=#237 id=237 data-nosnippet>237</a>    </span><span class="kw">fn </span>runtime_flake_system_replacement() {
+<a href=#238 id=238 data-nosnippet>238</a>        <span class="kw">let </span>template = <span class="macro">include_str!</span>(<span class="string">"../nix/runtime-flake.nix"</span>);
+<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">let </span>result = template.replace(<span class="string">"KUBERNIX_SYSTEM"</span>, <span class="string">"x86_64-linux"</span>);
+<a href=#240 id=240 data-nosnippet>240</a>        <span class="macro">assert!</span>(result.contains(<span class="string">"x86_64-linux"</span>));
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="macro">assert!</span>(!result.contains(<span class="string">"KUBERNIX_SYSTEM"</span>));
 <a href=#242 id=242 data-nosnippet>242</a>    }
 <a href=#243 id=243 data-nosnippet>243</a>
 <a href=#244 id=244 data-nosnippet>244</a>    <span class="attr">#[test]
-<a href=#245 id=245 data-nosnippet>245</a>    </span><span class="kw">fn </span>runtime_flake_system_replacement() {
-<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>template = <span class="macro">include_str!</span>(<span class="string">"../nix/runtime-flake.nix"</span>);
-<a href=#247 id=247 data-nosnippet>247</a>        <span class="kw">let </span>result = template.replace(<span class="string">"KUBERNIX_SYSTEM"</span>, <span class="string">"x86_64-linux"</span>);
-<a href=#248 id=248 data-nosnippet>248</a>        <span class="macro">assert!</span>(result.contains(<span class="string">"x86_64-linux"</span>));
-<a href=#249 id=249 data-nosnippet>249</a>        <span class="macro">assert!</span>(!result.contains(<span class="string">"KUBERNIX_SYSTEM"</span>));
-<a href=#250 id=250 data-nosnippet>250</a>    }
-<a href=#251 id=251 data-nosnippet>251</a>
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="attr">#[test]
-<a href=#253 id=253 data-nosnippet>253</a>    </span><span class="kw">fn </span>packages_template_contains_placeholder() {
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw">let </span>template = <span class="macro">include_str!</span>(<span class="string">"../nix/packages.nix"</span>);
-<a href=#255 id=255 data-nosnippet>255</a>        <span class="macro">assert!</span>(template.contains(<span class="string">"/* PACKAGES */"</span>));
+<a href=#245 id=245 data-nosnippet>245</a>    </span><span class="kw">fn </span>packages_template_contains_placeholder() {
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>template = <span class="macro">include_str!</span>(<span class="string">"../nix/packages.nix"</span>);
+<a href=#247 id=247 data-nosnippet>247</a>        <span class="macro">assert!</span>(template.contains(<span class="string">"/* PACKAGES */"</span>));
+<a href=#248 id=248 data-nosnippet>248</a>    }
+<a href=#249 id=249 data-nosnippet>249</a>
+<a href=#250 id=250 data-nosnippet>250</a>    <span class="attr">#[test]
+<a href=#251 id=251 data-nosnippet>251</a>    </span><span class="kw">fn </span>packages_replacement() {
+<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">let </span>template = <span class="macro">include_str!</span>(<span class="string">"../nix/packages.nix"</span>);
+<a href=#253 id=253 data-nosnippet>253</a>        <span class="kw">let </span>result = template.replace(<span class="string">"/* PACKAGES */"</span>, <span class="string">"hello world"</span>);
+<a href=#254 id=254 data-nosnippet>254</a>        <span class="macro">assert!</span>(result.contains(<span class="string">"hello world"</span>));
+<a href=#255 id=255 data-nosnippet>255</a>        <span class="macro">assert!</span>(!result.contains(<span class="string">"/* PACKAGES */"</span>));
 <a href=#256 id=256 data-nosnippet>256</a>    }
 <a href=#257 id=257 data-nosnippet>257</a>
 <a href=#258 id=258 data-nosnippet>258</a>    <span class="attr">#[test]
-<a href=#259 id=259 data-nosnippet>259</a>    </span><span class="kw">fn </span>packages_replacement() {
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">let </span>template = <span class="macro">include_str!</span>(<span class="string">"../nix/packages.nix"</span>);
-<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">let </span>result = template.replace(<span class="string">"/* PACKAGES */"</span>, <span class="string">"hello world"</span>);
-<a href=#262 id=262 data-nosnippet>262</a>        <span class="macro">assert!</span>(result.contains(<span class="string">"hello world"</span>));
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="macro">assert!</span>(!result.contains(<span class="string">"/* PACKAGES */"</span>));
-<a href=#264 id=264 data-nosnippet>264</a>    }
-<a href=#265 id=265 data-nosnippet>265</a>
-<a href=#266 id=266 data-nosnippet>266</a>    <span class="attr">#[test]
-<a href=#267 id=267 data-nosnippet>267</a>    </span><span class="kw">fn </span>flake_lock_is_valid_json() {
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>lock = <span class="macro">include_str!</span>(<span class="string">"../flake.lock"</span>);
-<a href=#269 id=269 data-nosnippet>269</a>        <span class="kw">let </span>parsed: serde_json::Value = serde_json::from_str(lock).unwrap();
-<a href=#270 id=270 data-nosnippet>270</a>        <span class="macro">assert!</span>(parsed[<span class="string">"nodes"</span>][<span class="string">"nixpkgs"</span>][<span class="string">"locked"</span>][<span class="string">"rev"</span>].is_string());
-<a href=#271 id=271 data-nosnippet>271</a>    }
-<a href=#272 id=272 data-nosnippet>272</a>
-<a href=#273 id=273 data-nosnippet>273</a>    <span class="attr">#[test]
-<a href=#274 id=274 data-nosnippet>274</a>    </span><span class="kw">fn </span>is_active_false_by_default() {
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="comment">// IN_NIX should not be set during tests
-<a href=#276 id=276 data-nosnippet>276</a>        </span>Nix::remove_env_marker();
-<a href=#277 id=277 data-nosnippet>277</a>        <span class="macro">assert!</span>(!Nix::is_active());
-<a href=#278 id=278 data-nosnippet>278</a>    }
-<a href=#279 id=279 data-nosnippet>279</a>
-<a href=#280 id=280 data-nosnippet>280</a>    <span class="attr">#[test]
-<a href=#281 id=281 data-nosnippet>281</a>    </span><span class="kw">fn </span>is_active_true_when_set() {
-<a href=#282 id=282 data-nosnippet>282</a>        Nix::set_env_marker();
-<a href=#283 id=283 data-nosnippet>283</a>        <span class="macro">assert!</span>(Nix::is_active());
-<a href=#284 id=284 data-nosnippet>284</a>        Nix::remove_env_marker();
-<a href=#285 id=285 data-nosnippet>285</a>    }
-<a href=#286 id=286 data-nosnippet>286</a>}
+<a href=#259 id=259 data-nosnippet>259</a>    </span><span class="kw">fn </span>flake_lock_is_valid_json() {
+<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">let </span>lock = <span class="macro">include_str!</span>(<span class="string">"../flake.lock"</span>);
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">let </span>parsed: serde_json::Value = serde_json::from_str(lock).unwrap();
+<a href=#262 id=262 data-nosnippet>262</a>        <span class="macro">assert!</span>(parsed[<span class="string">"nodes"</span>][<span class="string">"nixpkgs"</span>][<span class="string">"locked"</span>][<span class="string">"rev"</span>].is_string());
+<a href=#263 id=263 data-nosnippet>263</a>    }
+<a href=#264 id=264 data-nosnippet>264</a>
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="attr">#[test]
+<a href=#266 id=266 data-nosnippet>266</a>    </span><span class="kw">fn </span>is_active_false_by_default() {
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="comment">// IN_NIX should not be set during tests
+<a href=#268 id=268 data-nosnippet>268</a>        </span>Nix::remove_env_marker();
+<a href=#269 id=269 data-nosnippet>269</a>        <span class="macro">assert!</span>(!Nix::is_active());
+<a href=#270 id=270 data-nosnippet>270</a>    }
+<a href=#271 id=271 data-nosnippet>271</a>
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="attr">#[test]
+<a href=#273 id=273 data-nosnippet>273</a>    </span><span class="kw">fn </span>is_active_true_when_set() {
+<a href=#274 id=274 data-nosnippet>274</a>        Nix::set_env_marker();
+<a href=#275 id=275 data-nosnippet>275</a>        <span class="macro">assert!</span>(Nix::is_active());
+<a href=#276 id=276 data-nosnippet>276</a>        Nix::remove_env_marker();
+<a href=#277 id=277 data-nosnippet>277</a>    }
+<a href=#278 id=278 data-nosnippet>278</a>}
 </code></pre></div></section></main></body></html>
