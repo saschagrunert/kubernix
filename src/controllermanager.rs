@@ -1,4 +1,5 @@
 use crate::{
+    component::{ClusterContext, Component, Phase},
     config::Config,
     kubeconfig::KubeConfig,
     network::Network,
@@ -7,6 +8,23 @@ use crate::{
 };
 use anyhow::Result;
 use std::fs::create_dir_all;
+
+/// Component wrapper for registry-based startup.
+pub struct ControllerManagerComponent;
+
+impl Component for ControllerManagerComponent {
+    fn name(&self) -> &str {
+        "Controller Manager"
+    }
+
+    fn phase(&self) -> Phase {
+        Phase::Controller
+    }
+
+    fn start(&self, ctx: &ClusterContext<'_>) -> ProcessState {
+        ControllerManager::start(ctx.config, ctx.network, ctx.pki, ctx.kubeconfig)
+    }
+}
 
 pub struct ControllerManager {
     process: Process,

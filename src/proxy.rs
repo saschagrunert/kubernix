@@ -1,4 +1,5 @@
 use crate::{
+    component::{ClusterContext, Component, Phase},
     config::Config,
     kubeconfig::KubeConfig,
     network::Network,
@@ -7,6 +8,23 @@ use crate::{
 };
 use anyhow::Result;
 use std::fs::{self, create_dir_all};
+
+/// Component wrapper for registry-based startup.
+pub struct ProxyComponent;
+
+impl Component for ProxyComponent {
+    fn name(&self) -> &str {
+        "Proxy"
+    }
+
+    fn phase(&self) -> Phase {
+        Phase::NodeAgent
+    }
+
+    fn start(&self, ctx: &ClusterContext<'_>) -> ProcessState {
+        Proxy::start(ctx.config, ctx.network, ctx.kubeconfig)
+    }
+}
 
 pub struct Proxy {
     process: Process,

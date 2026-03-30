@@ -16,8 +16,18 @@ env:
 
 jobs:
   build:
-    name: build / debug
+    name: build / ${{ matrix.profile }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: debug
+            make_target: build
+            cache_suffix: ""
+          - profile: release
+            make_target: build-release
+            cache_suffix: "-release"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
@@ -27,23 +37,8 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-      - run: make build
-
-  build-release:
-    name: build / release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
-      - uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
-      - run: make build-release
+          key: ${{ runner.os }}-cargo${{ matrix.cache_suffix }}-${{ hashFiles('**/Cargo.lock') }}
+      - run: make ${{ matrix.make_target }}
 
   build-static:
     name: build / static

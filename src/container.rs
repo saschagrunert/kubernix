@@ -31,17 +31,23 @@ impl Container {
         // Build the base container image
         info!("Building base container image '{}'", DEFAULT_IMAGE);
 
-        // Prepare the Dockerfile
+        // Prepare the Dockerfile: use a custom one if provided, otherwise
+        // fall back to the embedded default.
         let file = config.root().join("Dockerfile");
         if !file.exists() {
-            fs::write(
-                &file,
-                format!(
-                    include_str!("assets/Dockerfile"),
-                    nix = Nix::DIR,
-                    root = DEFAULT_ROOT
-                ),
-            )?;
+            if let Some(custom) = config.dockerfile() {
+                debug!("Using custom Dockerfile '{}'", custom.display());
+                fs::copy(custom, &file)?;
+            } else {
+                fs::write(
+                    &file,
+                    format!(
+                        include_str!("assets/Dockerfile"),
+                        nix = Nix::DIR,
+                        root = DEFAULT_ROOT
+                    ),
+                )?;
+            }
         }
 
         // Exclude .git from the container build context since the
@@ -70,7 +76,12 @@ impl Container {
             .stdout(Self::stdio(config))
             .status()?;
         if !status.success() {
-            bail!("Unable to build container base image");
+            bail!(
+                "Unable to build container base image '{}' using '{}' (exit: {})",
+                DEFAULT_IMAGE,
+                config.container_runtime(),
+                status,
+            );
         }
 
         info!("Container base image built");

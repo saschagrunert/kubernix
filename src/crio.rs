@@ -1,5 +1,6 @@
 use crate::{
     Config, RUNTIME_ENV,
+    component::{ClusterContext, Component, Phase},
     container::Container,
     network::Network,
     node::Node,
@@ -15,6 +16,36 @@ use std::{
     path::PathBuf,
     process::Command,
 };
+
+/// Component wrapper for registry-based startup (per-node).
+pub struct CrioComponent {
+    node: u8,
+    name: String,
+}
+
+impl CrioComponent {
+    /// Create a new CRI-O component for the given node index.
+    pub fn new(node: u8) -> Self {
+        Self {
+            node,
+            name: format!("CRI-O (node {})", node),
+        }
+    }
+}
+
+impl Component for CrioComponent {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn phase(&self) -> Phase {
+        Phase::NodeRuntime
+    }
+
+    fn start(&self, ctx: &ClusterContext<'_>) -> ProcessState {
+        Crio::start(ctx.config, self.node, ctx.network)
+    }
+}
 
 pub struct Crio {
     process: Process,

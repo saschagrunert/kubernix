@@ -1,14 +1,35 @@
 //! Configuration related structures
 use crate::{podman::Podman, system::System};
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand as ClapSubcommand, builder::styling};
+use clap::{Parser, Subcommand as ClapSubcommand, ValueEnum, builder::styling};
 use ipnetwork::Ipv4Network;
 use log::LevelFilter;
 use serde::{Deserialize, Serialize};
 use std::{
+    fmt,
     fs::{self, canonicalize, create_dir_all, read_to_string},
     path::PathBuf,
 };
+
+/// Output format for log messages
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum LogFormat {
+    /// Human-readable colored text (default)
+    #[default]
+    Text,
+    /// Machine-readable JSON, one object per line
+    Json,
+}
+
+impl fmt::Display for LogFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LogFormat::Text => write!(f, "text"),
+            LogFormat::Json => write!(f, "json"),
+        }
+    }
+}
 
 #[derive(Parser, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -48,6 +69,16 @@ pub struct Config {
     )]
     /// The logging level of the application
     log_level: LevelFilter,
+
+    #[arg(
+        default_value = "text",
+        env = "KUBERNIX_LOG_FORMAT",
+        long = "log-format",
+        short = 'f',
+        value_name = "FORMAT"
+    )]
+    /// The output format for log messages
+    log_format: LogFormat,
 
     #[arg(
         default_value = "10.10.0.0/16",
@@ -118,6 +149,15 @@ pub struct Config {
     no_shell: bool,
 
     #[arg(
+        env = "KUBERNIX_DOCKERFILE",
+        long = "dockerfile",
+        short = 'd',
+        value_name = "PATH"
+    )]
+    /// Custom Dockerfile path for multi-node container image builds
+    dockerfile: Option<PathBuf>,
+
+    #[arg(
         default_value = "coredns",
         env = "KUBERNIX_ADDONS",
         long = "addons",
@@ -143,6 +183,11 @@ impl Config {
     /// Returns the log level
     pub fn log_level(&self) -> LevelFilter {
         self.log_level
+    }
+
+    /// Returns the log format
+    pub fn log_format(&self) -> LogFormat {
+        self.log_format
     }
 
     /// Returns the CIDR
@@ -180,6 +225,11 @@ impl Config {
         &self.no_shell
     }
 
+    /// Returns the custom Dockerfile path
+    pub fn dockerfile(&self) -> &Option<PathBuf> {
+        &self.dockerfile
+    }
+
     /// Returns the addons to deploy
     pub fn addons(&self) -> &Vec<String> {
         &self.addons
@@ -210,8 +260,12 @@ impl Config {
     /// Make the configs root path absolute
     pub fn canonicalize_root(&mut self) -> Result<()> {
         self.create_root_dir()?;
-        self.root =
-            canonicalize(self.root()).context("Unable to canonicalize config root directory")?;
+        self.root = canonicalize(self.root()).with_context(|| {
+            format!(
+                "Unable to canonicalize config root directory '{}'",
+                self.root().display()
+            )
+        })?;
         Ok(())
     }
 
@@ -253,7 +307,12 @@ impl Config {
     }
 
     fn create_root_dir(&self) -> Result<()> {
-        create_dir_all(self.root()).context("Unable to create root directory")
+        create_dir_all(self.root()).with_context(|| {
+            format!(
+                "Unable to create root directory '{}'",
+                self.root().display()
+            )
+        })
     }
 }
 
@@ -281,7 +340,7 @@ pub mod tests {
 
     pub fn test_config_wrong_cidr() -> Result<Config> {
         let mut c = test_config()?;
-        c.cidr = "10.0.0.1/25".parse()?;
+        c.cidr = "10.0.0.1/31".parse()?;
         Ok(c)
     }
 
@@ -323,6 +382,7 @@ pub mod tests {
 addons = ["coredns"]
 cidr = "1.1.1.1/16"
 container-runtime = "podman"
+log-format = "text"
 log-level = "DEBUG"
 no-shell = false
 nodes = 1
@@ -333,7 +393,37 @@ root = "root"
         c.try_load_file()?;
         assert_eq!(c.root(), Path::new("root"));
         assert_eq!(c.log_level(), LevelFilter::Debug);
+        assert_eq!(c.log_format(), LogFormat::Text);
         assert_eq!(&c.cidr().to_string(), "1.1.1.1/16");
+        assert!(c.dockerfile().is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn try_load_file_with_dockerfile() -> Result<()> {
+        let mut c = Config::default();
+        c.root = tempdir()?.keep();
+        fs::write(
+            c.root.join(Config::FILENAME),
+            r#"
+addons = ["coredns"]
+cidr = "1.1.1.1/16"
+container-runtime = "podman"
+dockerfile = "/tmp/MyDockerfile"
+log-format = "json"
+log-level = "DEBUG"
+no-shell = false
+nodes = 1
+packages = []
+root = "root"
+            "#,
+        )?;
+        c.try_load_file()?;
+        assert_eq!(c.log_format(), LogFormat::Json);
+        assert_eq!(
+            c.dockerfile().as_deref(),
+            Some(Path::new("/tmp/MyDockerfile"))
+        );
         Ok(())
     }
 

@@ -154,10 +154,19 @@ impl System {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::tests::test_config;
     use std::env::set_var;
 
     const VALID_EXECUTABLE: &str = "echo";
     const INVALID_EXECUTABLE: &str = "should-not-exist";
+
+    /// Set an environment variable for testing.
+    ///
+    /// # Safety justification
+    /// Only called from serial unit tests.
+    fn set_test_env(key: &str, value: &str) {
+        unsafe { set_var(key, value) };
+    }
 
     #[test]
     fn module_failure() {
@@ -181,7 +190,18 @@ mod tests {
 
     #[test]
     fn find_shell_success() {
-        unsafe { set_var("SHELL", VALID_EXECUTABLE) };
+        set_test_env("SHELL", VALID_EXECUTABLE);
         assert!(System::shell().is_ok());
+    }
+
+    /// Integration test: requires root for modprobe/sysctl.
+    /// Run with: sudo cargo test -- --ignored
+    #[test]
+    #[ignore]
+    fn setup_success() -> Result<()> {
+        let c = test_config()?;
+        let s = System::setup(&c)?;
+        s.cleanup();
+        Ok(())
     }
 }

@@ -1,4 +1,4 @@
-use crate::progress::Progress;
+use crate::{config::LogFormat, progress::Progress};
 use console::{Color, style};
 use log::{Level, LevelFilter, Log, Metadata, Record, set_max_level};
 use std::io::{IsTerminal, Write, stderr};
@@ -6,26 +6,22 @@ use std::io::{IsTerminal, Write, stderr};
 /// The main logging facade
 pub struct Logger {
     level: LevelFilter,
+    format: LogFormat,
 }
 
 impl Logger {
     /// Create a new logger
-    pub fn new(level: LevelFilter) -> Box<Self> {
+    pub fn new(level: LevelFilter, format: LogFormat) -> Box<Self> {
         set_max_level(LevelFilter::Trace);
-        Self { level }.into()
+        Self { level, format }.into()
     }
 
-    /// Log an error message
+    /// Log an error message directly to stderr.
+    ///
+    /// This is used for fatal errors before the global logger is
+    /// configured, so it writes plain text regardless of format settings.
     pub fn error(msg: &str) {
-        Self {
-            level: LevelFilter::Error,
-        }
-        .log(
-            &Record::builder()
-                .args(format_args!("{}", msg))
-                .level(Level::Error)
-                .build(),
-        );
+        writeln!(stderr(), "[ERROR] {}", msg).ok();
     }
 }
 
@@ -39,6 +35,50 @@ impl Log for Logger {
             return;
         }
 
+        match self.format {
+            LogFormat::Json => self.log_json(record),
+            LogFormat::Text => self.log_text(record),
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+impl Logger {
+    fn log_json(&self, record: &Record<'_>) {
+        let level = record.metadata().level().as_str().to_lowercase();
+        let message = Self::escape_json(&record.args().to_string());
+        let target = Self::escape_json(record.target());
+        let line = format!(
+            r#"{{"level":"{}","message":"{}","target":"{}"}}"#,
+            level, message, target,
+        );
+        writeln!(stderr(), "{}", line).ok();
+    }
+
+    /// Escape a string for safe embedding in a JSON value.
+    fn escape_json(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        for ch in s.chars() {
+            match ch {
+                '\\' => out.push_str("\\\\"),
+                '"' => out.push_str("\\\""),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                c if c.is_control() => {
+                    // Unicode escape for other control chars
+                    for unit in c.encode_utf16(&mut [0; 2]) {
+                        out.push_str(&format!("\\u{:04x}", unit));
+                    }
+                }
+                c => out.push(c),
+            }
+        }
+        out
+    }
+
+    fn log_text(&self, record: &Record<'_>) {
         let level = record.metadata().level();
         let (level_name, level_color) = match level {
             Level::Error => ("ERROR", Color::Red),
@@ -73,8 +113,6 @@ impl Log for Logger {
             writeln!(stderr(), "{}", msg).ok();
         }
     }
-
-    fn flush(&self) {}
 }
 
 #[cfg(test)]
@@ -83,8 +121,8 @@ pub mod tests {
     use log::{MetadataBuilder, Record};
 
     #[test]
-    fn logger_success() {
-        let l = Logger::new(LevelFilter::Info);
+    fn logger_text_success() {
+        let l = Logger::new(LevelFilter::Info, LogFormat::Text);
         let record = Record::builder()
             .args(format_args!("Error!"))
             .level(Level::Error)
@@ -94,6 +132,17 @@ pub mod tests {
         assert!(l.enabled(&err_metadata));
         let dbg_metadata = MetadataBuilder::new().level(Level::Debug).build();
         assert!(!l.enabled(&dbg_metadata));
+        l.flush();
+    }
+
+    #[test]
+    fn logger_json_success() {
+        let l = Logger::new(LevelFilter::Info, LogFormat::Json);
+        let record = Record::builder()
+            .args(format_args!("test message"))
+            .level(Level::Info)
+            .build();
+        l.log(&record);
         l.flush();
     }
 }
