@@ -56,7 +56,7 @@ impl System {
 
             match fs::write(&hosts_file, new_hosts.join("\n")) {
                 Err(e) => {
-                    warn!(
+                    debug!(
                         "Unable to write hosts file '{}'. The nodes may be not reachable: {}",
                         hosts_file.display(),
                         e

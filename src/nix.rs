@@ -135,6 +135,8 @@ impl Nix {
             .arg("develop")
             .arg(&flake_ref)
             .arg("--no-update-lock-file")
+            .arg("--log-format")
+            .arg("raw")
             .arg("--command")
             .arg("bash")
             .arg("-c")

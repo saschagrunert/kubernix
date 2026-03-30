@@ -20,7 +20,7 @@ for local testing, experimenting and development purposes.
 
 Moving pictures are worth more than thousand words, so here is a short demo:
 
-![demo](.github/kubernix.svg)
+![demo](.github/kubernix.gif)
 
 ### Nix?
 
@@ -293,7 +293,7 @@ $ sudo kubernix -p kubernetes-helm
 [INFO ] Bootstrapping cluster inside nix environment
 …
 > helm version
-version.BuildInfo{Version:"v3.x.x", …}
+version.BuildInfo{Version:"v3.17.3", ...}
 ```
 
 All available packages are listed on the [official Nix index][21].
