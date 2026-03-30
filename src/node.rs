@@ -1,5 +1,12 @@
+//! Node naming utilities.
+//!
+//! Provides consistent node name generation used across kubelet,
+//! CRI-O, and container components for both single-node and multi-node
+//! configurations.
+
 use crate::{Config, network::Network};
 
+/// Generates node names based on cluster configuration.
 pub struct Node;
 
 impl Node {

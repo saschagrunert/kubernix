@@ -1,3 +1,8 @@
+//! etcd distributed key-value store component.
+//!
+//! Provides the backing store for all Kubernetes cluster data.
+//! Starts a single-node etcd instance with TLS mutual authentication.
+
 use crate::{
     component::{ClusterContext, Component, Phase},
     config::Config,
@@ -25,11 +30,13 @@ impl Component for EtcdComponent {
     }
 }
 
+/// Manages the etcd process lifecycle.
 pub struct Etcd {
     process: Process,
 }
 
 impl Etcd {
+    /// Start etcd with TLS and the given cluster configuration.
     pub fn start(config: &Config, network: &Network, pki: &Pki) -> ProcessState {
         const ETCD: &str = "etcd";
         let dir = config.root().join(ETCD);

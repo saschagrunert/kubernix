@@ -1,3 +1,9 @@
+//! Kubeconfig file generation for cluster components.
+//!
+//! Creates kubeconfig files for each identity (admin, kubelet, proxy,
+//! controller-manager, scheduler) using `kubectl config` commands and
+//! sets file permissions so non-root shell sessions can read them.
+
 use crate::{
     Config,
     kubectl::Kubectl,
@@ -12,6 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[must_use]
 pub struct KubeConfig {
     kubelets: Vec<PathBuf>,
     proxy: PathBuf,
@@ -21,26 +28,32 @@ pub struct KubeConfig {
 }
 
 impl KubeConfig {
+    /// Kubeconfig file paths for each kubelet node.
     pub fn kubelets(&self) -> &[PathBuf] {
         &self.kubelets
     }
 
+    /// Kubeconfig file path for kube-proxy.
     pub fn proxy(&self) -> &Path {
         &self.proxy
     }
 
+    /// Kubeconfig file path for the controller manager.
     pub fn controller_manager(&self) -> &Path {
         &self.controller_manager
     }
 
+    /// Kubeconfig file path for the scheduler.
     pub fn scheduler(&self) -> &Path {
         &self.scheduler
     }
 
+    /// Kubeconfig file path for the cluster admin (used by kubectl).
     pub fn admin(&self) -> &Path {
         &self.admin
     }
 
+    /// Generate or load kubeconfig files for all cluster components.
     pub fn new(config: &Config, pki: &Pki) -> Result<KubeConfig> {
         // Create the target dir
         let dir = config.root().join("kubeconfig");
@@ -143,7 +156,7 @@ mod tests {
         let c = test_config()?;
         let n = test_network()?;
         let p = Pki::new(&c, &n)?;
-        KubeConfig::new(&c, &p)?;
+        let _kc = KubeConfig::new(&c, &p)?;
         Ok(())
     }
 }

@@ -87,8 +87,12 @@ lint-dependencies: ## Validate dependency versions via zeitgeist.
 	}
 	$(BUILD_DIR)/zeitgeist validate --local-only --base-path . --config dependencies.yaml
 
+.PHONY: lint-deny
+lint-deny: ## Check licenses and duplicate dependencies via cargo-deny.
+	cargo deny check
+
 .PHONY: lint
-lint: lint-clippy lint-rustfmt lint-audit lint-dependencies ## Run all linters.
+lint: lint-clippy lint-rustfmt lint-audit lint-deny lint-dependencies ## Run all linters.
 
 ##@ Run targets:
 

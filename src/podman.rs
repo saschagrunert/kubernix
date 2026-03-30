@@ -1,3 +1,8 @@
+//! Podman container runtime integration.
+//!
+//! Provides podman-specific CLI arguments for image builds and container
+//! execution, including conmon, crun, and storage driver configuration.
+
 use crate::{Config, system::System};
 use anyhow::Result;
 use log::LevelFilter;
@@ -6,6 +11,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Podman-specific argument builder for container operations.
 pub struct Podman;
 
 impl Podman {

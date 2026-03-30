@@ -1,3 +1,8 @@
+//! Kubernetes encryption-at-rest configuration.
+//!
+//! Generates a random AES-CBC key and writes the EncryptionConfiguration
+//! manifest consumed by the API server's `--encryption-provider-config` flag.
+
 use crate::Config;
 use anyhow::Result;
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -8,15 +13,19 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[must_use]
 pub struct EncryptionConfig {
     path: PathBuf,
 }
 
 impl EncryptionConfig {
+    /// Path to the generated EncryptionConfiguration YAML file.
     pub fn path(&self) -> &Path {
         &self.path
     }
 
+    /// Generate the encryption config with a random AES-CBC key, or
+    /// reuse an existing one to support cluster restarts.
     pub fn new(config: &Config) -> Result<EncryptionConfig> {
         let dir = &config.root().join("encryptionconfig");
         create_dir_all(dir)?;

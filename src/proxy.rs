@@ -1,3 +1,8 @@
+//! Kubernetes network proxy component.
+//!
+//! Runs `kube-proxy` which maintains network rules on nodes, enabling
+//! Kubernetes Service abstraction by forwarding traffic to backend pods.
+
 use crate::{
     component::{ClusterContext, Component, Phase},
     config::Config,
@@ -26,11 +31,13 @@ impl Component for ProxyComponent {
     }
 }
 
+/// Manages the `kube-proxy` process lifecycle.
 pub struct Proxy {
     process: Process,
 }
 
 impl Proxy {
+    /// Start the proxy with the given cluster configuration.
     pub fn start(config: &Config, network: &Network, kubeconfig: &KubeConfig) -> ProcessState {
         let dir = config.root().join("proxy");
         create_dir_all(&dir)?;

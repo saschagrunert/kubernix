@@ -1,3 +1,9 @@
+//! CRI-O container runtime component.
+//!
+//! Manages CRI-O instances that provide the container runtime interface
+//! for kubelet. In multi-node mode, each CRI-O instance runs inside its
+//! own container with an isolated CNI network configuration.
+
 use crate::{
     Config, RUNTIME_ENV,
     component::{ClusterContext, Component, Phase},
@@ -47,6 +53,7 @@ impl Component for CrioComponent {
     }
 }
 
+/// Manages a CRI-O process and its associated socket for a single node.
 pub struct Crio {
     process: Process,
     socket: CriSocket,
@@ -66,6 +73,7 @@ impl Display for CriSocket {
 pub const MAX_SOCKET_PATH_LEN: usize = 107;
 
 impl CriSocket {
+    /// Create a new CRI socket, validating the path length against Unix limits.
     pub fn new(path: PathBuf) -> Result<CriSocket> {
         if path.display().to_string().len() > MAX_SOCKET_PATH_LEN {
             bail!("Socket path '{}' is too long", path.display())
@@ -73,6 +81,7 @@ impl CriSocket {
         Ok(CriSocket(path))
     }
 
+    /// Format the socket path as a `unix://` URI for CRI clients.
     pub fn to_socket_string(&self) -> String {
         format!("unix://{}", self.0.display())
     }
@@ -81,6 +90,7 @@ impl CriSocket {
 const CRIO: &str = "crio";
 
 impl Crio {
+    /// Start a CRI-O instance for the given node index.
     pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
         let node_name = Node::name(config, network, node);
 

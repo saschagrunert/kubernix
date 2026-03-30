@@ -1,3 +1,9 @@
+//! Generic process lifecycle management.
+//!
+//! Provides the [`Process`] abstraction that spawns a child process,
+//! watches it for unexpected exits, waits for readiness based on log
+//! output patterns, and handles graceful shutdown via SIGTERM.
+
 use crate::system::System;
 use anyhow::{Context, Result, bail};
 use crossbeam_channel::{Receiver, Sender, bounded};
@@ -34,13 +40,13 @@ pub trait Stoppable {
     fn stop(&mut self) -> Result<()>;
 }
 
-/// A started process
+/// A running process handle that can be stopped during cluster shutdown.
 pub type Started = Box<dyn Stoppable + Send + Sync>;
 
-/// A vector of processes which can be stopped
+/// Ordered collection of running processes, stopped in reverse order during cleanup.
 pub type Stoppables = Vec<Started>;
 
-/// The process state as result
+/// The result of starting a component process, either a stoppable handle or an error.
 pub type ProcessState = Result<Started>;
 
 #[derive(Deserialize, Serialize)]

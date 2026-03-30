@@ -1,3 +1,8 @@
+//! System preparation and host utilities.
+//!
+//! Handles kernel module loading, sysctl configuration, hosts file
+//! management, executable lookup in `$PATH`, and container detection.
+
 use crate::{Config, node::Node};
 use anyhow::{Context, Result, bail};
 use log::{debug, info, warn};
@@ -10,6 +15,7 @@ use std::{
     process::Command,
 };
 
+/// Manages host-level system preparation and cleanup.
 pub struct System {
     hosts: Option<String>,
 }

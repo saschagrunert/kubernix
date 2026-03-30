@@ -1,3 +1,9 @@
+//! Multi-node container management.
+//!
+//! Handles building the base container image and running cluster
+//! components inside containers for multi-node setups. Each container
+//! shares the host network namespace and mounts the runtime root directory.
+
 use crate::{Config, nix::Nix, podman::Podman, process::Process, system::System};
 use anyhow::{Result, bail};
 use log::{LevelFilter, debug, info, trace};
@@ -11,6 +17,7 @@ use std::{
 const DEFAULT_IMAGE: &str = "kubernix:base";
 const DEFAULT_ROOT: &str = "kubernix";
 
+/// Provides container image building and process execution for multi-node clusters.
 pub struct Container;
 
 impl Container {
