@@ -281,7 +281,7 @@ impl Pki {
         let csr = dir.join("ca-csr.json");
         Self::write_csr(CN, CN, &csr)?;
 
-        let mut cfssl = Command::new("cfssl")
+        let cfssl = Command::new("cfssl")
             .arg("gencert")
             .arg("-initca")
             .arg(csr)
@@ -289,22 +289,7 @@ impl Pki {
             .stderr(Stdio::piped())
             .spawn()?;
 
-        let pipe = cfssl.stdout.take().context("unable to get stdout")?;
-        let output = Command::new("cfssljson")
-            .arg("-bare")
-            .arg(dir.join(CA_NAME))
-            .stdin(pipe)
-            .output()?;
-
-        let cfssl_output = cfssl.wait_with_output()?;
-        if !output.status.success() {
-            debug!(
-                "cfssl stderr: {}",
-                String::from_utf8_lossy(&cfssl_output.stderr)
-            );
-            debug!("cfssljson output: {:?}", output);
-            bail!("CA certificate generation failed");
-        }
+        Self::pipe_cfssl_to_cfssljson(cfssl, &dir.join(CA_NAME), CA_NAME)?;
         debug!("CA certificates created");
         Ok(Identity::new(dir, CA_NAME, CA_NAME))
     }
@@ -365,7 +350,7 @@ impl Pki {
     fn generate(pki_config: &PkiConfig, name: &str, csr: &Path, user: &str) -> Result<Identity> {
         debug!("Creating certificate for {}", name);
 
-        let mut cfssl = Command::new("cfssl")
+        let cfssl = Command::new("cfssl")
             .arg("gencert")
             .arg(format!("-ca={}", pki_config.ca().cert().display()))
             .arg(format!("-ca-key={}", pki_config.ca().key().display()))
@@ -377,10 +362,22 @@ impl Pki {
             .stderr(Stdio::piped())
             .spawn()?;
 
-        let pipe = cfssl.stdout.take().context("unable to get stdout")?;
+        Self::pipe_cfssl_to_cfssljson(cfssl, &pki_config.dir().join(name), name)?;
+        debug!("Certificate created for {}", name);
+
+        Ok(Identity::new(pki_config.dir(), name, user))
+    }
+
+    /// Pipe cfssl output to cfssljson for certificate generation.
+    fn pipe_cfssl_to_cfssljson(
+        mut cfssl: std::process::Child,
+        output_prefix: &Path,
+        name: &str,
+    ) -> Result<()> {
+        let pipe = cfssl.stdout.take().context("Unable to get cfssl stdout")?;
         let output = Command::new("cfssljson")
             .arg("-bare")
-            .arg(pki_config.dir().join(name))
+            .arg(output_prefix)
             .stdin(pipe)
             .output()?;
 
@@ -391,11 +388,9 @@ impl Pki {
                 String::from_utf8_lossy(&cfssl_output.stderr)
             );
             debug!("cfssljson output: {:?}", output);
-            bail!("Certificate generation failed for {}", name);
+            bail!("Unable to generate certificate for {}", name);
         }
-        debug!("Certificate created for {}", name);
-
-        Ok(Identity::new(pki_config.dir(), name, user))
+        Ok(())
     }
 
     fn write_csr(cn: &str, o: &str, dest: &Path) -> Result<()> {

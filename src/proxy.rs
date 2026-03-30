@@ -80,3 +80,27 @@ impl Stoppable for Proxy {
         self.process.stop()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_template_renders() {
+        let yml = format!(
+            include_str!("assets/proxy.yml"),
+            "/tmp/proxy.kubeconfig", "10.10.0.0/18",
+        );
+        assert!(yml.contains("kind: KubeProxyConfiguration"));
+        assert!(yml.contains("kubeconfig: \"/tmp/proxy.kubeconfig\""));
+        assert!(yml.contains("clusterCIDR: \"10.10.0.0/18\""));
+        assert!(yml.contains("mode: \"iptables\""));
+    }
+
+    #[test]
+    fn component_metadata() {
+        let c = ProxyComponent;
+        assert_eq!(c.name(), "Proxy");
+        assert_eq!(c.phase(), Phase::Controller);
+    }
+}

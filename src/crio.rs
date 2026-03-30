@@ -278,4 +278,25 @@ mod tests {
     fn cri_socket_failure() {
         assert!(CriSocket::new("a".repeat(MAX_SOCKET_PATH_LEN + 1).into()).is_err());
     }
+
+    #[test]
+    fn cri_socket_string_format() -> Result<()> {
+        let socket = CriSocket::new("/run/crio.sock".into())?;
+        assert_eq!(socket.to_socket_string(), "unix:///run/crio.sock");
+        assert_eq!(socket.to_string(), "/run/crio.sock");
+        Ok(())
+    }
+
+    #[test]
+    fn component_metadata() {
+        let c = CrioComponent::new(0);
+        assert_eq!(c.name(), "CRI-O (node 0)");
+        assert_eq!(c.phase(), Phase::Controller);
+    }
+
+    #[test]
+    fn component_name_per_node() {
+        assert_eq!(CrioComponent::new(0).name(), "CRI-O (node 0)");
+        assert_eq!(CrioComponent::new(2).name(), "CRI-O (node 2)");
+    }
 }

@@ -89,6 +89,13 @@ mod tests {
     use super::*;
     use crate::{config::tests::test_config, network::tests::test_network};
 
+    #[test]
+    fn component_metadata() {
+        let c = EtcdComponent;
+        assert_eq!(c.name(), "etcd");
+        assert_eq!(c.phase(), Phase::Infrastructure);
+    }
+
     /// Integration test: requires etcd and cfssl binaries in $PATH.
     /// Run with: cargo test -- --ignored
     #[test]

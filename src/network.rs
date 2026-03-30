@@ -6,9 +6,9 @@
 
 use crate::Config;
 use anyhow::{Context, Result, bail};
-use hostname::get;
 use ipnetwork::Ipv4Network;
 use log::{debug, warn};
+use nix::unistd::gethostname;
 use std::{
     net::{Ipv4Addr, SocketAddr},
     process::Command,
@@ -116,7 +116,7 @@ impl Network {
         // Set the rest of the networking related adresses and paths
         let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2379);
         let etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2380);
-        let hostname = get()
+        let hostname = gethostname()
             .context("Unable to get hostname")?
             .to_str()
             .context("Unable to convert hostname into string")?

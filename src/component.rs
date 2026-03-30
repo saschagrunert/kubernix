@@ -137,12 +137,21 @@ impl ComponentRegistry {
                 .collect();
 
             let phase_ok = results.iter().all(|r| r.is_ok());
-            all_results.extend(results.into_iter().map(|r| (*phase, r)));
-
             if !phase_ok {
-                info!("Phase {:?} failed, skipping remaining phases", phase);
+                let failures: Vec<_> = results
+                    .iter()
+                    .filter_map(|r| r.as_ref().err().map(|e| e.to_string()))
+                    .collect();
+                info!(
+                    "Phase {:?} failed ({} errors: {}), skipping remaining phases",
+                    phase,
+                    failures.len(),
+                    failures.join(", ")
+                );
+                all_results.extend(results.into_iter().map(|r| (*phase, r)));
                 break;
             }
+            all_results.extend(results.into_iter().map(|r| (*phase, r)));
         }
 
         let all_ok = all_results.iter().all(|(_, r)| r.is_ok());

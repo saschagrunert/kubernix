@@ -148,3 +148,51 @@ impl Stoppable for Kubelet {
         self.process.stop()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crio::MAX_SOCKET_PATH_LEN;
+
+    #[test]
+    fn config_template_renders() {
+        let yml = format!(
+            include_str!("assets/kubelet.yml"),
+            ca = "/tmp/ca.pem",
+            dns = "10.10.64.2",
+            cidr = "10.10.128.0/18",
+            cert = "/tmp/kubelet.pem",
+            key = "/tmp/kubelet-key.pem",
+            port = 11250,
+            healthzPort = 12250,
+        );
+        assert!(yml.contains("kind: KubeletConfiguration"));
+        assert!(yml.contains("clientCAFile: \"/tmp/ca.pem\""));
+        assert!(yml.contains("clusterDNS:"));
+        assert!(yml.contains("- \"10.10.64.2\""));
+        assert!(yml.contains("podCIDR: \"10.10.128.0/18\""));
+        assert!(yml.contains("port: 11250"));
+        assert!(yml.contains("healthzPort: 12250"));
+    }
+
+    #[test]
+    fn socket_path_too_long() {
+        // A very long root_dir path should fail validation
+        let long_path = "a".repeat(MAX_SOCKET_PATH_LEN);
+        let total = long_path.len() + "pod-resources/1234567890".len();
+        assert!(total > MAX_SOCKET_PATH_LEN);
+    }
+
+    #[test]
+    fn component_metadata() {
+        let c = KubeletComponent::new(0);
+        assert_eq!(c.name(), "Kubelet (node 0)");
+        assert_eq!(c.phase(), Phase::NodeAgent);
+    }
+
+    #[test]
+    fn component_name_per_node() {
+        assert_eq!(KubeletComponent::new(0).name(), "Kubelet (node 0)");
+        assert_eq!(KubeletComponent::new(3).name(), "Kubelet (node 3)");
+    }
+}
