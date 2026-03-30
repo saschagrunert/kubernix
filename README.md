@@ -48,7 +48,7 @@ The following technology stack is currently being used:
 | conntrack-tools | v1.4.8   |
 | cri-o-wrapper   | v1.35.0  |
 | cri-tools       | v1.35.0  |
-| crun            | v1.26    |
+| crun            | v1.27    |
 | etcd            | v3.6.9   |
 | iproute2        | v6.19.0  |
 | iptables        | v1.8.12  |
