@@ -20,7 +20,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1.0.102"
 base64 = "0.22.1"
-clap = { version = "4.6.0", features = ["derive", "wrap_help", "env", "color"] }
+clap = { version = "4.6.1", features = ["derive", "wrap_help", "env", "color"] }
 console = "0.16.3"
 crossbeam-channel = "0.5.15"
 indicatif = "0.18.4"
