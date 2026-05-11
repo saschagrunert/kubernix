@@ -26,7 +26,7 @@ crossbeam-channel = "0.5.15"
 indicatif = "0.18.4"
 ipnetwork = { version = "0.21.1", features = ["serde"] }
 log = { version = "0.4.29", features = ["serde", "std"] }
-nix = { version = "0.31.2", features = ["fs", "hostname", "signal", "mount", "process", "user"] }
+nix = { version = "0.31.3", features = ["fs", "hostname", "signal", "mount", "process", "user"] }
 rand = "0.10.1"
 rayon = "1.12.0"
 serde = { version = "1.0.228", features = ["derive"] }
