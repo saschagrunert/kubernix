@@ -48,18 +48,18 @@ The following technology stack is currently being used:
 | conntrack-tools | v1.4.8   |
 | cri-o-wrapper   | v1.35.0  |
 | cri-tools       | v1.35.0  |
-| crun            | v1.27    |
-| etcd            | v3.6.9   |
+| crun            | v1.27.1  |
+| etcd            | v3.6.10  |
 | iproute2        | v6.19.0  |
-| iptables        | v1.8.12  |
+| iptables        | v1.8.13  |
 | kmod            | v31      |
-| kubectl         | v1.35.3  |
-| kubernetes      | v1.35.3  |
+| kubectl         | v1.36.0  |
+| kubernetes      | v1.36.0  |
 | nss-cacert      | v3.121   |
-| podman          | v5.8.1   |
+| podman          | v5.8.2   |
 | socat           | v1.8.1.1 |
 | sysctl          | v4.0.6   |
-| util-linux      | v2.41.3  |
+| util-linux      | v2.42    |
 
 Some other tools are not explicitly mentioned here, because they are no
 first-level dependencies.
