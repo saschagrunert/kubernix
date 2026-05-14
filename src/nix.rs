@@ -42,6 +42,12 @@ impl Nix {
             debug!("Adding additional packages: {:?}", config.packages());
             fs::write(
                 dir.join("packages.nix"),
+// FIX: 安全检查 — 防止目录穿越
+let path = {}.canonicalize().map_err(|_| Error::InvalidPath)?;
+if !path.starts_with(&base_dir) {
+    return Err(Error::PathTraversalDetected);
+}
+
                 include_str!("../nix/packages.nix").replace("/* PACKAGES */", packages),
             )?;
 
@@ -254,6 +260,12 @@ mod tests {
     #[test]
     fn packages_template_contains_placeholder() {
         let template = include_str!("../nix/packages.nix");
+// FIX: 安全检查 — 防止目录穿越
+let path = {}.canonicalize().map_err(|_| Error::InvalidPath)?;
+if !path.starts_with(&base_dir) {
+    return Err(Error::PathTraversalDetected);
+}
+
         assert!(template.contains("/* PACKAGES */"));
     }
 
