@@ -26,7 +26,7 @@ Moving pictures are worth more than thousand words, so here is a short demo:
 
 Have you ever heard about [Nix][2], the functional package manager?
 
-In case you haven't, don’t worry – the important thing is that it provides all the third-party
+In case you haven’t, don’t worry, the important thing is that it provides all the third-party
 dependencies needed for this project, pinned to a dedicated version. This guarantees stable,
 reproducible installations.
 
@@ -96,7 +96,7 @@ $ curl https://nixos.org/nix/install | sh
 Please make sure to follow the instructions output by the script and that
 [flakes are enabled][3] in your Nix configuration.
 
-[3]: https://nixos.wiki/wiki/Flakes
+[3]: https://wiki.nixos.org/wiki/Flakes
 
 ### Getting Started
 
@@ -291,8 +291,8 @@ $ sudo kubernix --overlay overlay.nix
 [INFO ] Nix environment not found, bootstrapping one
 [INFO ] Using custom overlay 'overlay.nix'
 these derivations will be built:
-  /nix/store/9jb43i2mqjc94mbx30d9nrx529w6lngw-cri-o-1.15.2.drv
-  building '/nix/store/9jb43i2mqjc94mbx30d9nrx529w6lngw-cri-o-1.15.2.drv'...
+  /nix/store/…-cri-o-1.36.0.drv
+  building '/nix/store/…-cri-o-1.36.0.drv'...
 ```
 
 Using this technique makes it easy for daily development of Kubernetes
@@ -311,13 +311,13 @@ $ sudo kubernix -p kubernetes-helm
 [INFO ] Bootstrapping cluster inside nix environment
 …
 > helm version
-version.BuildInfo{Version:"v3.17.3", ...}
+version.BuildInfo{Version:"v4.2.0", ...}
 ```
 
 All available packages are listed on the [official Nix index][21].
 
 [20]: https://helm.sh
-[21]: https://nixos.org/nixos/packages.html?channel=nixpkgs-unstable
+[21]: https://search.nixos.org/packages?channel=unstable
 
 ## Contributing
 

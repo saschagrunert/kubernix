@@ -90,7 +90,7 @@ impl System {
             warn!(
                 "Unable to restore hosts file, may need manual cleanup: {}",
                 e
-            )
+            );
         }
     }
 

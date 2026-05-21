@@ -32,12 +32,11 @@ pub use logger::Logger;
 /// current contents differ. Avoids unnecessary filesystem writes and
 /// inode updates on warm restarts.
 pub(crate) fn write_if_changed(path: &std::path::Path, content: &str) -> anyhow::Result<()> {
-    if path.exists() {
-        if let Ok(existing) = std::fs::read_to_string(path) {
-            if existing == content {
-                return Ok(());
-            }
-        }
+    if path.exists()
+        && let Ok(existing) = std::fs::read_to_string(path)
+        && existing == content
+    {
+        return Ok(());
     }
     std::fs::write(path, content)?;
     Ok(())
@@ -191,7 +190,6 @@ impl Kubernix {
         let kubectl = Kubectl::new(kubeconfig.admin());
         let encryptionconfig = EncryptionConfig::new(&config)?;
 
-        // Build the component registry
         let ctx = ClusterContext {
             config: &config,
             network: &network,
@@ -201,20 +199,8 @@ impl Kubernix {
             kubectl: &kubectl,
         };
 
-        let mut registry = ComponentRegistry::new();
-        registry.register(Box::new(etcd::EtcdComponent));
-        registry.register(Box::new(apiserver::ApiServerComponent));
-        registry.register(Box::new(controllermanager::ControllerManagerComponent));
-        registry.register(Box::new(scheduler::SchedulerComponent));
-        for node in 0..config.nodes() {
-            registry.register(Box::new(crio::CrioComponent::new(node)));
-            registry.register(Box::new(kubelet::KubeletComponent::new(node)));
-        }
-        registry.register(Box::new(proxy::ProxyComponent));
+        let (processes, all_ok) = Self::register_components(&config).run(&ctx);
 
-        let (processes, all_ok) = registry.run(&ctx);
-
-        // Setup the main instance
         let spawn_shell = !config.no_shell();
         let addon_shutdown = Arc::new(AtomicBool::new(false));
         let mut kubernix = Kubernix {
@@ -227,7 +213,6 @@ impl Kubernix {
             system,
         };
 
-        // No dead processes
         if all_ok {
             if let Err(e) = kubernix.write_env_file() {
                 p.reset();
@@ -235,27 +220,7 @@ impl Kubernix {
                 return Err(e);
             }
 
-            // Deploy addons asynchronously so the shell is available
-            // sooner. Failures are logged but do not block startup.
-            // The thread handle is stored so Drop can join it before
-            // tearing down cluster processes.
-            let addon_config = kubernix.config.clone();
-            let addon_network = kubernix.network.clone();
-            let addon_kubeconfig = kubernix.kubectl.kubeconfig().to_path_buf();
-            kubernix.addon_thread = Some(thread::spawn(move || {
-                let kubectl = Kubectl::new(&addon_kubeconfig);
-                if addon_shutdown.load(Ordering::Relaxed) {
-                    return;
-                }
-                if addon_config.addons().iter().any(|a| a == "coredns") {
-                    if let Err(e) = CoreDns::apply(&addon_config, &addon_network, &kubectl) {
-                        if !addon_shutdown.load(Ordering::Relaxed) {
-                            error!("Failed to deploy CoreDNS addon: {}", e);
-                        }
-                    }
-                }
-            }));
-
+            kubernix.spawn_addons(addon_shutdown);
             info!("Everything is up and running");
             p.reset();
 
@@ -270,6 +235,38 @@ impl Kubernix {
         }
 
         Ok(())
+    }
+
+    fn register_components(config: &Config) -> ComponentRegistry {
+        let mut registry = ComponentRegistry::new();
+        registry.register(Box::new(etcd::EtcdComponent));
+        registry.register(Box::new(apiserver::ApiServerComponent));
+        registry.register(Box::new(controllermanager::ControllerManagerComponent));
+        registry.register(Box::new(scheduler::SchedulerComponent));
+        for node in 0..config.nodes() {
+            registry.register(Box::new(crio::CrioComponent::new(node)));
+            registry.register(Box::new(kubelet::KubeletComponent::new(node)));
+        }
+        registry.register(Box::new(proxy::ProxyComponent));
+        registry
+    }
+
+    fn spawn_addons(&mut self, addon_shutdown: Arc<AtomicBool>) {
+        let addon_config = self.config.clone();
+        let addon_network = self.network.clone();
+        let addon_kubeconfig = self.kubectl.kubeconfig().to_path_buf();
+        self.addon_thread = Some(thread::spawn(move || {
+            let kubectl = Kubectl::new(&addon_kubeconfig);
+            if addon_shutdown.load(Ordering::Relaxed) {
+                return;
+            }
+            if addon_config.addons().iter().any(|a| a == "coredns")
+                && let Err(e) = CoreDns::apply(&addon_config, &addon_network, &kubectl)
+                && !addon_shutdown.load(Ordering::Relaxed)
+            {
+                error!("Failed to deploy CoreDNS addon: {}", e);
+            }
+        }));
     }
 
     /// Wait until a termination signal occurs

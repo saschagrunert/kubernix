@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# cfssl version
+CFSSL_VERSION=1.6.5
+
+VERSION="${1:-$CFSSL_VERSION}"
+BASE_URL="https://github.com/cloudflare/cfssl/releases/download/v${VERSION}"
+
+curl -sLo /usr/local/bin/cfssl "${BASE_URL}/cfssl_${VERSION}_linux_amd64"
+curl -sLo /usr/local/bin/cfssljson "${BASE_URL}/cfssljson_${VERSION}_linux_amd64"
+chmod +x /usr/local/bin/cfssl /usr/local/bin/cfssljson

@@ -3,8 +3,8 @@ dependencies:
   - name: cfssl
     version: 1.6.5
     refPaths:
-      - path: .github/workflows/ci.yml
-        match: cfssl@v
+      - path: contrib/install-cfssl
+        match: CFSSL_VERSION=
 
   - name: zeitgeist
     version: 0.7.0
