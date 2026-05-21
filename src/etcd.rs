@@ -8,9 +8,8 @@ use crate::{
     config::Config,
     network::Network,
     pki::Pki,
-    process::{Process, ProcessState, Stoppable},
+    process::{Process, ProcessState, stoppable},
 };
-use anyhow::Result;
 use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
@@ -78,16 +77,13 @@ impl Etcd {
     }
 }
 
-impl Stoppable for Etcd {
-    fn stop(&mut self) -> Result<()> {
-        self.process.stop()
-    }
-}
+stoppable!(Etcd);
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{config::tests::test_config, network::tests::test_network};
+    use anyhow::Result;
 
     #[test]
     fn component_metadata() {

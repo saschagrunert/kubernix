@@ -9,9 +9,8 @@ use crate::{
     kubeconfig::KubeConfig,
     network::Network,
     pki::Pki,
-    process::{Process, ProcessState, Stoppable},
+    process::{Process, ProcessState, stoppable},
 };
-use anyhow::Result;
 use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
@@ -75,11 +74,7 @@ impl ControllerManager {
     }
 }
 
-impl Stoppable for ControllerManager {
-    fn stop(&mut self) -> Result<()> {
-        self.process.stop()
-    }
-}
+stoppable!(ControllerManager);
 
 #[cfg(test)]
 mod tests {

@@ -16,6 +16,9 @@ use std::{
     process::{Command, Stdio},
 };
 
+const RSA_KEY_SIZE: u32 = 2048;
+const CERT_EXPIRY: &str = "8760h";
+
 #[must_use]
 pub struct Pki {
     admin: Identity,
@@ -224,52 +227,48 @@ impl Pki {
                 vec![network.hostname()]
             };
 
-            let (left, right) = rayon::join(
+            type CertFn = fn(&PkiConfig) -> Result<Identity>;
+            let cert_fns: [CertFn; 6] = [
+                Self::setup_admin,
+                Self::setup_apiserver,
+                Self::setup_controller_manager,
+                Self::setup_proxy,
+                Self::setup_scheduler,
+                Self::setup_service_account,
+            ];
+
+            let (certs, kubelets) = rayon::join(
                 || {
-                    rayon::join(
-                        || {
-                            rayon::join(
-                                || Self::setup_admin(pki_config),
-                                || Self::setup_apiserver(pki_config),
-                            )
-                        },
-                        || {
-                            rayon::join(
-                                || Self::setup_controller_manager(pki_config),
-                                || Self::setup_proxy(pki_config),
-                            )
-                        },
-                    )
+                    cert_fns
+                        .into_par_iter()
+                        .map(|f| f(pki_config))
+                        .collect::<Vec<_>>()
                 },
                 || {
-                    rayon::join(
-                        || {
-                            rayon::join(
-                                || Self::setup_scheduler(pki_config),
-                                || Self::setup_service_account(pki_config),
-                            )
-                        },
-                        || {
-                            kubelet_nodes
-                                .par_iter()
-                                .map(|n| Self::setup_kubelet(pki_config, n))
-                                .collect::<Result<Vec<_>, _>>()
-                        },
-                    )
+                    kubelet_nodes
+                        .par_iter()
+                        .map(|n| Self::setup_kubelet(pki_config, n))
+                        .collect::<Result<Vec<_>>>()
                 },
             );
 
-            let ((admin, apiserver), (controller_manager, proxy)) = left;
-            let ((scheduler, service_account), kubelets) = right;
+            let mut it = certs.into_iter();
+            let admin = it.next().unwrap()?;
+            let apiserver = it.next().unwrap()?;
+            let controller_manager = it.next().unwrap()?;
+            let proxy = it.next().unwrap()?;
+            let scheduler = it.next().unwrap()?;
+            let service_account = it.next().unwrap()?;
+            debug_assert!(it.next().is_none());
 
             Ok(Pki {
-                admin: admin?,
-                apiserver: apiserver?,
-                controller_manager: controller_manager?,
+                admin,
+                apiserver,
+                controller_manager,
+                proxy,
+                scheduler,
+                service_account,
                 kubelets: kubelets?,
-                proxy: proxy?,
-                scheduler: scheduler?,
-                service_account: service_account?,
                 ca,
             })
         }
@@ -398,7 +397,7 @@ impl Pki {
             "CN": cn,
             "key": {
                 "algo": "rsa",
-                "size": 2048
+                "size": RSA_KEY_SIZE
             },
             "names": [{
                 "O": o,
@@ -413,7 +412,7 @@ impl Pki {
         let cfg = json!({
             "signing": {
                 "default": {
-                    "expiry": "8760h"
+                    "expiry": CERT_EXPIRY
                 },
                 "profiles": {
                     "kubernetes": {
@@ -423,7 +422,7 @@ impl Pki {
                             "server auth",
                             "client auth"
                         ],
-                        "expiry": "8760h"
+                        "expiry": CERT_EXPIRY
                     }
                 }
             }

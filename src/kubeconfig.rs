@@ -83,40 +83,40 @@ impl KubeConfig {
 
             // Generate all kubeconfig files in parallel since they are
             // independent of each other.
-            let (left, right) = rayon::join(
+            let identities = [
+                pki.proxy(),
+                pki.controller_manager(),
+                pki.scheduler(),
+                pki.admin(),
+            ];
+            let (configs, kubelets) = rayon::join(
                 || {
-                    rayon::join(
-                        || Self::setup_kubeconfig(&dir, pki.proxy(), ca),
-                        || Self::setup_kubeconfig(&dir, pki.controller_manager(), ca),
-                    )
+                    identities
+                        .into_par_iter()
+                        .map(|id| Self::setup_kubeconfig(&dir, id, ca))
+                        .collect::<Vec<_>>()
                 },
                 || {
-                    rayon::join(
-                        || {
-                            rayon::join(
-                                || Self::setup_kubeconfig(&dir, pki.scheduler(), ca),
-                                || Self::setup_kubeconfig(&dir, pki.admin(), ca),
-                            )
-                        },
-                        || {
-                            pki.kubelets()
-                                .par_iter()
-                                .map(|id| Self::setup_kubeconfig(&dir, id, ca))
-                                .collect::<Result<Vec<_>, _>>()
-                        },
-                    )
+                    pki.kubelets()
+                        .par_iter()
+                        .map(|id| Self::setup_kubeconfig(&dir, id, ca))
+                        .collect::<Result<Vec<_>>>()
                 },
             );
 
-            let (proxy, controller_manager) = left;
-            let ((scheduler, admin), kubelets) = right;
+            let mut it = configs.into_iter();
+            let proxy = it.next().unwrap()?;
+            let controller_manager = it.next().unwrap()?;
+            let scheduler = it.next().unwrap()?;
+            let admin = it.next().unwrap()?;
+            debug_assert!(it.next().is_none());
 
             Ok(KubeConfig {
+                proxy,
+                controller_manager,
+                scheduler,
+                admin,
                 kubelets: kubelets?,
-                proxy: proxy?,
-                controller_manager: controller_manager?,
-                scheduler: scheduler?,
-                admin: admin?,
             })
         }
     }

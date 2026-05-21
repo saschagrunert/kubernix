@@ -7,10 +7,9 @@ use crate::{
     component::{ClusterContext, Component, Phase},
     config::Config,
     kubeconfig::KubeConfig,
-    process::{Process, ProcessState, Stoppable},
+    process::{Process, ProcessState, stoppable},
     write_if_changed,
 };
-use anyhow::Result;
 use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
@@ -60,11 +59,7 @@ impl Scheduler {
     }
 }
 
-impl Stoppable for Scheduler {
-    fn stop(&mut self) -> Result<()> {
-        self.process.stop()
-    }
-}
+stoppable!(Scheduler);
 
 #[cfg(test)]
 mod tests {

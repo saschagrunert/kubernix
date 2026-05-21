@@ -45,4 +45,11 @@ mod tests {
         assert_eq!(Node::name(&c, &n, 0), *n.hostname());
         Ok(())
     }
+
+    #[test]
+    fn multi_node_names_are_unique() {
+        use std::collections::HashSet;
+        let names: HashSet<String> = (0..5).map(Node::raw).collect();
+        assert_eq!(names.len(), 5);
+    }
 }

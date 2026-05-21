@@ -234,4 +234,11 @@ mod tests {
         let reg = ComponentRegistry::new();
         assert!(reg.by_phase().is_empty());
     }
+
+    #[test]
+    fn phase_ordering() {
+        assert!(Phase::Infrastructure < Phase::ControlPlane);
+        assert!(Phase::ControlPlane < Phase::Controller);
+        assert!(Phase::Controller < Phase::NodeAgent);
+    }
 }
