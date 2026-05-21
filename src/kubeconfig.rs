@@ -156,9 +156,9 @@ impl KubeConfig {
 
         // Make kubeconfig readable for non-root users spawning
         // additional shell sessions via `kubernix shell`.
-        let file = File::open(&kubeconfig).context("unable to open kubeconfig")?;
+        let file = File::open(&kubeconfig).context("Unable to open kubeconfig")?;
         fchmod(&file, Mode::from_bits_truncate(0o644))
-            .context("unable to set kubeconfig permissions")?;
+            .context("Unable to set kubeconfig permissions")?;
 
         debug!("Kubeconfig created for {}", identity.name());
         Ok(kubeconfig)

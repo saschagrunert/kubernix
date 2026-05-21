@@ -202,6 +202,28 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - run: make lint-dependencies
 
+  test-msrv:
+    name: test / msrv
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        run: echo "version=$(grep '^rust-version' Cargo.toml | sed 's/.*"\(.*\)"/\1/')" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install cfssl
+        run: contrib/install-cfssl
+      - run: cargo test --lib
+
   test-unit:
     name: test / unit
     runs-on: ubuntu-latest
@@ -218,18 +240,8 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: |
-            ~/go/bin
-            ~/go/pkg
-            ~/bin
-          key: ${{ runner.os }}-test-tools-cfssl-1.6.5
-      - name: Install test dependencies
-        run: |
-          go install github.com/cloudflare/cfssl/cmd/cfssl@v1.6.5
-          go install github.com/cloudflare/cfssl/cmd/cfssljson@v1.6.5
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+      - name: Install cfssl
+        run: contrib/install-cfssl
       - name: Generate code coverage
         run: cargo llvm-cov --all-features --lib --lcov --output-path lcov.info
       - name: Upload Results
