@@ -48,4 +48,15 @@ mod tests {
         assert!(yml.contains("clusterIP: 10.10.1.2"));
         assert!(yml.contains("k8s-app: coredns"));
     }
+
+    #[test]
+    fn render_contains_resource_kinds() {
+        let yml = CoreDns::render(Ipv4Addr::new(10, 0, 0, 2));
+        assert!(yml.contains("kind: ServiceAccount"));
+        assert!(yml.contains("kind: ClusterRole"));
+        assert!(yml.contains("kind: ClusterRoleBinding"));
+        assert!(yml.contains("kind: ConfigMap"));
+        assert!(yml.contains("kind: Deployment"));
+        assert!(yml.contains("kind: Service"));
+    }
 }

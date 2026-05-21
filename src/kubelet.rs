@@ -12,11 +12,14 @@ use crate::{
     network::Network,
     node::Node,
     pki::Pki,
-    process::{Process, ProcessState, Stoppable},
+    process::{Process, ProcessState, stoppable},
     write_if_changed,
 };
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, bail};
 use std::fs::create_dir_all;
+
+const KUBELET_PORT_BASE: u16 = 11250;
+const HEALTHZ_PORT_BASE: u16 = 12250;
 
 /// Component wrapper for registry-based startup (per-node).
 pub struct KubeletComponent {
@@ -94,8 +97,8 @@ impl Kubelet {
                 .context("Unable to retrieve kubelet CIDR")?,
             cert = identity.cert().display(),
             key = identity.key().display(),
-            port = 11250 + u16::from(node),
-            healthzPort = 12250 + u16::from(node),
+            port = KUBELET_PORT_BASE + u16::from(node),
+            healthzPort = HEALTHZ_PORT_BASE + u16::from(node),
         );
         let cfg = dir.join("config.yml");
         write_if_changed(&cfg, &yml)?;
@@ -143,11 +146,7 @@ impl Kubelet {
     }
 }
 
-impl Stoppable for Kubelet {
-    fn stop(&mut self) -> Result<()> {
-        self.process.stop()
-    }
-}
+stoppable!(Kubelet);
 
 #[cfg(test)]
 mod tests {
@@ -163,16 +162,16 @@ mod tests {
             cidr = "10.10.128.0/18",
             cert = "/tmp/kubelet.pem",
             key = "/tmp/kubelet-key.pem",
-            port = 11250,
-            healthzPort = 12250,
+            port = KUBELET_PORT_BASE,
+            healthzPort = HEALTHZ_PORT_BASE,
         );
         assert!(yml.contains("kind: KubeletConfiguration"));
         assert!(yml.contains("clientCAFile: \"/tmp/ca.pem\""));
         assert!(yml.contains("clusterDNS:"));
         assert!(yml.contains("- \"10.10.64.2\""));
         assert!(yml.contains("podCIDR: \"10.10.128.0/18\""));
-        assert!(yml.contains("port: 11250"));
-        assert!(yml.contains("healthzPort: 12250"));
+        assert!(yml.contains(&format!("port: {}", KUBELET_PORT_BASE)));
+        assert!(yml.contains(&format!("healthzPort: {}", HEALTHZ_PORT_BASE)));
     }
 
     #[test]

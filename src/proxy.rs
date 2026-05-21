@@ -9,10 +9,9 @@ use crate::{
     kubeconfig::KubeConfig,
     network::Network,
     node::Node,
-    process::{Process, ProcessState, Stoppable},
+    process::{Process, ProcessState, stoppable},
     write_if_changed,
 };
-use anyhow::Result;
 use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
@@ -75,11 +74,7 @@ impl Proxy {
     }
 }
 
-impl Stoppable for Proxy {
-    fn stop(&mut self) -> Result<()> {
-        self.process.stop()
-    }
-}
+stoppable!(Proxy);
 
 #[cfg(test)]
 mod tests {

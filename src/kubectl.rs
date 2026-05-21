@@ -3,6 +3,7 @@
 //! Provides a typed interface around the `kubectl` binary for applying
 //! manifests, configuring kubeconfig files, and waiting for pod readiness.
 
+use crate::process::READINESS_TIMEOUT;
 use anyhow::{Result, bail};
 use log::{debug, trace};
 use std::{
@@ -64,9 +65,8 @@ impl Kubectl {
     /// Wait for a pod to be ready
     pub fn wait_ready(&self, name: &str) -> Result<()> {
         debug!("Waiting for {} to be ready", name);
-        const TIMEOUT: u64 = 120;
         let now = Instant::now();
-        while now.elapsed().as_secs() < TIMEOUT {
+        while now.elapsed().as_secs() < READINESS_TIMEOUT {
             let output = self.execute(&[
                 "get",
                 "pods",
@@ -81,7 +81,7 @@ impl Kubectl {
                     name,
                     status,
                     now.elapsed().as_secs(),
-                    TIMEOUT,
+                    READINESS_TIMEOUT,
                 );
                 if stdout.contains("1/1") {
                     debug!("{} ready", name);
@@ -92,7 +92,7 @@ impl Kubectl {
                     "{} status not available ({}/{}s)",
                     name,
                     now.elapsed().as_secs(),
-                    TIMEOUT,
+                    READINESS_TIMEOUT,
                 )
             }
             sleep(Duration::from_secs(2));
@@ -111,5 +111,12 @@ mod tests {
         let k = Kubectl::new(&PathBuf::from(""));
         k.execute(&[])?;
         Ok(())
+    }
+
+    #[test]
+    fn kubeconfig_path() {
+        let path = PathBuf::from("/tmp/test.kubeconfig");
+        let k = Kubectl::new(&path);
+        assert_eq!(k.kubeconfig(), path);
     }
 }

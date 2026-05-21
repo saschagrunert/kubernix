@@ -10,7 +10,7 @@ use crate::{
     kubectl::Kubectl,
     network::Network,
     pki::Pki,
-    process::{Process, ProcessState, Stoppable},
+    process::{Process, ProcessState, stoppable},
     write_if_changed,
 };
 use anyhow::{Context, Result};
@@ -123,11 +123,7 @@ impl ApiServer {
     }
 }
 
-impl Stoppable for ApiServer {
-    fn stop(&mut self) -> Result<()> {
-        self.process.stop()
-    }
-}
+stoppable!(ApiServer);
 
 #[cfg(test)]
 mod tests {

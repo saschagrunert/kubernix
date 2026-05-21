@@ -49,6 +49,20 @@ pub type Stoppables = Vec<Started>;
 /// The result of starting a component process, either a stoppable handle or an error.
 pub type ProcessState = Result<Started>;
 
+/// Default timeout in seconds for process readiness and pod polling.
+pub const READINESS_TIMEOUT: u64 = 120;
+
+macro_rules! stoppable {
+    ($ty:ty) => {
+        impl $crate::process::Stoppable for $ty {
+            fn stop(&mut self) -> anyhow::Result<()> {
+                self.process.stop()
+            }
+        }
+    };
+}
+pub(crate) use stoppable;
+
 #[derive(Deserialize, Serialize)]
 struct Run {
     command: PathBuf,
@@ -132,7 +146,7 @@ impl Process {
             log_file,
             name: identifier.into(),
             pid,
-            readiness_timeout: 120,
+            readiness_timeout: READINESS_TIMEOUT,
             watch: Some(watch),
         })
     }
