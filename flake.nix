@@ -2,7 +2,7 @@
   description = "KuberNix - Single dependency Kubernetes clusters for local testing";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
   };
 
   outputs =
