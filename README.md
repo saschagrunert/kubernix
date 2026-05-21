@@ -64,6 +64,24 @@ The following technology stack is currently being used:
 Some other tools are not explicitly mentioned here, because they are no
 first-level dependencies.
 
+### Boot Phases
+
+Components start in four sequential phases. Within each phase, components
+start in parallel. If any component in a phase fails, subsequent phases
+are skipped.
+
+```mermaid
+graph TD
+    A["Phase 1: Infrastructure"] --> B["Phase 2: ControlPlane"]
+    B --> C["Phase 3: Controller"]
+    C --> D["Phase 4: NodeAgent"]
+
+    A --- etcd
+    B --- apiserver
+    C --- scheduler & controller-manager & cri-o["cri-o (x N)"] & proxy
+    D --- kubelet["kubelet (x N)"]
+```
+
 ### Single Dependency
 
 #### With Nix
@@ -207,7 +225,7 @@ components. For example, etcd gets started via:
 
 ```json
 {
-  "command": "/nix/store/…-etcd-3.6.9-bin/bin/etcd",
+  "command": "/nix/store/…-etcd-3.6.11-bin/bin/etcd",
   "args": [
     "--advertise-client-urls=https://127.0.0.1:2379",
     "--client-cert-auth",
