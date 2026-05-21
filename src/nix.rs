@@ -184,26 +184,6 @@ impl Nix {
     pub fn is_active() -> bool {
         var(Nix::NIX_ENV).is_ok()
     }
-
-    /// Set the NIX_ENV marker so re-exec knows we are inside Nix.
-    ///
-    /// # Safety
-    /// Callers must ensure no other threads are concurrently reading
-    /// or writing environment variables.
-    #[cfg(test)]
-    pub fn set_env_marker() {
-        unsafe { std::env::set_var(Self::NIX_ENV, "true") };
-    }
-
-    /// Remove the NIX_ENV marker.
-    ///
-    /// # Safety
-    /// Callers must ensure no other threads are concurrently reading
-    /// or writing environment variables.
-    #[cfg(test)]
-    pub fn remove_env_marker() {
-        unsafe { std::env::remove_var(Self::NIX_ENV) };
-    }
 }
 
 #[cfg(test)]
@@ -272,15 +252,13 @@ mod tests {
         assert!(parsed["nodes"]["nixpkgs"]["locked"]["rev"].is_string());
     }
 
-    /// Tests env marker set/unset in a single test to avoid racing
-    /// on the shared IN_NIX environment variable in parallel runs.
     #[test]
     fn is_active_toggle() {
-        Nix::remove_env_marker();
-        assert!(!Nix::is_active());
-        Nix::set_env_marker();
-        assert!(Nix::is_active());
-        Nix::remove_env_marker();
-        assert!(!Nix::is_active());
+        temp_env::with_var(Nix::NIX_ENV, None::<&str>, || {
+            assert!(!Nix::is_active());
+        });
+        temp_env::with_var(Nix::NIX_ENV, Some("true"), || {
+            assert!(Nix::is_active());
+        });
     }
 }

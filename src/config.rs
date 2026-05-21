@@ -11,7 +11,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// Output format for log messages
+/// Output format for log messages.
+///
+/// ```
+/// use kubernix::LogFormat;
+///
+/// assert_eq!(LogFormat::Text.to_string(), "text");
+/// assert_eq!(LogFormat::Json.to_string(), "json");
+/// ```
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize, ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum LogFormat {
