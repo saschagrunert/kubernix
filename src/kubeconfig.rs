@@ -132,7 +132,7 @@ impl KubeConfig {
             "set-cluster",
             cluster,
             &format!("--certificate-authority={}", ca.display()),
-            &format!("--server=https://{}:6443", &Ipv4Addr::LOCALHOST),
+            &format!("--server=https://{}:6443", Ipv4Addr::LOCALHOST),
             embed_certs,
         ])?;
 
