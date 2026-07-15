@@ -353,91 +353,105 @@
 <a href=#353 id=353 data-nosnippet>353</a>
 <a href=#354 id=354 data-nosnippet>354</a>    <span class="attr">#[test]
 <a href=#355 id=355 data-nosnippet>355</a>    </span><span class="kw">fn </span>canonicalize_root_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config::default();
-<a href=#357 id=357 data-nosnippet>357</a>        c.root = tempdir()<span class="question-mark">?</span>.keep();
-<a href=#358 id=358 data-nosnippet>358</a>        c.canonicalize_root()
-<a href=#359 id=359 data-nosnippet>359</a>    }
-<a href=#360 id=360 data-nosnippet>360</a>
-<a href=#361 id=361 data-nosnippet>361</a>    <span class="attr">#[test]
-<a href=#362 id=362 data-nosnippet>362</a>    </span><span class="kw">fn </span>canonicalize_root_failure() {
-<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config::default();
-<a href=#364 id=364 data-nosnippet>364</a>        c.root = Path::new(<span class="string">"/"</span>).join(<span class="string">"proc"</span>).join(<span class="string">"invalid"</span>);
-<a href=#365 id=365 data-nosnippet>365</a>        <span class="macro">assert!</span>(c.canonicalize_root().is_err())
-<a href=#366 id=366 data-nosnippet>366</a>    }
-<a href=#367 id=367 data-nosnippet>367</a>
-<a href=#368 id=368 data-nosnippet>368</a>    <span class="attr">#[test]
-<a href=#369 id=369 data-nosnippet>369</a>    </span><span class="kw">fn </span>to_file_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config::default();
-<a href=#371 id=371 data-nosnippet>371</a>        c.root = tempdir()<span class="question-mark">?</span>.keep();
-<a href=#372 id=372 data-nosnippet>372</a>        c.to_file()
-<a href=#373 id=373 data-nosnippet>373</a>    }
-<a href=#374 id=374 data-nosnippet>374</a>
-<a href=#375 id=375 data-nosnippet>375</a>    <span class="attr">#[test]
-<a href=#376 id=376 data-nosnippet>376</a>    </span><span class="kw">fn </span>to_file_failure() {
-<a href=#377 id=377 data-nosnippet>377</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config::default();
-<a href=#378 id=378 data-nosnippet>378</a>        c.root = Path::new(<span class="string">"/"</span>).join(<span class="string">"proc"</span>).join(<span class="string">"invalid"</span>);
-<a href=#379 id=379 data-nosnippet>379</a>        <span class="macro">assert!</span>(c.to_file().is_err())
-<a href=#380 id=380 data-nosnippet>380</a>    }
-<a href=#381 id=381 data-nosnippet>381</a>
-<a href=#382 id=382 data-nosnippet>382</a>    <span class="attr">#[test]
-<a href=#383 id=383 data-nosnippet>383</a>    </span><span class="kw">fn </span>try_load_file_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config::default();
-<a href=#385 id=385 data-nosnippet>385</a>        c.root = tempdir()<span class="question-mark">?</span>.keep();
-<a href=#386 id=386 data-nosnippet>386</a>        fs::write(
-<a href=#387 id=387 data-nosnippet>387</a>            c.root.join(Config::FILENAME),
-<a href=#388 id=388 data-nosnippet>388</a>            <span class="string">r#"
-<a href=#389 id=389 data-nosnippet>389</a>addons = ["coredns"]
-<a href=#390 id=390 data-nosnippet>390</a>cidr = "1.1.1.1/16"
-<a href=#391 id=391 data-nosnippet>391</a>container-runtime = "podman"
-<a href=#392 id=392 data-nosnippet>392</a>log-format = "text"
-<a href=#393 id=393 data-nosnippet>393</a>log-level = "DEBUG"
-<a href=#394 id=394 data-nosnippet>394</a>no-shell = false
-<a href=#395 id=395 data-nosnippet>395</a>nodes = 1
-<a href=#396 id=396 data-nosnippet>396</a>packages = []
-<a href=#397 id=397 data-nosnippet>397</a>root = "root"
-<a href=#398 id=398 data-nosnippet>398</a>            "#</span>,
-<a href=#399 id=399 data-nosnippet>399</a>        )<span class="question-mark">?</span>;
-<a href=#400 id=400 data-nosnippet>400</a>        c.try_load_file()<span class="question-mark">?</span>;
-<a href=#401 id=401 data-nosnippet>401</a>        <span class="macro">assert_eq!</span>(c.root(), Path::new(<span class="string">"root"</span>));
-<a href=#402 id=402 data-nosnippet>402</a>        <span class="macro">assert_eq!</span>(c.log_level(), LevelFilter::Debug);
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="macro">assert_eq!</span>(c.log_format(), LogFormat::Text);
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>c.cidr().to_string(), <span class="string">"1.1.1.1/16"</span>);
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="macro">assert!</span>(c.dockerfile().is_none());
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="prelude-val">Ok</span>(())
-<a href=#407 id=407 data-nosnippet>407</a>    }
-<a href=#408 id=408 data-nosnippet>408</a>
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="attr">#[test]
-<a href=#410 id=410 data-nosnippet>410</a>    </span><span class="kw">fn </span>try_load_file_with_dockerfile() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config::default();
-<a href=#412 id=412 data-nosnippet>412</a>        c.root = tempdir()<span class="question-mark">?</span>.keep();
-<a href=#413 id=413 data-nosnippet>413</a>        fs::write(
-<a href=#414 id=414 data-nosnippet>414</a>            c.root.join(Config::FILENAME),
-<a href=#415 id=415 data-nosnippet>415</a>            <span class="string">r#"
-<a href=#416 id=416 data-nosnippet>416</a>addons = ["coredns"]
-<a href=#417 id=417 data-nosnippet>417</a>cidr = "1.1.1.1/16"
-<a href=#418 id=418 data-nosnippet>418</a>container-runtime = "podman"
-<a href=#419 id=419 data-nosnippet>419</a>dockerfile = "/tmp/MyDockerfile"
-<a href=#420 id=420 data-nosnippet>420</a>log-format = "json"
-<a href=#421 id=421 data-nosnippet>421</a>log-level = "DEBUG"
-<a href=#422 id=422 data-nosnippet>422</a>no-shell = false
-<a href=#423 id=423 data-nosnippet>423</a>nodes = 1
-<a href=#424 id=424 data-nosnippet>424</a>packages = []
-<a href=#425 id=425 data-nosnippet>425</a>root = "root"
-<a href=#426 id=426 data-nosnippet>426</a>            "#</span>,
-<a href=#427 id=427 data-nosnippet>427</a>        )<span class="question-mark">?</span>;
-<a href=#428 id=428 data-nosnippet>428</a>        c.try_load_file()<span class="question-mark">?</span>;
-<a href=#429 id=429 data-nosnippet>429</a>        <span class="macro">assert_eq!</span>(c.log_format(), LogFormat::Json);
-<a href=#430 id=430 data-nosnippet>430</a>        <span class="macro">assert_eq!</span>(c.dockerfile(), <span class="prelude-val">Some</span>(Path::new(<span class="string">"/tmp/MyDockerfile"</span>)));
-<a href=#431 id=431 data-nosnippet>431</a>        <span class="prelude-val">Ok</span>(())
-<a href=#432 id=432 data-nosnippet>432</a>    }
-<a href=#433 id=433 data-nosnippet>433</a>
-<a href=#434 id=434 data-nosnippet>434</a>    <span class="attr">#[test]
-<a href=#435 id=435 data-nosnippet>435</a>    </span><span class="kw">fn </span>try_load_file_failure() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#436 id=436 data-nosnippet>436</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config::default();
-<a href=#437 id=437 data-nosnippet>437</a>        c.root = tempdir()<span class="question-mark">?</span>.keep();
-<a href=#438 id=438 data-nosnippet>438</a>        fs::write(c.root.join(Config::FILENAME), <span class="string">"invalid"</span>)<span class="question-mark">?</span>;
-<a href=#439 id=439 data-nosnippet>439</a>        <span class="macro">assert!</span>(c.try_load_file().is_err());
-<a href=#440 id=440 data-nosnippet>440</a>        <span class="prelude-val">Ok</span>(())
-<a href=#441 id=441 data-nosnippet>441</a>    }
-<a href=#442 id=442 data-nosnippet>442</a>}
+<a href=#356 id=356 data-nosnippet>356</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config {
+<a href=#357 id=357 data-nosnippet>357</a>            root: tempdir()<span class="question-mark">?</span>.keep(),
+<a href=#358 id=358 data-nosnippet>358</a>            ..Config::default()
+<a href=#359 id=359 data-nosnippet>359</a>        };
+<a href=#360 id=360 data-nosnippet>360</a>        c.canonicalize_root()
+<a href=#361 id=361 data-nosnippet>361</a>    }
+<a href=#362 id=362 data-nosnippet>362</a>
+<a href=#363 id=363 data-nosnippet>363</a>    <span class="attr">#[test]
+<a href=#364 id=364 data-nosnippet>364</a>    </span><span class="kw">fn </span>canonicalize_root_failure() {
+<a href=#365 id=365 data-nosnippet>365</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config {
+<a href=#366 id=366 data-nosnippet>366</a>            root: Path::new(<span class="string">"/"</span>).join(<span class="string">"proc"</span>).join(<span class="string">"invalid"</span>),
+<a href=#367 id=367 data-nosnippet>367</a>            ..Config::default()
+<a href=#368 id=368 data-nosnippet>368</a>        };
+<a href=#369 id=369 data-nosnippet>369</a>        <span class="macro">assert!</span>(c.canonicalize_root().is_err())
+<a href=#370 id=370 data-nosnippet>370</a>    }
+<a href=#371 id=371 data-nosnippet>371</a>
+<a href=#372 id=372 data-nosnippet>372</a>    <span class="attr">#[test]
+<a href=#373 id=373 data-nosnippet>373</a>    </span><span class="kw">fn </span>to_file_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#374 id=374 data-nosnippet>374</a>        <span class="kw">let </span>c = Config {
+<a href=#375 id=375 data-nosnippet>375</a>            root: tempdir()<span class="question-mark">?</span>.keep(),
+<a href=#376 id=376 data-nosnippet>376</a>            ..Config::default()
+<a href=#377 id=377 data-nosnippet>377</a>        };
+<a href=#378 id=378 data-nosnippet>378</a>        c.to_file()
+<a href=#379 id=379 data-nosnippet>379</a>    }
+<a href=#380 id=380 data-nosnippet>380</a>
+<a href=#381 id=381 data-nosnippet>381</a>    <span class="attr">#[test]
+<a href=#382 id=382 data-nosnippet>382</a>    </span><span class="kw">fn </span>to_file_failure() {
+<a href=#383 id=383 data-nosnippet>383</a>        <span class="kw">let </span>c = Config {
+<a href=#384 id=384 data-nosnippet>384</a>            root: Path::new(<span class="string">"/"</span>).join(<span class="string">"proc"</span>).join(<span class="string">"invalid"</span>),
+<a href=#385 id=385 data-nosnippet>385</a>            ..Config::default()
+<a href=#386 id=386 data-nosnippet>386</a>        };
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="macro">assert!</span>(c.to_file().is_err())
+<a href=#388 id=388 data-nosnippet>388</a>    }
+<a href=#389 id=389 data-nosnippet>389</a>
+<a href=#390 id=390 data-nosnippet>390</a>    <span class="attr">#[test]
+<a href=#391 id=391 data-nosnippet>391</a>    </span><span class="kw">fn </span>try_load_file_success() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config {
+<a href=#393 id=393 data-nosnippet>393</a>            root: tempdir()<span class="question-mark">?</span>.keep(),
+<a href=#394 id=394 data-nosnippet>394</a>            ..Config::default()
+<a href=#395 id=395 data-nosnippet>395</a>        };
+<a href=#396 id=396 data-nosnippet>396</a>        fs::write(
+<a href=#397 id=397 data-nosnippet>397</a>            c.root.join(Config::FILENAME),
+<a href=#398 id=398 data-nosnippet>398</a>            <span class="string">r#"
+<a href=#399 id=399 data-nosnippet>399</a>addons = ["coredns"]
+<a href=#400 id=400 data-nosnippet>400</a>cidr = "1.1.1.1/16"
+<a href=#401 id=401 data-nosnippet>401</a>container-runtime = "podman"
+<a href=#402 id=402 data-nosnippet>402</a>log-format = "text"
+<a href=#403 id=403 data-nosnippet>403</a>log-level = "DEBUG"
+<a href=#404 id=404 data-nosnippet>404</a>no-shell = false
+<a href=#405 id=405 data-nosnippet>405</a>nodes = 1
+<a href=#406 id=406 data-nosnippet>406</a>packages = []
+<a href=#407 id=407 data-nosnippet>407</a>root = "root"
+<a href=#408 id=408 data-nosnippet>408</a>            "#</span>,
+<a href=#409 id=409 data-nosnippet>409</a>        )<span class="question-mark">?</span>;
+<a href=#410 id=410 data-nosnippet>410</a>        c.try_load_file()<span class="question-mark">?</span>;
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="macro">assert_eq!</span>(c.root(), Path::new(<span class="string">"root"</span>));
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="macro">assert_eq!</span>(c.log_level(), LevelFilter::Debug);
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="macro">assert_eq!</span>(c.log_format(), LogFormat::Text);
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="macro">assert_eq!</span>(<span class="kw-2">&amp;</span>c.cidr().to_string(), <span class="string">"1.1.1.1/16"</span>);
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="macro">assert!</span>(c.dockerfile().is_none());
+<a href=#416 id=416 data-nosnippet>416</a>        <span class="prelude-val">Ok</span>(())
+<a href=#417 id=417 data-nosnippet>417</a>    }
+<a href=#418 id=418 data-nosnippet>418</a>
+<a href=#419 id=419 data-nosnippet>419</a>    <span class="attr">#[test]
+<a href=#420 id=420 data-nosnippet>420</a>    </span><span class="kw">fn </span>try_load_file_with_dockerfile() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#421 id=421 data-nosnippet>421</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config {
+<a href=#422 id=422 data-nosnippet>422</a>            root: tempdir()<span class="question-mark">?</span>.keep(),
+<a href=#423 id=423 data-nosnippet>423</a>            ..Config::default()
+<a href=#424 id=424 data-nosnippet>424</a>        };
+<a href=#425 id=425 data-nosnippet>425</a>        fs::write(
+<a href=#426 id=426 data-nosnippet>426</a>            c.root.join(Config::FILENAME),
+<a href=#427 id=427 data-nosnippet>427</a>            <span class="string">r#"
+<a href=#428 id=428 data-nosnippet>428</a>addons = ["coredns"]
+<a href=#429 id=429 data-nosnippet>429</a>cidr = "1.1.1.1/16"
+<a href=#430 id=430 data-nosnippet>430</a>container-runtime = "podman"
+<a href=#431 id=431 data-nosnippet>431</a>dockerfile = "/tmp/MyDockerfile"
+<a href=#432 id=432 data-nosnippet>432</a>log-format = "json"
+<a href=#433 id=433 data-nosnippet>433</a>log-level = "DEBUG"
+<a href=#434 id=434 data-nosnippet>434</a>no-shell = false
+<a href=#435 id=435 data-nosnippet>435</a>nodes = 1
+<a href=#436 id=436 data-nosnippet>436</a>packages = []
+<a href=#437 id=437 data-nosnippet>437</a>root = "root"
+<a href=#438 id=438 data-nosnippet>438</a>            "#</span>,
+<a href=#439 id=439 data-nosnippet>439</a>        )<span class="question-mark">?</span>;
+<a href=#440 id=440 data-nosnippet>440</a>        c.try_load_file()<span class="question-mark">?</span>;
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="macro">assert_eq!</span>(c.log_format(), LogFormat::Json);
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="macro">assert_eq!</span>(c.dockerfile(), <span class="prelude-val">Some</span>(Path::new(<span class="string">"/tmp/MyDockerfile"</span>)));
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="prelude-val">Ok</span>(())
+<a href=#444 id=444 data-nosnippet>444</a>    }
+<a href=#445 id=445 data-nosnippet>445</a>
+<a href=#446 id=446 data-nosnippet>446</a>    <span class="attr">#[test]
+<a href=#447 id=447 data-nosnippet>447</a>    </span><span class="kw">fn </span>try_load_file_failure() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = Config {
+<a href=#449 id=449 data-nosnippet>449</a>            root: tempdir()<span class="question-mark">?</span>.keep(),
+<a href=#450 id=450 data-nosnippet>450</a>            ..Config::default()
+<a href=#451 id=451 data-nosnippet>451</a>        };
+<a href=#452 id=452 data-nosnippet>452</a>        fs::write(c.root.join(Config::FILENAME), <span class="string">"invalid"</span>)<span class="question-mark">?</span>;
+<a href=#453 id=453 data-nosnippet>453</a>        <span class="macro">assert!</span>(c.try_load_file().is_err());
+<a href=#454 id=454 data-nosnippet>454</a>        <span class="prelude-val">Ok</span>(())
+<a href=#455 id=455 data-nosnippet>455</a>    }
+<a href=#456 id=456 data-nosnippet>456</a>}
 </code></pre></div></section></main></body></html>
