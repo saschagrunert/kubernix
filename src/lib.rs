@@ -385,6 +385,39 @@ impl Kubernix {
     }
 }
 
+impl Drop for Kubernix {
+    fn drop(&mut self) {
+        let p = Progress::new(Self::processes(&self.config), self.config.log_level());
+
+        info!("Cleaning up");
+
+        // Signal the addon thread to stop and give it a short window
+        // to finish. If it does not complete in time, proceed with
+        // shutdown rather than blocking for up to 120s.
+        self.addon_shutdown.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.addon_thread.take() {
+            debug!("Waiting for addon deployment to finish");
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !handle.is_finished() && Instant::now() < deadline {
+                sleep(Duration::from_millis(100));
+            }
+            if handle.is_finished() {
+                let _ = handle.join();
+            } else {
+                debug!("Addon thread did not finish in time, proceeding with shutdown");
+            }
+        }
+
+        self.stop();
+        self.umount();
+        self.system.cleanup();
+        info!("Cleanup done");
+
+        p.reset();
+        debug!("All done");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -447,38 +480,5 @@ mod tests {
         let dir = tempdir().unwrap();
         let points = Kubernix::read_mount_points(dir.path()).unwrap();
         assert!(points.is_empty());
-    }
-}
-
-impl Drop for Kubernix {
-    fn drop(&mut self) {
-        let p = Progress::new(Self::processes(&self.config), self.config.log_level());
-
-        info!("Cleaning up");
-
-        // Signal the addon thread to stop and give it a short window
-        // to finish. If it does not complete in time, proceed with
-        // shutdown rather than blocking for up to 120s.
-        self.addon_shutdown.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.addon_thread.take() {
-            debug!("Waiting for addon deployment to finish");
-            let deadline = Instant::now() + Duration::from_secs(5);
-            while !handle.is_finished() && Instant::now() < deadline {
-                sleep(Duration::from_millis(100));
-            }
-            if handle.is_finished() {
-                let _ = handle.join();
-            } else {
-                debug!("Addon thread did not finish in time, proceeding with shutdown");
-            }
-        }
-
-        self.stop();
-        self.umount();
-        self.system.cleanup();
-        info!("Cleanup done");
-
-        p.reset();
-        debug!("All done");
     }
 }

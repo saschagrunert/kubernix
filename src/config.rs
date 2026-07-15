@@ -353,36 +353,46 @@ pub mod tests {
 
     #[test]
     fn canonicalize_root_success() -> Result<()> {
-        let mut c = Config::default();
-        c.root = tempdir()?.keep();
+        let mut c = Config {
+            root: tempdir()?.keep(),
+            ..Config::default()
+        };
         c.canonicalize_root()
     }
 
     #[test]
     fn canonicalize_root_failure() {
-        let mut c = Config::default();
-        c.root = Path::new("/").join("proc").join("invalid");
+        let mut c = Config {
+            root: Path::new("/").join("proc").join("invalid"),
+            ..Config::default()
+        };
         assert!(c.canonicalize_root().is_err())
     }
 
     #[test]
     fn to_file_success() -> Result<()> {
-        let mut c = Config::default();
-        c.root = tempdir()?.keep();
+        let c = Config {
+            root: tempdir()?.keep(),
+            ..Config::default()
+        };
         c.to_file()
     }
 
     #[test]
     fn to_file_failure() {
-        let mut c = Config::default();
-        c.root = Path::new("/").join("proc").join("invalid");
+        let c = Config {
+            root: Path::new("/").join("proc").join("invalid"),
+            ..Config::default()
+        };
         assert!(c.to_file().is_err())
     }
 
     #[test]
     fn try_load_file_success() -> Result<()> {
-        let mut c = Config::default();
-        c.root = tempdir()?.keep();
+        let mut c = Config {
+            root: tempdir()?.keep(),
+            ..Config::default()
+        };
         fs::write(
             c.root.join(Config::FILENAME),
             r#"
@@ -408,8 +418,10 @@ root = "root"
 
     #[test]
     fn try_load_file_with_dockerfile() -> Result<()> {
-        let mut c = Config::default();
-        c.root = tempdir()?.keep();
+        let mut c = Config {
+            root: tempdir()?.keep(),
+            ..Config::default()
+        };
         fs::write(
             c.root.join(Config::FILENAME),
             r#"
@@ -433,8 +445,10 @@ root = "root"
 
     #[test]
     fn try_load_file_failure() -> Result<()> {
-        let mut c = Config::default();
-        c.root = tempdir()?.keep();
+        let mut c = Config {
+            root: tempdir()?.keep(),
+            ..Config::default()
+        };
         fs::write(c.root.join(Config::FILENAME), "invalid")?;
         assert!(c.try_load_file().is_err());
         Ok(())
