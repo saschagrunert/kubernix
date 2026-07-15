@@ -43,23 +43,23 @@ The following technology stack is currently being used:
 | Application     | Version  |
 | --------------- | -------- |
 | cfssl           | v1.6.5   |
-| cni-plugins     | v1.9.0   |
+| cni-plugins     | v1.9.1   |
 | conmon          | v2.2.1   |
 | conntrack-tools | v1.4.8   |
-| cri-o-wrapper   | v1.36.0  |
+| cri-o-wrapper   | v1.36.2  |
 | cri-tools       | v1.36.0  |
 | crun            | v1.27.1  |
-| etcd            | v3.6.11  |
-| iproute2        | v6.19.0  |
+| etcd            | v3.6.13  |
+| iproute2        | v7.1.0   |
 | iptables        | v1.8.13  |
 | kmod            | v31      |
-| kubectl         | v1.36.1  |
-| kubernetes      | v1.36.1  |
-| nss-cacert      | v3.121   |
-| podman          | v5.8.2   |
-| socat           | v1.8.1.1 |
+| kubectl         | v1.36.2  |
+| kubernetes      | v1.36.2  |
+| nss-cacert      | v3.125   |
+| podman          | v5.8.4   |
+| socat           | v1.8.1.3 |
 | sysctl          | v4.0.6   |
-| util-linux      | v2.42    |
+| util-linux      | v2.42.2  |
 
 Some other tools are not explicitly mentioned here, because they are no
 first-level dependencies.
@@ -291,8 +291,8 @@ $ sudo kubernix --overlay overlay.nix
 [INFO ] Nix environment not found, bootstrapping one
 [INFO ] Using custom overlay 'overlay.nix'
 these derivations will be built:
-  /nix/store/…-cri-o-1.36.0.drv
-  building '/nix/store/…-cri-o-1.36.0.drv'...
+  /nix/store/…-cri-o-1.36.2.drv
+  building '/nix/store/…-cri-o-1.36.2.drv'...
 ```
 
 Using this technique makes it easy for daily development of Kubernetes
