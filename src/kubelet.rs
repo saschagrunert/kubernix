@@ -1,13 +1,13 @@
 //! Kubernetes kubelet node agent component.
 //!
 //! Runs `kubelet` on each node, responsible for managing pods and
-//! containers via the CRI-O container runtime.
+//! containers via the configured CRI runtime.
 
 use crate::{
     component::{ClusterContext, Component, Phase},
     config::Config,
     container::Container,
-    crio::{Crio, MAX_SOCKET_PATH_LEN},
+    cri::{self, MAX_SOCKET_PATH_LEN},
     kubeconfig::KubeConfig,
     network::Network,
     node::Node,
@@ -92,7 +92,7 @@ impl Kubelet {
             ca = pki.ca().cert().display(),
             dns = network.dns()?,
             cidr = network
-                .crio_cidrs()
+                .pod_cidrs()
                 .get(node as usize)
                 .context("Unable to retrieve kubelet CIDR")?,
             cert = identity.cert().display(),
@@ -108,7 +108,7 @@ impl Kubelet {
             &format!("--root-dir={}", root_dir.display()),
             &format!(
                 "--container-runtime-endpoint={}",
-                Crio::socket(config, network, node)?.to_socket_string(),
+                cri::cri_socket(config, network, node)?.to_socket_string(),
             ),
             &format!(
                 "--kubeconfig={}",
@@ -151,7 +151,7 @@ stoppable!(Kubelet);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crio::MAX_SOCKET_PATH_LEN;
+    use crate::cri::MAX_SOCKET_PATH_LEN;
 
     #[test]
     fn config_template_renders() {

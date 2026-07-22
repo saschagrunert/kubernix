@@ -46,6 +46,7 @@ The following technology stack is currently being used:
 | cni-plugins     | v1.9.1   |
 | conmon          | v2.2.1   |
 | conntrack-tools | v1.4.8   |
+| containerd      | v2.3.1   |
 | cri-o-wrapper   | v1.36.2  |
 | cri-tools       | v1.36.0  |
 | crun            | v1.27.1  |
@@ -78,7 +79,7 @@ graph TD
 
     A --- etcd
     B --- apiserver
-    C --- scheduler & controller-manager & cri-o["cri-o (x N)"] & proxy
+    C --- scheduler & controller-manager & cri["cri-o or containerd (x N)"] & proxy
     D --- kubelet["kubelet (x N)"]
 ```
 
@@ -153,7 +154,7 @@ the current one:
 apiserver/
 controllermanager/
 coredns/
-crio/
+crio/          # or containerd/ when using --cri-runtime=containerd
 encryptionconfig/
 etcd/
 kubeconfig/
@@ -174,7 +175,7 @@ available within their corresponding directory:
 > ls -1 **.log
 apiserver/kube-apiserver.log
 controllermanager/kube-controller-manager.log
-crio/crio.log
+crio/crio.log  # or containerd/ when using --cri-runtime=containerd
 etcd/etcd.log
 kubelet/kubelet.log
 proxy/kube-proxy.log
@@ -254,6 +255,7 @@ KuberNix has some configuration possibilities, which are currently:
 | `-o, --overlay`           | Nix package overlay to be used                                                      |                | `KUBERNIX_OVERLAY`           |
 | `-d, --dockerfile`        | Custom Dockerfile for multi-node container image builds                             |                | `KUBERNIX_DOCKERFILE`        |
 | `-p, --packages`          | Additional Nix dependencies to be added to the environment                          |                | `KUBERNIX_PACKAGES`          |
+| `--cri-runtime`           | CRI runtime to use (`crio` or `containerd`)                                         | `crio`         | `KUBERNIX_CRI_RUNTIME`       |
 | `-a, --addons`            | Cluster addons to deploy (available: coredns)                                       | `coredns`      | `KUBERNIX_ADDONS`            |
 
 Please ensure that the CIDR is not overlapping with existing local networks and

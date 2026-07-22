@@ -251,17 +251,25 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   test-integration:
-    name: test / integration / ${{ matrix.name }}
+    name: test / integration / ${{ matrix.cri_runtime }} / ${{ matrix.mode }}
     runs-on: ubuntu-latest
     needs: build-cross
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: single
+          - mode: single
             nodes: 1
-          - name: multi
+            cri_runtime: crio
+          - mode: multi
             nodes: 2
+            cri_runtime: crio
+          - mode: single
+            nodes: 1
+            cri_runtime: containerd
+          - mode: multi
+            nodes: 2
+            cri_runtime: containerd
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
@@ -278,9 +286,9 @@ jobs:
           sudo hostnamectl set-hostname test
       - name: Prepare the system
         run: sudo contrib/prepare-system
-      - name: Run ${{ matrix.name }} integration test
+      - name: Run ${{ matrix.cri_runtime }} / ${{ matrix.mode }} integration test
         run: |
-          sudo -E env "PATH=$PATH" ./kubernix --log-level=debug --no-shell --addons --nodes=${{ matrix.nodes }} &
+          sudo -E env "PATH=$PATH" ./kubernix --log-level=debug --no-shell --addons --nodes=${{ matrix.nodes }} --cri-runtime=${{ matrix.cri_runtime }} &
           KUBERNIX_PID=$!
           timeout 300 bash -c 'while [ ! -f kubernix-run/kubernix.pid ]; do sleep 1; done'
           echo "Cluster is up, running checks"
