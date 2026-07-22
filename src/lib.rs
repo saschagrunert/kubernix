@@ -27,7 +27,7 @@ mod proxy;
 mod scheduler;
 mod system;
 
-pub use config::{Config, CriRuntime, LogFormat};
+pub use config::{Config, CriRuntime, LogFormat, SubCommand};
 pub use logger::Logger;
 
 /// Write `content` to `path` only if the file does not exist or its
@@ -122,8 +122,12 @@ impl Kubernix {
             )
         }
 
-        let shell_cmd = format!(". {} && exec {}", env_file.display(), config.shell_ok()?);
-        Nix::run(&config, &["bash", "-c", &format!("'{}'", shell_cmd)])?;
+        let shell_cmd = format!(
+            ". '{}' && exec '{}'",
+            env_file.display(),
+            config.shell_ok()?
+        );
+        Nix::run(&config, &["bash", "-c", &shell_cmd])?;
 
         info!("Bye, leaving the Kubernix environment");
         Ok(())

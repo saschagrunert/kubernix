@@ -9,14 +9,14 @@ with pkgs;
   containerd
   cri-o
   cri-tools
+  crun
   etcd
   iproute2
   iptables
   kmod
-  kubernetes
   kubectl
+  kubernetes
   podman
-  crun
   socat
   sysctl
   util-linux

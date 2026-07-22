@@ -1,6 +1,6 @@
 [package]
 name = "kubernix"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["Sascha Grunert <mail@saschagrunert.de>"]
 edition = "2024"
 rust-version = "1.88"
@@ -9,7 +9,7 @@ categories = ["command-line-utilities"]
 description = "Kubernetes development cluster bootstrapping with Nix packages"
 documentation = "https://docs.rs/kubernix"
 homepage = "https://github.com/saschagrunert/kubernix"
-keywords = ["kubernetes", "nix", "nix-flakes", "crio", "kube"]
+keywords = ["kubernetes", "nix", "nix-flakes", "crio", "containerd"]
 readme = "README.md"
 repository = "https://github.com/saschagrunert/kubernix"
 

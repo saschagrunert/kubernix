@@ -226,7 +226,7 @@ components. For example, etcd gets started via:
 
 ```json
 {
-  "command": "/nix/store/…-etcd-3.6.11-bin/bin/etcd",
+  "command": "/nix/store/…-etcd-3.6.13-bin/bin/etcd",
   "args": [
     "--advertise-client-urls=https://127.0.0.1:2379",
     "--client-cert-auth",
