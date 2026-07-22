@@ -1,13 +1,13 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/kubelet.rs`."><title>kubelet.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="kubernix" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">kubernix/</div>kubelet.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="doccomment">//! Kubernetes kubelet node agent component.
 <a href=#2 id=2 data-nosnippet>2</a>//!
 <a href=#3 id=3 data-nosnippet>3</a>//! Runs `kubelet` on each node, responsible for managing pods and
-<a href=#4 id=4 data-nosnippet>4</a>//! containers via the CRI-O container runtime.
+<a href=#4 id=4 data-nosnippet>4</a>//! containers via the configured CRI runtime.
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a></span><span class="kw">use crate</span>::{
 <a href=#7 id=7 data-nosnippet>7</a>    component::{ClusterContext, Component, Phase},
 <a href=#8 id=8 data-nosnippet>8</a>    config::Config,
 <a href=#9 id=9 data-nosnippet>9</a>    container::Container,
-<a href=#10 id=10 data-nosnippet>10</a>    crio::{Crio, MAX_SOCKET_PATH_LEN},
+<a href=#10 id=10 data-nosnippet>10</a>    cri::{<span class="self">self</span>, MAX_SOCKET_PATH_LEN},
 <a href=#11 id=11 data-nosnippet>11</a>    kubeconfig::KubeConfig,
 <a href=#12 id=12 data-nosnippet>12</a>    network::Network,
 <a href=#13 id=13 data-nosnippet>13</a>    node::Node,
@@ -92,7 +92,7 @@
 <a href=#92 id=92 data-nosnippet>92</a>            ca = pki.ca().cert().display(),
 <a href=#93 id=93 data-nosnippet>93</a>            dns = network.dns()<span class="question-mark">?</span>,
 <a href=#94 id=94 data-nosnippet>94</a>            cidr = network
-<a href=#95 id=95 data-nosnippet>95</a>                .crio_cidrs()
+<a href=#95 id=95 data-nosnippet>95</a>                .pod_cidrs()
 <a href=#96 id=96 data-nosnippet>96</a>                .get(node <span class="kw">as </span>usize)
 <a href=#97 id=97 data-nosnippet>97</a>                .context(<span class="string">"Unable to retrieve kubelet CIDR"</span>)<span class="question-mark">?</span>,
 <a href=#98 id=98 data-nosnippet>98</a>            cert = identity.cert().display(),
@@ -108,7 +108,7 @@
 <a href=#108 id=108 data-nosnippet>108</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"--root-dir={}"</span>, root_dir.display()),
 <a href=#109 id=109 data-nosnippet>109</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(
 <a href=#110 id=110 data-nosnippet>110</a>                <span class="string">"--container-runtime-endpoint={}"</span>,
-<a href=#111 id=111 data-nosnippet>111</a>                Crio::socket(config, network, node)<span class="question-mark">?</span>.to_socket_string(),
+<a href=#111 id=111 data-nosnippet>111</a>                cri::cri_socket(config, network, node)<span class="question-mark">?</span>.to_socket_string(),
 <a href=#112 id=112 data-nosnippet>112</a>            ),
 <a href=#113 id=113 data-nosnippet>113</a>            <span class="kw-2">&amp;</span><span class="macro">format!</span>(
 <a href=#114 id=114 data-nosnippet>114</a>                <span class="string">"--kubeconfig={}"</span>,
@@ -151,7 +151,7 @@
 <a href=#151 id=151 data-nosnippet>151</a><span class="attr">#[cfg(test)]
 <a href=#152 id=152 data-nosnippet>152</a></span><span class="kw">mod </span>tests {
 <a href=#153 id=153 data-nosnippet>153</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">use </span><span class="kw">crate</span>::crio::MAX_SOCKET_PATH_LEN;
+<a href=#154 id=154 data-nosnippet>154</a>    <span class="kw">use </span><span class="kw">crate</span>::cri::MAX_SOCKET_PATH_LEN;
 <a href=#155 id=155 data-nosnippet>155</a>
 <a href=#156 id=156 data-nosnippet>156</a>    <span class="attr">#[test]
 <a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">fn </span>config_template_renders() {
