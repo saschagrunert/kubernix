@@ -37,7 +37,7 @@ impl Display for CriSocket {
 impl CriSocket {
     /// Create a new CRI socket, validating the path length against Unix limits.
     pub fn new(path: PathBuf) -> Result<CriSocket> {
-        if path.display().to_string().len() > MAX_SOCKET_PATH_LEN {
+        if path.as_os_str().len() > MAX_SOCKET_PATH_LEN {
             bail!("Socket path '{}' is too long", path.display())
         }
         Ok(CriSocket(path))

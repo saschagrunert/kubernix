@@ -71,9 +71,7 @@ impl Kubelet {
         let dir = config.root().join(KUBELET).join(&node_name);
         let root_dir = dir.join("run");
         // pod-resources/<pid> is the longest socket path kubelet creates
-        if root_dir.display().to_string().len() + "pod-resources/1234567890".len()
-            > MAX_SOCKET_PATH_LEN
-        {
+        if root_dir.as_os_str().len() + "pod-resources/1234567890".len() > MAX_SOCKET_PATH_LEN {
             bail!(
                 "Kubelet run path '{}' is too long for unix sockets",
                 root_dir.display()

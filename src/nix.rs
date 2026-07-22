@@ -1,9 +1,9 @@
 //! Nix environment bootstrapping.
 //!
 //! Manages the `nix develop` shell that provides all runtime
-//! dependencies (etcd, kubernetes, CRI-O, etc.) at pinned versions.
-//! Re-executes the kubernix binary inside the Nix shell, forwarding
-//! all CLI options.
+//! dependencies (etcd, kubernetes, CRI runtimes, etc.) at pinned
+//! versions. Re-executes the kubernix binary inside the Nix shell,
+//! forwarding all CLI options.
 
 use crate::{Config, system::System};
 use anyhow::{Result, bail};
@@ -38,6 +38,17 @@ impl Nix {
             )?;
             fs::write(dir.join("flake.lock"), include_str!("../flake.lock"))?;
 
+            for pkg in config.packages() {
+                if !pkg
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.')
+                {
+                    bail!(
+                        "Invalid package name '{}': only alphanumeric characters, dashes, underscores, and dots are allowed",
+                        pkg,
+                    );
+                }
+            }
             let packages = &config.packages().join(" ");
             debug!("Adding additional packages: {:?}", config.packages());
             fs::write(
@@ -75,6 +86,7 @@ impl Nix {
         let cidr = format!("{}", config.cidr());
         let nodes = format!("{}", config.nodes());
         let container_runtime = config.container_runtime();
+        let cri_runtime = format!("{}", config.cri_runtime());
 
         let shell_val: String = config.shell().unwrap_or_default().to_owned();
         let overlay_val = config.overlay().map(|o| format!("{}", o.display()));
@@ -92,6 +104,8 @@ impl Nix {
             nodes.as_str(),
             "--container-runtime",
             container_runtime,
+            "--cri-runtime",
+            cri_runtime.as_str(),
         ];
 
         if let Some(ref overlay) = overlay_val {
@@ -125,23 +139,26 @@ impl Nix {
         Self::run(&config, &args)
     }
 
-    /// Run a command inside the nix develop shell
+    /// Run a command inside the nix develop shell.
+    ///
+    /// Each element in `args` is passed as a separate OS argument to
+    /// `nix develop --command`, avoiding shell interpretation.
     pub fn run(config: &Config, args: &[&str]) -> Result<()> {
         let nix_dir = config.root().join(Self::DIR);
         let flake_ref = format!("path:{}", nix_dir.display());
 
-        let status = Command::new(System::find_executable("nix")?)
-            .env(Nix::NIX_ENV, "true")
+        let mut cmd = Command::new(System::find_executable("nix")?);
+        cmd.env(Nix::NIX_ENV, "true")
             .arg("develop")
             .arg(&flake_ref)
             .arg("--no-update-lock-file")
             .arg("--log-format")
             .arg("raw")
-            .arg("--command")
-            .arg("bash")
-            .arg("-c")
-            .arg(args.join(" "))
-            .status()?;
+            .arg("--command");
+        for arg in args {
+            cmd.arg(arg);
+        }
+        let status = cmd.status()?;
         if !status.success() {
             bail!("nix develop exited with status {}", status);
         }
