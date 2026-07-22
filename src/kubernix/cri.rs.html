@@ -37,7 +37,7 @@
 <a href=#37 id=37 data-nosnippet>37</a><span class="kw">impl </span>CriSocket {
 <a href=#38 id=38 data-nosnippet>38</a>    <span class="doccomment">/// Create a new CRI socket, validating the path length against Unix limits.
 <a href=#39 id=39 data-nosnippet>39</a>    </span><span class="kw">pub fn </span>new(path: PathBuf) -&gt; <span class="prelude-ty">Result</span>&lt;CriSocket&gt; {
-<a href=#40 id=40 data-nosnippet>40</a>        <span class="kw">if </span>path.display().to_string().len() &gt; MAX_SOCKET_PATH_LEN {
+<a href=#40 id=40 data-nosnippet>40</a>        <span class="kw">if </span>path.as_os_str().len() &gt; MAX_SOCKET_PATH_LEN {
 <a href=#41 id=41 data-nosnippet>41</a>            <span class="macro">bail!</span>(<span class="string">"Socket path '{}' is too long"</span>, path.display())
 <a href=#42 id=42 data-nosnippet>42</a>        }
 <a href=#43 id=43 data-nosnippet>43</a>        <span class="prelude-val">Ok</span>(CriSocket(path))
