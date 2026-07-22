@@ -20,7 +20,8 @@ use rayon::prelude::*;
 /// Components in the same phase start concurrently; phases run sequentially.
 ///
 /// Phase ordering is optimized so that independent components overlap:
-/// - CRI-O starts alongside controllers (it only needs etcd/apiserver, not controllers)
+/// - The CRI runtime (CRI-O or containerd) starts alongside controllers
+///   (it only needs etcd/apiserver, not controllers)
 /// - Proxy starts alongside kubelets (it only needs the API server to sync caches)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Phase {
@@ -30,9 +31,9 @@ pub enum Phase {
     ControlPlane,
     /// Controllers, node runtimes, and proxy all start together since they
     /// only depend on the API server, not on each other.
-    /// Contains: scheduler, controller-manager, CRI-O (per node), proxy.
+    /// Contains: scheduler, controller-manager, CRI runtime (per node), proxy.
     Controller,
-    /// Node agents that require a running CRI-O runtime (kubelet).
+    /// Node agents that require a running CRI runtime (kubelet).
     NodeAgent,
 }
 

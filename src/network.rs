@@ -1,8 +1,8 @@
 //! Cluster network topology and CIDR allocation.
 //!
 //! Splits a parent CIDR into non-overlapping subnets for the cluster
-//! network, service network, and per-node CRI-O pod networks. Also
-//! checks for conflicts with existing system routes.
+//! network, service network, and per-node pod networks. Also checks
+//! for conflicts with existing system routes.
 
 use crate::Config;
 use anyhow::{Context, Result, bail};
@@ -18,7 +18,7 @@ use std::{
 #[must_use]
 pub struct Network {
     cluster_cidr: Ipv4Network,
-    crio_cidrs: Vec<Ipv4Network>,
+    pod_cidrs: Vec<Ipv4Network>,
     service_cidr: Ipv4Network,
     etcd_client: SocketAddr,
     etcd_peer: SocketAddr,
@@ -34,9 +34,9 @@ impl Network {
         &self.cluster_cidr
     }
 
-    /// Per-node CRI-O pod network subnets, one per configured node.
-    pub fn crio_cidrs(&self) -> &[Ipv4Network] {
-        &self.crio_cidrs
+    /// Per-node pod network subnets, one per configured node.
+    pub fn pod_cidrs(&self) -> &[Ipv4Network] {
+        &self.pod_cidrs
     }
 
     /// Subnet reserved for Kubernetes Service ClusterIPs.
@@ -61,7 +61,7 @@ impl Network {
 
     /// Calculate the subnet prefix to use for splitting the parent CIDR.
     ///
-    /// We need (2 + nodes) subnets: cluster, service, and one per CRI-O node.
+    /// We need (2 + nodes) subnets: cluster, service, and one per node.
     /// The prefix is chosen so that all subnets fit inside the parent CIDR.
     fn subnet_prefix(parent_prefix: u8, nodes: u8) -> Result<u8> {
         let required = 2 + u32::from(nodes); // cluster + service + N nodes
@@ -98,19 +98,19 @@ impl Network {
         )?;
         debug!("Using service CIDR {}", service_cidr);
 
-        let mut crio_cidrs = vec![];
+        let mut pod_cidrs = vec![];
         let mut offset = cluster_cidr.size() + service_cidr.size();
         for node in 0..config.nodes() {
             let cidr = Ipv4Network::new(
                 config
                     .cidr()
                     .nth(offset)
-                    .context("Unable to retrieve CRI-O CIDR start IP")?,
+                    .context("Unable to retrieve pod CIDR start IP")?,
                 subnet_prefix,
             )?;
             offset += cidr.size();
-            debug!("Using CRI-O ({}) CIDR {}", node, cidr);
-            crio_cidrs.push(cidr);
+            debug!("Using pod ({}) CIDR {}", node, cidr);
+            pod_cidrs.push(cidr);
         }
 
         // Set the rest of the networking related adresses and paths
@@ -124,7 +124,7 @@ impl Network {
 
         Ok(Self {
             cluster_cidr,
-            crio_cidrs,
+            pod_cidrs,
             service_cidr,
             etcd_client,
             etcd_peer,
@@ -208,14 +208,14 @@ pub mod tests {
             "service CIDR should be the second /18 subnet"
         );
         assert_eq!(
-            n.crio_cidrs().len(),
+            n.pod_cidrs().len(),
             1,
-            "single node should have one CRI-O CIDR"
+            "single node should have one pod CIDR"
         );
         assert_eq!(
-            n.crio_cidrs()[0].to_string(),
+            n.pod_cidrs()[0].to_string(),
             "10.10.128.0/18",
-            "CRI-O CIDR should be the third /18 subnet"
+            "pod CIDR should be the third /18 subnet"
         );
         Ok(())
     }

@@ -6,6 +6,7 @@ with pkgs;
   cni-plugins
   conmon
   conntrack-tools
+  containerd
   cri-o
   cri-tools
   etcd

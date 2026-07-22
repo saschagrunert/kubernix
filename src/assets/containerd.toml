@@ -1,0 +1,27 @@
+version = 3
+root = "{root}"
+state = "{state}"
+
+[grpc]
+address = "{socket}"
+
+[plugins."io.containerd.cri.v1.images"]
+sandbox_image = "registry.k8s.io/pause:3.10"
+
+[plugins."io.containerd.cri.v1.runtime"]
+enable_unprivileged_ports = true
+enable_unprivileged_icmp = true
+
+[plugins."io.containerd.cri.v1.runtime".cni]
+bin_dirs = ["{plugin_dir}"]
+conf_dir = "{cni_conf_dir}"
+
+[plugins."io.containerd.cri.v1.runtime".containerd]
+default_runtime_name = "crun"
+
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.crun]
+runtime_type = "io.containerd.runc.v2"
+
+[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.crun.options]
+BinaryName = "{runtime_path}"
+SystemdCgroup = false

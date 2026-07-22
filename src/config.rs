@@ -38,6 +38,33 @@ impl fmt::Display for LogFormat {
     }
 }
 
+/// Container Runtime Interface (CRI) implementation to use.
+///
+/// ```
+/// use kubernix::CriRuntime;
+///
+/// assert_eq!(CriRuntime::Crio.to_string(), "crio");
+/// assert_eq!(CriRuntime::Containerd.to_string(), "containerd");
+/// ```
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum CriRuntime {
+    /// CRI-O container runtime (default)
+    #[default]
+    Crio,
+    /// containerd container runtime
+    Containerd,
+}
+
+impl fmt::Display for CriRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CriRuntime::Crio => write!(f, "crio"),
+            CriRuntime::Containerd => write!(f, "containerd"),
+        }
+    }
+}
+
 #[derive(Clone, Parser, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 #[command(
@@ -164,6 +191,16 @@ pub struct Config {
     /// Custom Dockerfile path for multi-node container image builds
     dockerfile: Option<PathBuf>,
 
+    #[serde(default)]
+    #[arg(
+        default_value = "crio",
+        env = "KUBERNIX_CRI_RUNTIME",
+        long = "cri-runtime",
+        value_name = "CRI_RUNTIME"
+    )]
+    /// The CRI runtime to use (crio or containerd)
+    cri_runtime: CriRuntime,
+
     #[arg(
         default_value = "coredns",
         env = "KUBERNIX_ADDONS",
@@ -235,6 +272,11 @@ impl Config {
     /// Custom Dockerfile path for multi-node container image builds.
     pub fn dockerfile(&self) -> Option<&Path> {
         self.dockerfile.as_deref()
+    }
+
+    /// CRI runtime implementation (CRI-O or containerd).
+    pub fn cri_runtime(&self) -> CriRuntime {
+        self.cri_runtime
     }
 
     /// Cluster addons to deploy after bootstrap (e.g. `coredns`).
@@ -399,6 +441,7 @@ pub mod tests {
 addons = ["coredns"]
 cidr = "1.1.1.1/16"
 container-runtime = "podman"
+cri-runtime = "crio"
 log-format = "text"
 log-level = "DEBUG"
 no-shell = false
@@ -412,6 +455,7 @@ root = "root"
         assert_eq!(c.log_level(), LevelFilter::Debug);
         assert_eq!(c.log_format(), LogFormat::Text);
         assert_eq!(&c.cidr().to_string(), "1.1.1.1/16");
+        assert_eq!(c.cri_runtime(), CriRuntime::Crio);
         assert!(c.dockerfile().is_none());
         Ok(())
     }
@@ -428,6 +472,7 @@ root = "root"
 addons = ["coredns"]
 cidr = "1.1.1.1/16"
 container-runtime = "podman"
+cri-runtime = "containerd"
 dockerfile = "/tmp/MyDockerfile"
 log-format = "json"
 log-level = "DEBUG"
@@ -439,7 +484,33 @@ root = "root"
         )?;
         c.try_load_file()?;
         assert_eq!(c.log_format(), LogFormat::Json);
+        assert_eq!(c.cri_runtime(), CriRuntime::Containerd);
         assert_eq!(c.dockerfile(), Some(Path::new("/tmp/MyDockerfile")));
+        Ok(())
+    }
+
+    #[test]
+    fn try_load_file_without_cri_runtime() -> Result<()> {
+        let mut c = Config {
+            root: tempdir()?.keep(),
+            ..Config::default()
+        };
+        fs::write(
+            c.root.join(Config::FILENAME),
+            r#"
+addons = ["coredns"]
+cidr = "1.1.1.1/16"
+container-runtime = "podman"
+log-format = "text"
+log-level = "DEBUG"
+no-shell = false
+nodes = 1
+packages = []
+root = "root"
+            "#,
+        )?;
+        c.try_load_file()?;
+        assert_eq!(c.cri_runtime(), CriRuntime::Crio);
         Ok(())
     }
 

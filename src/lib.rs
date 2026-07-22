@@ -5,8 +5,10 @@ mod apiserver;
 mod component;
 mod config;
 mod container;
+mod containerd;
 mod controllermanager;
 mod coredns;
+mod cri;
 mod crio;
 mod encryptionconfig;
 mod etcd;
@@ -25,7 +27,7 @@ mod proxy;
 mod scheduler;
 mod system;
 
-pub use config::{Config, LogFormat};
+pub use config::{Config, CriRuntime, LogFormat};
 pub use logger::Logger;
 
 /// Write `content` to `path` only if the file does not exist or its
@@ -46,7 +48,7 @@ use crate::nix::Nix;
 use component::{ClusterContext, ComponentRegistry};
 use container::Container;
 use coredns::CoreDns;
-use crio::Crio;
+use cri::RUNTIME_ENV;
 use encryptionconfig::EncryptionConfig;
 use kubeconfig::KubeConfig;
 use kubectl::Kubectl;
@@ -78,8 +80,6 @@ use std::{
     thread::{self, sleep},
     time::{Duration, Instant},
 };
-
-const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
 /// The main entry point for the application
 pub struct Kubernix {
@@ -244,7 +244,14 @@ impl Kubernix {
         registry.register(Box::new(controllermanager::ControllerManagerComponent));
         registry.register(Box::new(scheduler::SchedulerComponent));
         for node in 0..config.nodes() {
-            registry.register(Box::new(crio::CrioComponent::new(node)));
+            match config.cri_runtime() {
+                config::CriRuntime::Crio => {
+                    registry.register(Box::new(crio::CrioComponent::new(node)));
+                }
+                config::CriRuntime::Containerd => {
+                    registry.register(Box::new(containerd::ContainerdComponent::new(node)));
+                }
+            }
             registry.register(Box::new(kubelet::KubeletComponent::new(node)));
         }
         registry.register(Box::new(proxy::ProxyComponent));
@@ -330,7 +337,7 @@ impl Kubernix {
             format!(
                 "export {}={}\nexport {}={}",
                 RUNTIME_ENV,
-                Crio::socket(&self.config, &self.network, 0)?.to_socket_string(),
+                cri::cri_socket(&self.config, &self.network, 0)?.to_socket_string(),
                 "KUBECONFIG",
                 self.kubectl.kubeconfig().display(),
             ),
