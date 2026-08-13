@@ -305,6 +305,10 @@ jobs:
         run: |
           echo "127.0.0.1 test" | sudo tee -a /etc/hosts
           sudo hostnamectl set-hostname test
+      - name: Free port 53 for CoreDNS
+        run: |
+          echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf
+          sudo systemctl stop systemd-resolved || true
       - name: Prepare the system
         if: ${{ !matrix.rootless }}
         run: sudo contrib/prepare-system
@@ -313,11 +317,12 @@ jobs:
         run: |
           sudo sh -c 'echo "kernel.unprivileged_userns_clone=1" > /etc/sysctl.d/rootless.conf && sysctl --system'
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
+          sudo systemctl disable --now apparmor || true
           sudo sh -c 'mkdir -p /etc/systemd/system/user-.slice.d && printf "[Slice]\nDelegate=yes\n" > /etc/systemd/system/user-.slice.d/delegate.conf && systemctl daemon-reload'
       - name: Run integration test
         run: |
-          # --addons with no value disables addon deployment (empty list)
-          ${{ !matrix.rootless && 'sudo -E env "PATH=$PATH"' || '' }} ./kubernix --log-level=debug --no-shell --addons --nodes=${{ matrix.nodes }} --cri-runtime=${{ matrix.cri_runtime }} &
+          ${{ !matrix.rootless && 'sudo -E env "PATH=$PATH"' || '' }} ./kubernix --log-level=debug --no-shell --nodes=${{ matrix.nodes }} --cri-runtime=${{ matrix.cri_runtime }} &
           KUBERNIX_PID=$!
           timeout 600 bash -c 'while [ ! -f kubernix-run/kubernix.pid ]; do sleep 1; done'
           echo "Cluster is up, running checks"
@@ -337,6 +342,18 @@ jobs:
             echo "FAIL: unhealthy pods: $UNHEALTHY"
             exit 1
           fi
+
+          echo "Asserting CoreDNS is ready..."
+          if ! timeout 110 bash -c 'until kubectl -n kube-system wait --for=condition=Ready pod -l k8s-app=coredns --timeout=5s 2>/dev/null; do sleep 2; done'; then
+            echo "=== CoreDNS pod describe ==="
+            kubectl describe pod -n kube-system -l k8s-app=coredns || true
+            echo "=== CoreDNS logs ==="
+            kubectl logs -n kube-system -l k8s-app=coredns --tail=100 || true
+            echo "=== kubernetes endpoints ==="
+            kubectl get endpoints kubernetes || true
+            exit 1
+          fi
+          echo "CoreDNS is ready"
 
           echo "All assertions passed"
           ${{ !matrix.rootless && 'sudo' || '' }} kill $KUBERNIX_PID

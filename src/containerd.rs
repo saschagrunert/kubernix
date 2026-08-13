@@ -88,16 +88,35 @@ impl Containerd {
         let cni_conf_dir = dir.join("cni");
         let socket = Self::socket(config, network, node)?;
 
+        // In rootless mode, kubelet sends oomScoreAdj via CRI, containerd
+        // passes it to the OCI spec, and crun fails writing
+        // /proc/self/oom_score_adj in a user namespace. Wrap crun to patch
+        // config.json before exec (strip oomScoreAdj, fix namespace config).
+        let runtime_path = if config.is_rootless() {
+            dir.join("crun-rootless").display().to_string()
+        } else {
+            crun_path.clone()
+        };
+
         if !dir.exists() {
             create_dir_all(&dir)?;
             create_dir_all(&cni_conf_dir)?;
 
-            let snapshotter =
-                if config.multi_node() || config.is_rootless() || System::in_container()? {
-                    "native"
-                } else {
-                    "overlayfs"
-                };
+            if config.is_rootless() {
+                let wrapper = dir.join("crun-rootless");
+                let script =
+                    include_str!("assets/crun-rootless.sh").replace("__CRUN_PATH__", &crun_path);
+                fs::write(&wrapper, script)?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))?;
+                }
+            }
+
+            // containerd 2.3.3 native snapshotter fails with "no unpack
+            // platforms defined"; overlayfs works in all modes.
+            let snapshotter = "overlayfs";
             fs::write(
                 &config_file,
                 format!(
@@ -107,13 +126,25 @@ impl Containerd {
                     socket = socket,
                     plugin_dir = plugin_dir,
                     cni_conf_dir = cni_conf_dir.display(),
-                    runtime_path = crun_path,
+                    runtime_path = runtime_path,
                     snapshotter = snapshotter,
+                    disable_apparmor = config.is_rootless(),
                     disable_nri = config.is_rootless(),
                 ),
             )?;
 
             cri::write_pod_network_config(config, &cni_conf_dir, &node_name, node, network)?;
+        }
+
+        // containerd-shim-runc-v2 hardcodes its socket path to /run/containerd/s/.
+        // rootlesskit's --copy-up=/run creates an overlay that preserves
+        // host-owned subdirectories with wrong ownership (host root maps to
+        // UID 65534). Recreate with correct ownership. Safe: runs inside
+        // rootlesskit's private mount namespace before containerd starts.
+        if config.is_rootless() && create_dir_all("/run/containerd/s").is_err() {
+            fs::remove_dir_all("/run/containerd")
+                .context("Failed to remove host-owned /run/containerd")?;
+            create_dir_all("/run/containerd/s")?;
         }
 
         let config_arg = format!("--config={}", config_file.display());
