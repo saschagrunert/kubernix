@@ -58,6 +58,8 @@ use process::Stoppables;
 use progress::Progress;
 use system::System;
 
+const ROOTLESS_ENV: &str = "KUBERNIX_ROOTLESS";
+
 use ::nix::{
     mount::{MntFlags, umount2},
     unistd::getuid,
@@ -99,15 +101,25 @@ impl Kubernix {
 
         // Bootstrap if we're not inside a nix shell
         if Nix::is_active() {
+            if config.is_rootless() && std::env::var(ROOTLESS_ENV).as_deref() != Ok("1") {
+                return Self::reexec_rootless();
+            }
             Self::bootstrap_cluster(config)
         } else {
             Nix::bootstrap(config)
         }
     }
 
-    /// Spawn a new shell into the provided configuration environment
+    /// Spawn a new shell into the provided configuration environment.
     pub fn new_shell(mut config: Config) -> Result<()> {
         Self::prepare_env(&mut config)?;
+
+        if config.is_rootless() && std::env::var(ROOTLESS_ENV).as_deref() != Ok("1") {
+            bail!(
+                "The cluster was started in rootless mode. \
+                 Run 'kubernix shell' from within the rootlesskit session."
+            )
+        }
 
         info!(
             "Spawning new kubernix shell in: '{}'",
@@ -135,10 +147,17 @@ impl Kubernix {
 
     /// Prepare the environment based on the provided config
     fn prepare_env(config: &mut Config) -> Result<()> {
-        // Rootless is currently not supported
-        if !getuid().is_root() {
-            bail!("Please run kubernix as root")
-        }
+        let env_rootless = std::env::var(ROOTLESS_ENV).as_deref() == Ok("1");
+        let rootless = if !getuid().is_root() {
+            true
+        } else if env_rootless {
+            // KUBERNIX_ROOTLESS=1 is set by reexec_rootless() inside rootlesskit.
+            // Only honor it when actually inside a user namespace to prevent
+            // a broken cluster from `sudo KUBERNIX_ROOTLESS=1 kubernix`.
+            System::in_user_namespace()
+        } else {
+            false
+        };
 
         // Prepare the configuration
         if config.root().exists() {
@@ -148,9 +167,67 @@ impl Kubernix {
         }
         config.canonicalize_root()?;
 
+        // Set rootless after config loading since try_load_file
+        // replaces the whole struct (resetting #[serde(skip)] fields).
+        config.set_rootless(rootless);
+
         // Setup the logger
         set_boxed_logger(Logger::new(config.log_level(), config.log_format()))
-            .context("Unable to set logger")
+            .context("Unable to set logger")?;
+
+        if config.is_rootless() && !Nix::is_active() {
+            info!("Running in rootless mode");
+        }
+
+        Ok(())
+    }
+
+    /// POSIX single-quote escaping: wraps in single quotes and escapes
+    /// any embedded single quotes with the '\'' sequence.
+    fn shell_escape(s: &str) -> String {
+        format!("'{}'", s.replace('\'', "'\\''"))
+    }
+
+    /// Re-exec kubernix inside rootlesskit for rootless operation.
+    /// All child processes inherit the user namespace.
+    fn reexec_rootless() -> Result<()> {
+        info!("Re-executing inside rootlesskit");
+
+        let exe = std::env::current_exe().context("Unable to determine current executable")?;
+        let args: Vec<String> = std::env::args().skip(1).collect();
+
+        let inner_cmd = format!(
+            "exec {} {}",
+            Self::shell_escape(&exe.display().to_string()),
+            args.iter()
+                .map(|a| Self::shell_escape(a))
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
+
+        let mut cmd = Command::new("rootlesskit");
+        cmd.args([
+            "--net=host",
+            "--copy-up=/etc",
+            "--copy-up=/run",
+            "--copy-up=/var/cache",
+            "--copy-up=/var/lib",
+            "--copy-up=/var/log",
+            "--copy-up=/var/run",
+            "bash",
+            "-c",
+            &inner_cmd,
+        ]);
+        cmd.env(ROOTLESS_ENV, "1");
+
+        let status = cmd.status().context(
+            "Failed to start rootlesskit. Is it installed? \
+             (rootless mode requires rootlesskit)",
+        )?;
+
+        // No Kubernix struct or other Drop-bearing resources exist yet,
+        // only the logger from prepare_env.
+        std::process::exit(status.code().unwrap_or(1));
     }
 
     /// Stop kubernix by cleaning up all running processes
@@ -164,14 +241,15 @@ impl Kubernix {
 
     /// The amount of processes to be run
     fn processes(config: &Config) -> u64 {
-        5 + 2 * u64::from(config.nodes())
+        let base = 4 + 2 * u64::from(config.nodes());
+        if config.is_rootless() { base } else { base + 1 }
     }
 
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config) -> Result<()> {
         // Setup the progress bar
         const BASE_STEPS: u64 = 15;
-        let steps = if config.multi_node() {
+        let steps = if config.multi_node() && !config.is_rootless() {
             u64::from(config.nodes()) * 2 + BASE_STEPS
         } else {
             BASE_STEPS
@@ -258,7 +336,9 @@ impl Kubernix {
             }
             registry.register(Box::new(kubelet::KubeletComponent::new(node)));
         }
-        registry.register(Box::new(proxy::ProxyComponent));
+        if !config.is_rootless() {
+            registry.register(Box::new(proxy::ProxyComponent));
+        }
         registry
     }
 
@@ -356,6 +436,10 @@ impl Kubernix {
 
     /// Remove all stale mounts
     fn umount(&self) {
+        if self.config.is_rootless() {
+            debug!("Skipping mount cleanup in rootless mode");
+            return;
+        }
         debug!("Removing active mounts");
         let now = Instant::now();
         while now.elapsed().as_secs() < 15 {

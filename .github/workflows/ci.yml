@@ -251,7 +251,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   test-integration:
-    name: test / integration / ${{ matrix.cri_runtime }} / ${{ matrix.mode }}
+    name: test / integration / ${{ matrix.cri_runtime }} / ${{ matrix.mode }}${{ matrix.rootless && ' / rootless' || '' }}
     runs-on: ubuntu-latest
     needs: build-cross
     strategy:
@@ -261,15 +261,35 @@ jobs:
           - mode: single
             nodes: 1
             cri_runtime: crio
+            rootless: false
           - mode: multi
             nodes: 2
             cri_runtime: crio
+            rootless: false
           - mode: single
             nodes: 1
             cri_runtime: containerd
+            rootless: false
           - mode: multi
             nodes: 2
             cri_runtime: containerd
+            rootless: false
+          - mode: single
+            nodes: 1
+            cri_runtime: crio
+            rootless: true
+          - mode: single
+            nodes: 1
+            cri_runtime: containerd
+            rootless: true
+          - mode: multi
+            nodes: 2
+            cri_runtime: crio
+            rootless: true
+          - mode: multi
+            nodes: 2
+            cri_runtime: containerd
+            rootless: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
@@ -281,16 +301,25 @@ jobs:
           name: kubernix-x86_64
       - run: chmod +x kubernix
       - name: Set hostname
+        if: ${{ !matrix.rootless }}
         run: |
           echo "127.0.0.1 test" | sudo tee -a /etc/hosts
           sudo hostnamectl set-hostname test
       - name: Prepare the system
+        if: ${{ !matrix.rootless }}
         run: sudo contrib/prepare-system
-      - name: Run ${{ matrix.cri_runtime }} / ${{ matrix.mode }} integration test
+      - name: Prepare rootless environment
+        if: ${{ matrix.rootless }}
         run: |
-          sudo -E env "PATH=$PATH" ./kubernix --log-level=debug --no-shell --addons --nodes=${{ matrix.nodes }} --cri-runtime=${{ matrix.cri_runtime }} &
+          sudo sh -c 'echo "kernel.unprivileged_userns_clone=1" > /etc/sysctl.d/rootless.conf && sysctl --system'
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo sh -c 'mkdir -p /etc/systemd/system/user-.slice.d && printf "[Slice]\nDelegate=yes\n" > /etc/systemd/system/user-.slice.d/delegate.conf && systemctl daemon-reload'
+      - name: Run integration test
+        run: |
+          # --addons with no value disables addon deployment (empty list)
+          ${{ !matrix.rootless && 'sudo -E env "PATH=$PATH"' || '' }} ./kubernix --log-level=debug --no-shell --addons --nodes=${{ matrix.nodes }} --cri-runtime=${{ matrix.cri_runtime }} &
           KUBERNIX_PID=$!
-          timeout 300 bash -c 'while [ ! -f kubernix-run/kubernix.pid ]; do sleep 1; done'
+          timeout 600 bash -c 'while [ ! -f kubernix-run/kubernix.pid ]; do sleep 1; done'
           echo "Cluster is up, running checks"
           export KUBECONFIG=$PWD/kubernix-run/kubeconfig/admin.kubeconfig
 
@@ -310,6 +339,6 @@ jobs:
           fi
 
           echo "All assertions passed"
-          sudo kill $KUBERNIX_PID
+          ${{ !matrix.rootless && 'sudo' || '' }} kill $KUBERNIX_PID
           wait $KUBERNIX_PID || true
-        timeout-minutes: 10
+        timeout-minutes: 15

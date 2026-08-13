@@ -85,19 +85,39 @@ impl Kubelet {
             .get(node as usize)
             .with_context(|| format!("Unable to retrieve kubelet identity for {}", node_name))?;
 
-        let yml = format!(
-            include_str!("assets/kubelet.yml"),
-            ca = pki.ca().cert().display(),
-            dns = network.dns()?,
-            cidr = network
-                .pod_cidrs()
-                .get(node as usize)
-                .context("Unable to retrieve kubelet CIDR")?,
-            cert = identity.cert().display(),
-            key = identity.key().display(),
-            port = KUBELET_PORT_BASE + u16::from(node),
-            healthzPort = HEALTHZ_PORT_BASE + u16::from(node),
-        );
+        let ca = pki.ca().cert().display().to_string();
+        let dns = network.dns()?;
+        let cidr = network
+            .pod_cidrs()
+            .get(node as usize)
+            .context("Unable to retrieve kubelet CIDR")?;
+        let cert = identity.cert().display().to_string();
+        let key = identity.key().display().to_string();
+        let port = KUBELET_PORT_BASE + u16::from(node);
+        let healthz_port = HEALTHZ_PORT_BASE + u16::from(node);
+        let yml = if config.is_rootless() {
+            format!(
+                include_str!("assets/kubelet-rootless.yml"),
+                ca = ca,
+                dns = dns,
+                cidr = cidr,
+                cert = cert,
+                key = key,
+                port = port,
+                healthzPort = healthz_port,
+            )
+        } else {
+            format!(
+                include_str!("assets/kubelet.yml"),
+                ca = ca,
+                dns = dns,
+                cidr = cidr,
+                cert = cert,
+                key = key,
+                port = port,
+                healthzPort = healthz_port,
+            )
+        };
         let cfg = dir.join("config.yml");
         write_if_changed(&cfg, &yml)?;
 
@@ -122,7 +142,7 @@ impl Kubelet {
             "--v=2",
         ];
 
-        let mut process = if config.multi_node() {
+        let mut process = if config.multi_node() && !config.is_rootless() {
             // Run inside a container
             let arg_hostname = &format!("--hostname-override={}", node_name);
             let mut modargs: Vec<&str> = vec![arg_hostname];
@@ -135,8 +155,14 @@ impl Kubelet {
                 &node_name,
                 &modargs,
             )?
+        } else if config.multi_node() {
+            // Rootless multi-node: direct process with hostname override
+            let arg_hostname = format!("--hostname-override={}", node_name);
+            let mut modargs: Vec<&str> = vec![&arg_hostname];
+            modargs.extend(args);
+            Process::start(&dir, "Kubelet", KUBELET, &modargs)?
         } else {
-            // Run as usual process
+            // Single-node: run as usual process
             Process::start(&dir, "Kubelet", KUBELET, args)?
         };
         process.wait_ready("Successfully registered node")?;
@@ -191,5 +217,22 @@ mod tests {
     fn component_name_per_node() {
         assert_eq!(KubeletComponent::new(0).name(), "Kubelet (node 0)");
         assert_eq!(KubeletComponent::new(3).name(), "Kubelet (node 3)");
+    }
+
+    #[test]
+    fn rootless_config_template_renders() {
+        let yml = format!(
+            include_str!("assets/kubelet-rootless.yml"),
+            ca = "/tmp/ca.pem",
+            dns = "10.10.64.2",
+            cidr = "10.10.128.0/18",
+            cert = "/tmp/kubelet.pem",
+            key = "/tmp/kubelet-key.pem",
+            port = KUBELET_PORT_BASE,
+            healthzPort = HEALTHZ_PORT_BASE,
+        );
+        assert!(yml.contains("kind: KubeletConfiguration"));
+        assert!(yml.contains("cgroupDriver: \"none\""));
+        assert!(yml.contains("KubeletInUserNamespace: true"));
     }
 }

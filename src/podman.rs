@@ -81,6 +81,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires conmon in $PATH"]
     fn build_args_success() -> Result<()> {
         let c = test_config()?;
         let p = PathBuf::from("policy.json");
@@ -97,6 +98,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires conmon in $PATH"]
     fn default_args_success() -> Result<()> {
         let c = test_config()?;
         assert!(!Podman::default_args(&c)?.is_empty());

@@ -30,8 +30,8 @@ impl Container {
         let policy_json = Self::policy_json(config);
         fs::write(&policy_json, include_str!("assets/policy.json"))?;
 
-        // Nothing needs to be done on single node runs or root users
-        if !config.multi_node() {
+        // Nothing needs to be done on single node or rootless runs
+        if !config.multi_node() || config.is_rootless() {
             return Ok(());
         }
 
@@ -142,10 +142,10 @@ impl Container {
             args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::<Vec<_>>())
         }
 
-        // Mount /dev/mapper if available
+        // Mount /dev/mapper if available (requires privileges)
         let dev_mapper = PathBuf::from("/").join("dev").join("mapper");
         let arg_volume_dev_mapper = &Self::volume_arg(dev_mapper.display());
-        if dev_mapper.exists() {
+        if !config.is_rootless() && dev_mapper.exists() {
             args_vec.push(arg_volume_dev_mapper);
         }
 

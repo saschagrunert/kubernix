@@ -46,18 +46,19 @@ The following technology stack is currently being used:
 | cni-plugins     | v1.9.1   |
 | conmon          | v2.2.1   |
 | conntrack-tools | v1.4.8   |
-| containerd      | v2.3.1   |
-| cri-o-wrapper   | v1.36.2  |
+| containerd      | v2.3.3   |
+| cri-o-wrapper   | v1.36.3  |
 | cri-tools       | v1.36.0  |
 | crun            | v1.27.1  |
-| etcd            | v3.6.13  |
+| etcd            | v3.6.14  |
 | iproute2        | v7.1.0   |
 | iptables        | v1.8.13  |
 | kmod            | v31      |
-| kubectl         | v1.36.2  |
-| kubernetes      | v1.36.2  |
-| nss-cacert      | v3.125   |
+| kubectl         | v1.36.3  |
+| kubernetes      | v1.36.3  |
+| nss-cacert      | v3.126   |
 | podman          | v5.8.4   |
+| rootlesskit     | v2.3.6   |
 | socat           | v1.8.1.3 |
 | sysctl          | v4.0.6   |
 | util-linux      | v2.42.2  |
@@ -79,7 +80,7 @@ graph TD
 
     A --- etcd
     B --- apiserver
-    C --- scheduler & controller-manager & cri["cri-o or containerd (x N)"] & proxy
+    C --- scheduler & controller-manager & cri["cri-o or containerd (x N)"] & proxy["proxy (root only)"]
     D --- kubelet["kubelet (x N)"]
 ```
 
@@ -115,16 +116,31 @@ $ make build-release
 The binary should now be available in the `target/release/kubernix` directory of
 the project. Alternatively, install the application via `cargo install kubernix`.
 
-After the successful binary retrieval, start KuberNix by running it as `root`:
+After the successful binary retrieval, start KuberNix:
 
 ```
-$ sudo kubernix
+$ kubernix
 ```
 
 KuberNix will now take care that the Nix environment gets correctly setup,
 downloads the needed binaries and starts the cluster. Per default it will create
 a directory called `kubernix-run` in the current path which contains all necessary
 data for the cluster.
+
+When running as a non-root user, KuberNix uses `rootlesskit` to provide a user
+namespace where all components run as fake root. This requires unprivileged user
+namespaces (`kernel.unprivileged_userns_clone=1`) and cgroup v2 with user
+delegation. On Ubuntu 23.10+, you may also need to set
+`kernel.apparmor_restrict_unprivileged_userns=0`. Kube-proxy is skipped without
+root (it needs iptables access), so ClusterIP-based Service routing is not
+available. Pod egress to external networks also requires masquerading, which
+is not possible without iptables. Pod-to-pod communication within the
+cluster works normally.
+
+In multi-node rootless mode, all nodes run as direct processes (no container
+isolation) with `--hostname-override` for node identity. Running with `sudo`
+gives full functionality including kube-proxy and container-based multi-node
+isolation.
 
 #### Shell Environment
 
@@ -182,11 +198,11 @@ proxy/kube-proxy.log
 scheduler/kube-scheduler.log
 ```
 
-If you want to spawn an additional shell session, simply run `kubernix shell` in
-the same directory as where the initial bootstrap happened.
+If you want to spawn an additional shell session, simply run `kubernix shell`
+in the same directory as where the initial bootstrap happened.
 
 ```
-$ sudo kubernix shell
+$ kubernix shell
 [INFO ] Spawning new kubernix shell in: 'kubernix-run'
 > kubectl run alpine --image=alpine -it --rm -- sh
 If you don't see a command prompt, try pressing enter.
@@ -289,7 +305,7 @@ self: super: {
 Now we can run KuberNix with the `--overlay, -o` command line argument:
 
 ```
-$ sudo kubernix --overlay overlay.nix
+$ kubernix --overlay overlay.nix
 [INFO ] Nix environment not found, bootstrapping one
 [INFO ] Using custom overlay 'overlay.nix'
 these derivations will be built:
@@ -308,7 +324,7 @@ can easily utilize additional tools in a reproducible way. For example, when to
 comes to using always the same [Helm][20] version, you could simply run:
 
 ```
-$ sudo kubernix -p kubernetes-helm
+$ kubernix -p kubernetes-helm
 [INFO ] Nix environment not found, bootstrapping one
 [INFO ] Bootstrapping cluster inside nix environment
 …

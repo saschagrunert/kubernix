@@ -17,6 +17,7 @@ with pkgs;
   kubectl
   kubernetes
   podman
+  rootlesskit
   socat
   sysctl
   util-linux

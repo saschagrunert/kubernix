@@ -23,9 +23,67 @@ pub struct System {
 impl System {
     /// Create a new system
     pub fn setup(config: &Config) -> Result<Self> {
-        if Self::in_container()? {
-            info!("Skipping modprobe and sysctl for sake of containerization")
-        } else {
+        if config.is_rootless() {
+            let in_userns = Self::in_user_namespace();
+            if !in_userns {
+                warn!(
+                    "Rootless mode but not inside a user namespace, \
+                     skipping directory setup"
+                );
+            } else {
+                // Inside rootlesskit, pre-existing host directories under the
+                // copy-up overlay retain host root ownership (mapped to nobody
+                // in the user namespace) and are not writable. Recreate paths
+                // that kubernix components write to under rootlesskit copy-ups.
+                // When adding a new component that writes to a host path under
+                // /var or /run, add the path here too.
+                for dir in &[
+                    "/var/lib/kubelet",
+                    "/var/lib/crio",
+                    "/var/lib/containers",
+                    "/var/cache/containers",
+                    "/var/log/pods",
+                    "/var/log/containers",
+                    "/var/log/crio",
+                    "/run/lock",
+                    "/run/containers",
+                ] {
+                    let path = PathBuf::from(dir);
+                    if path.exists()
+                        && let Err(e) = fs::remove_dir_all(&path)
+                    {
+                        warn!("Unable to remove '{}': {}", dir, e);
+                    }
+                    fs::create_dir_all(&path).with_context(|| {
+                        format!("Unable to create rootless directory '{}'", dir)
+                    })?;
+                }
+                fs::create_dir_all("/var/lib/kubelet/device-plugins")
+                    .context("Unable to create /var/lib/kubelet/device-plugins")?;
+
+                // Override containers-storage.conf to prevent
+                // overlay-specific options from leaking into vfs mode.
+                // Written to the run directory (not /etc/containers/) to
+                // avoid permission issues inside rootlesskit copy-ups.
+                let storage_conf = config.root().join("storage.conf");
+                fs::write(&storage_conf, "[storage]\ndriver = \"vfs\"\n")
+                    .context("Unable to write rootless storage.conf")?;
+                // SAFETY: called before any threads are spawned.
+                unsafe { std::env::set_var("CONTAINERS_STORAGE_CONF", &storage_conf) };
+
+                // On NixOS, /etc/hosts is a symlink into the read-only nix
+                // store. Replace it with a regular file so multi-node can
+                // write host entries.
+                let hosts_path = Self::hosts();
+                if hosts_path.is_symlink() {
+                    let content = read_to_string(&hosts_path).unwrap_or_default();
+                    fs::remove_file(&hosts_path).context("Unable to remove hosts symlink")?;
+                    fs::write(&hosts_path, content).context("Unable to write hosts file")?;
+                }
+            }
+        }
+
+        if !config.is_rootless() && !Self::in_container()? {
             for module in &["overlay", "br_netfilter", "ip_conntrack"] {
                 Self::modprobe(module)?;
             }
@@ -37,6 +95,8 @@ impl System {
             ] {
                 Self::sysctl_enable(sysctl)?;
             }
+        } else {
+            info!("Skipping modprobe and sysctl (containerized or rootless)");
         }
 
         let hosts = if config.multi_node() {
@@ -70,6 +130,24 @@ impl System {
         };
 
         Ok(Self { hosts })
+    }
+
+    /// Returns true if running inside a user namespace (uid 0 maps to
+    /// a non-zero host UID). Used to guard destructive host path cleanup
+    /// and to validate the KUBERNIX_ROOTLESS env var at startup.
+    ///
+    /// This function is intentionally side-effect-free (no logging)
+    /// because it may be called before the logger is initialized.
+    pub(crate) fn in_user_namespace() -> bool {
+        read_to_string("/proc/self/uid_map")
+            .map(|s| {
+                s.lines().any(|line| {
+                    let mut fields = line.split_whitespace();
+                    fields.next() == Some("0")
+                        && fields.next().is_some_and(|host_uid| host_uid != "0")
+                })
+            })
+            .unwrap_or(false)
     }
 
     /// Returns true if the process is running inside a container
