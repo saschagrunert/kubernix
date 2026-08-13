@@ -30,8 +30,8 @@
 <a href=#30 id=30 data-nosnippet>30</a>        </span><span class="kw">let </span>policy_json = <span class="self">Self</span>::policy_json(config);
 <a href=#31 id=31 data-nosnippet>31</a>        fs::write(<span class="kw-2">&amp;</span>policy_json, <span class="macro">include_str!</span>(<span class="string">"assets/policy.json"</span>))<span class="question-mark">?</span>;
 <a href=#32 id=32 data-nosnippet>32</a>
-<a href=#33 id=33 data-nosnippet>33</a>        <span class="comment">// Nothing needs to be done on single node runs or root users
-<a href=#34 id=34 data-nosnippet>34</a>        </span><span class="kw">if </span>!config.multi_node() {
+<a href=#33 id=33 data-nosnippet>33</a>        <span class="comment">// Nothing needs to be done on single node or rootless runs
+<a href=#34 id=34 data-nosnippet>34</a>        </span><span class="kw">if </span>!config.multi_node() || config.is_rootless() {
 <a href=#35 id=35 data-nosnippet>35</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(());
 <a href=#36 id=36 data-nosnippet>36</a>        }
 <a href=#37 id=37 data-nosnippet>37</a>
@@ -142,10 +142,10 @@
 <a href=#142 id=142 data-nosnippet>142</a>            args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;())
 <a href=#143 id=143 data-nosnippet>143</a>        }
 <a href=#144 id=144 data-nosnippet>144</a>
-<a href=#145 id=145 data-nosnippet>145</a>        <span class="comment">// Mount /dev/mapper if available
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="comment">// Mount /dev/mapper if available (requires privileges)
 <a href=#146 id=146 data-nosnippet>146</a>        </span><span class="kw">let </span>dev_mapper = PathBuf::from(<span class="string">"/"</span>).join(<span class="string">"dev"</span>).join(<span class="string">"mapper"</span>);
 <a href=#147 id=147 data-nosnippet>147</a>        <span class="kw">let </span>arg_volume_dev_mapper = <span class="kw-2">&amp;</span><span class="self">Self</span>::volume_arg(dev_mapper.display());
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">if </span>dev_mapper.exists() {
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">if </span>!config.is_rootless() &amp;&amp; dev_mapper.exists() {
 <a href=#149 id=149 data-nosnippet>149</a>            args_vec.push(arg_volume_dev_mapper);
 <a href=#150 id=150 data-nosnippet>150</a>        }
 <a href=#151 id=151 data-nosnippet>151</a>
