@@ -60,6 +60,9 @@ use system::System;
 
 const ROOTLESS_ENV: &str = "KUBERNIX_ROOTLESS";
 
+/// The port the API server listens on.
+pub(crate) const API_SERVER_PORT: u16 = 6443;
+
 use ::nix::{
     mount::{MntFlags, umount2},
     unistd::getuid,
@@ -196,33 +199,69 @@ impl Kubernix {
         let exe = std::env::current_exe().context("Unable to determine current executable")?;
         let args: Vec<String> = std::env::args().skip(1).collect();
 
-        let inner_cmd = format!(
-            "exec {} {}",
-            Self::shell_escape(&exe.display().to_string()),
-            args.iter()
-                .map(|a| Self::shell_escape(a))
-                .collect::<Vec<_>>()
-                .join(" "),
+        let kubernix_args = args
+            .iter()
+            .map(|a| Self::shell_escape(a))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let kubernix_exe = Self::shell_escape(&exe.display().to_string());
+
+        // Inside rootlesskit's cgroup namespace, evacuate processes from the
+        // namespace root into a child and enable controllers, then exec.
+        let rootlesskit_cmd = format!(
+            concat!(
+                "mount -t cgroup2 none /sys/fs/cgroup 2>/dev/null; ",
+                "mkdir -p /sys/fs/cgroup/kubernix; ",
+                "for p in $(cat /sys/fs/cgroup/cgroup.procs); do ",
+                "echo $p >/sys/fs/cgroup/kubernix/cgroup.procs 2>/dev/null; done; ",
+                "for c in memory cpu pids io; do ",
+                "echo \"+$c\" >/sys/fs/cgroup/cgroup.subtree_control 2>/dev/null; done; ",
+                "grep -q memory /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null ",
+                "|| echo 'WARNING: cgroup memory controller not delegated, pods may fail' >&2; ",
+                "exec {} {}",
+            ),
+            kubernix_exe, kubernix_args,
         );
 
-        let mut cmd = Command::new("rootlesskit");
+        // Evacuate all processes from the scope's root cgroup into a child
+        // so we can enable controllers in subtree_control (cgroup v2's
+        // "no internal processes" rule forbids it otherwise). This must
+        // happen outside rootlesskit's cgroup namespace.
+        let outer_cmd = format!(
+            concat!(
+                "CGRP=/sys/fs/cgroup$(cat /proc/self/cgroup | cut -d: -f3); ",
+                "mkdir -p \"$CGRP/init\"; ",
+                "for p in $(cat \"$CGRP/cgroup.procs\"); do ",
+                "echo $p >\"$CGRP/init/cgroup.procs\" 2>/dev/null; done; ",
+                "for c in memory cpu pids io; do ",
+                "echo \"+$c\" >\"$CGRP/cgroup.subtree_control\" 2>/dev/null; done; ",
+                "grep -q memory \"$CGRP/cgroup.subtree_control\" 2>/dev/null ",
+                "|| echo 'WARNING: cgroup memory controller not delegated, pods may fail' >&2; ",
+                "exec rootlesskit --net=host --cgroupns ",
+                "--copy-up=/etc --copy-up=/run --copy-up=/var/cache ",
+                "--copy-up=/var/lib --copy-up=/var/log --copy-up=/var/run ",
+                "bash -c {}",
+            ),
+            Self::shell_escape(&rootlesskit_cmd),
+        );
+
+        let mut cmd = Command::new("systemd-run");
         cmd.args([
-            "--net=host",
-            "--copy-up=/etc",
-            "--copy-up=/run",
-            "--copy-up=/var/cache",
-            "--copy-up=/var/lib",
-            "--copy-up=/var/log",
-            "--copy-up=/var/run",
+            "--user",
+            "--scope",
+            "-p",
+            "Delegate=yes",
+            "--",
             "bash",
             "-c",
-            &inner_cmd,
+            &outer_cmd,
         ]);
         cmd.env(ROOTLESS_ENV, "1");
 
         let status = cmd.status().context(
-            "Failed to start rootlesskit. Is it installed? \
-             (rootless mode requires rootlesskit)",
+            "Failed to start rootless session. \
+             Rootless mode requires systemd-run (with an active user session) \
+             and rootlesskit to be installed",
         )?;
 
         // No Kubernix struct or other Drop-bearing resources exist yet,
@@ -464,6 +503,34 @@ impl Kubernix {
         }
     }
 
+    /// Remove CRI storage directories while still inside the user namespace.
+    /// Image layers contain files owned by unmapped uids that become
+    /// unremovable after rootlesskit exits. Unmounts any lingering
+    /// container overlays first so remove_dir_all can succeed.
+    fn cleanup_rootless_storage(&self) {
+        if !self.config.is_rootless() {
+            return;
+        }
+        debug!("Removing rootless CRI storage");
+        let root = self.config.root();
+        for entry in ["crio", "containerd"] {
+            let dir = root.join(entry);
+            if !dir.exists() {
+                continue;
+            }
+            if let Ok(mounts) = Self::read_mount_points(&dir) {
+                for mp in &mounts {
+                    if let Err(e) = umount2(mp.as_path(), MntFlags::MNT_DETACH) {
+                        debug!("Unable to umount '{}': {}", mp.display(), e);
+                    }
+                }
+            }
+            if let Err(e) = fs::remove_dir_all(&dir) {
+                debug!("Unable to remove '{}': {}", dir.display(), e);
+            }
+        }
+    }
+
     /// Read mount points from /proc/mounts filtered by the given root path,
     /// sorted deepest-first for safe unmounting.
     fn read_mount_points(root: &Path) -> Result<Vec<PathBuf>> {
@@ -505,6 +572,7 @@ impl Drop for Kubernix {
 
         self.stop();
         self.umount();
+        self.cleanup_rootless_storage();
         self.system.cleanup();
         info!("Cleanup done");
 
