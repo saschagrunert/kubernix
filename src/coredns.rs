@@ -29,20 +29,19 @@ impl CoreDns {
     }
 
     fn render(dns: Ipv4Addr, rootless: bool) -> String {
-        let env = if rootless {
-            format!(
-                concat!(
-                    "        env:\n",
-                    "        - name: KUBERNETES_SERVICE_HOST\n",
-                    "          value: \"127.0.0.1\"\n",
-                    "        - name: KUBERNETES_SERVICE_PORT\n",
-                    "          value: \"{}\"\n",
-                ),
-                API_SERVER_PORT,
-            )
-        } else {
-            String::new()
-        };
+        // CoreDNS uses hostNetwork, so it can always reach the API server
+        // at 127.0.0.1. Setting these env vars explicitly avoids depending
+        // on kube-proxy ClusterIP routing being ready when CoreDNS starts.
+        let env = format!(
+            concat!(
+                "        env:\n",
+                "        - name: KUBERNETES_SERVICE_HOST\n",
+                "          value: \"127.0.0.1\"\n",
+                "        - name: KUBERNETES_SERVICE_PORT\n",
+                "          value: \"{}\"\n",
+            ),
+            API_SERVER_PORT,
+        );
         let resources = if rootless {
             ""
         } else {
@@ -88,18 +87,14 @@ mod tests {
     }
 
     #[test]
-    fn render_rootless_overrides_api_server_env() {
-        let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), true);
-        assert!(yml.contains("KUBERNETES_SERVICE_HOST"));
-        assert!(yml.contains("value: \"127.0.0.1\""));
-        assert!(yml.contains("KUBERNETES_SERVICE_PORT"));
-        assert!(yml.contains(&format!("value: \"{}\"", crate::API_SERVER_PORT)));
-    }
-
-    #[test]
-    fn render_non_rootless_no_api_server_env() {
-        let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), false);
-        assert!(!yml.contains("KUBERNETES_SERVICE_HOST"));
+    fn render_always_sets_api_server_env() {
+        for rootless in [true, false] {
+            let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), rootless);
+            assert!(yml.contains("KUBERNETES_SERVICE_HOST"));
+            assert!(yml.contains("value: \"127.0.0.1\""));
+            assert!(yml.contains("KUBERNETES_SERVICE_PORT"));
+            assert!(yml.contains(&format!("value: \"{}\"", crate::API_SERVER_PORT)));
+        }
     }
 
     #[test]
@@ -116,14 +111,15 @@ mod tests {
     }
 
     #[test]
-    fn render_rootless_produces_valid_structure() {
-        let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), true);
-        assert!(yml.contains("KUBERNETES_SERVICE_HOST"));
-        assert!(!yml.contains("memory: 170Mi"));
-        let args_pos = yml.find("        args:").unwrap();
-        let env_pos = yml.find("        env:\n").unwrap();
-        let mounts_pos = yml.find("        volumeMounts:").unwrap();
-        assert!(args_pos < env_pos, "args must precede env");
-        assert!(env_pos < mounts_pos, "env must precede volumeMounts");
+    fn render_produces_valid_structure() {
+        for rootless in [true, false] {
+            let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), rootless);
+            assert!(yml.contains("KUBERNETES_SERVICE_HOST"));
+            let args_pos = yml.find("        args:").unwrap();
+            let env_pos = yml.find("        env:\n").unwrap();
+            let mounts_pos = yml.find("        volumeMounts:").unwrap();
+            assert!(args_pos < env_pos, "args must precede env");
+            assert!(env_pos < mounts_pos, "env must precede volumeMounts");
+        }
     }
 }

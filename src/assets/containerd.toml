@@ -12,6 +12,7 @@ snapshotter = "{snapshotter}"
 [plugins."io.containerd.cri.v1.runtime"]
 enable_unprivileged_ports = true
 enable_unprivileged_icmp = true
+disable_apparmor = {disable_apparmor}
 
 [plugins."io.containerd.cri.v1.runtime".cni]
 bin_dirs = ["{plugin_dir}"]

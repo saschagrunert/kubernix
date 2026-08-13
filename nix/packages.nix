@@ -13,6 +13,7 @@ with pkgs;
   etcd
   iproute2
   iptables
+  jq
   kmod
   kubectl
   kubernetes
