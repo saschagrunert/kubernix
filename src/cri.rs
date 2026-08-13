@@ -57,8 +57,24 @@ pub fn cri_socket(config: &Config, network: &Network, node: u8) -> Result<CriSoc
     }
 }
 
-/// Write the CNI bridge network configuration for a node.
-pub fn write_cni_config(
+/// Write CNI network configuration for a node, selecting the appropriate
+/// plugin based on whether rootless mode is active.
+pub fn write_pod_network_config(
+    config: &Config,
+    cni_conf_dir: &Path,
+    node_name: &str,
+    node: u8,
+    network: &Network,
+) -> Result<()> {
+    if config.is_rootless() {
+        write_rootless_cni_config(cni_conf_dir, node_name, node, network)
+    } else {
+        write_cni_config(cni_conf_dir, node_name, node, network)
+    }
+}
+
+/// Write the CNI bridge network configuration for a node (root mode).
+fn write_cni_config(
     cni_conf_dir: &Path,
     node_name: &str,
     node: u8,
@@ -78,6 +94,33 @@ pub fn write_cni_config(
             "isGateway": true,
             "ipMasq": true,
             "hairpinMode": true,
+            "ipam": {
+                "type": "host-local",
+                "routes": [{ "dst": "0.0.0.0/0" }],
+                "ranges": [[{ "subnet": cidr }]]
+            }
+        }))?,
+    )?;
+    Ok(())
+}
+
+/// Write a rootless-compatible CNI config using the ptp plugin.
+fn write_rootless_cni_config(
+    cni_conf_dir: &Path,
+    node_name: &str,
+    node: u8,
+    network: &Network,
+) -> Result<()> {
+    let cidr = network
+        .pod_cidrs()
+        .get(node as usize)
+        .with_context(|| format!("Unable to find CIDR for {}", node_name))?;
+    fs::write(
+        cni_conf_dir.join("10-ptp.json"),
+        to_string_pretty(&json!({
+            "cniVersion": "0.3.1",
+            "name": format!("kubernix-{}", node_name),
+            "type": "ptp",
             "ipam": {
                 "type": "host-local",
                 "routes": [{ "dst": "0.0.0.0/0" }],
@@ -146,6 +189,30 @@ mod tests {
         let socket = CriSocket::new("/run/crio.sock".into())?;
         assert_eq!(socket.to_socket_string(), "unix:///run/crio.sock");
         assert_eq!(socket.to_string(), "/run/crio.sock");
+        Ok(())
+    }
+
+    #[test]
+    fn rootless_cni_config_uses_ptp() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let network = crate::network::Network::new(&crate::config::tests::test_config()?)?;
+        write_rootless_cni_config(dir.path(), "node-0", 0, &network)?;
+        let content = std::fs::read_to_string(dir.path().join("10-ptp.json"))?;
+        let v: serde_json::Value = serde_json::from_str(&content)?;
+        assert_eq!(v["type"], "ptp");
+        assert_eq!(v["ipam"]["type"], "host-local");
+        Ok(())
+    }
+
+    #[test]
+    fn bridge_cni_config_uses_bridge() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let network = crate::network::Network::new(&crate::config::tests::test_config()?)?;
+        write_cni_config(dir.path(), "node-0", 0, &network)?;
+        let content = std::fs::read_to_string(dir.path().join("10-bridge.json"))?;
+        let v: serde_json::Value = serde_json::from_str(&content)?;
+        assert_eq!(v["type"], "bridge");
+        assert_eq!(v["isGateway"], true);
         Ok(())
     }
 }

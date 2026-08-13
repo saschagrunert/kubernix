@@ -67,7 +67,7 @@ impl Containerd {
 
         let crun_path: String;
         let plugin_dir: String;
-        if config.multi_node() {
+        if config.multi_node() && !config.is_rootless() {
             // Use bare binary name so the runc v2 shim resolves crun from $PATH
             // inside the container (nix-shell provides it).
             crun_path = "crun".to_string();
@@ -92,6 +92,12 @@ impl Containerd {
             create_dir_all(&dir)?;
             create_dir_all(&cni_conf_dir)?;
 
+            let snapshotter =
+                if config.multi_node() || config.is_rootless() || System::in_container()? {
+                    "native"
+                } else {
+                    "overlayfs"
+                };
             fs::write(
                 &config_file,
                 format!(
@@ -102,16 +108,18 @@ impl Containerd {
                     plugin_dir = plugin_dir,
                     cni_conf_dir = cni_conf_dir.display(),
                     runtime_path = crun_path,
+                    snapshotter = snapshotter,
+                    disable_nri = config.is_rootless(),
                 ),
             )?;
 
-            cri::write_cni_config(&cni_conf_dir, &node_name, node, network)?;
+            cri::write_pod_network_config(config, &cni_conf_dir, &node_name, node, network)?;
         }
 
         let config_arg = format!("--config={}", config_file.display());
         let args: &[&str] = &[&config_arg];
 
-        let mut process = if config.multi_node() {
+        let mut process = if config.multi_node() && !config.is_rootless() {
             // containerd has no --cni-plugin-dir CLI flag (unlike CRI-O), so
             // patch bin_dirs in the config before starting the daemon. The
             // container entrypoint runs all args through `bash -c "$*"`, so

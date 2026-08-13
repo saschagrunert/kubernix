@@ -201,6 +201,10 @@ pub struct Config {
     /// The CRI runtime to use (crio or containerd)
     cri_runtime: CriRuntime,
 
+    #[serde(skip)]
+    #[arg(skip)]
+    rootless: bool,
+
     #[arg(
         default_value = "coredns",
         env = "KUBERNIX_ADDONS",
@@ -282,6 +286,16 @@ impl Config {
     /// Cluster addons to deploy after bootstrap (e.g. `coredns`).
     pub fn addons(&self) -> &[String] {
         &self.addons
+    }
+
+    /// Whether the cluster is running in rootless (user namespace) mode.
+    pub fn is_rootless(&self) -> bool {
+        self.rootless
+    }
+
+    /// Set rootless mode (auto-detected from UID at startup).
+    pub fn set_rootless(&mut self, val: bool) {
+        self.rootless = val;
     }
 }
 
@@ -378,6 +392,12 @@ pub mod tests {
         }
         c.root = tempdir()?.keep();
         c.canonicalize_root()?;
+        Ok(c)
+    }
+
+    pub fn test_config_rootless() -> Result<Config> {
+        let mut c = test_config()?;
+        c.set_rootless(true);
         Ok(c)
     }
 
@@ -522,6 +542,29 @@ root = "root"
         };
         fs::write(c.root.join(Config::FILENAME), "invalid")?;
         assert!(c.try_load_file().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn rootless_default_false() -> Result<()> {
+        let c = test_config()?;
+        assert!(!c.is_rootless());
+        Ok(())
+    }
+
+    #[test]
+    fn rootless_set_and_get() -> Result<()> {
+        let c = test_config_rootless()?;
+        assert!(c.is_rootless());
+        Ok(())
+    }
+
+    #[test]
+    fn rootless_not_serialized() -> Result<()> {
+        let mut c = test_config()?;
+        c.set_rootless(true);
+        let toml = toml::to_string(&c).unwrap();
+        assert!(!toml.contains("rootless"));
         Ok(())
     }
 }

@@ -72,7 +72,7 @@ impl Crio {
         let conmon: String;
         let crun_path: String;
         let plugin_dir: String;
-        if config.multi_node() {
+        if config.multi_node() && !config.is_rootless() {
             // Empty paths let CRI-O resolve conmon/crun from $PATH inside the container.
             conmon = String::new();
             crun_path = String::new();
@@ -100,37 +100,48 @@ impl Crio {
             create_dir_all(&network_dir)?;
             create_dir_all(&config_dir)?;
 
+            let attach_dir = dir.join("attach");
+            let ns_dir = dir.join("ns");
+            create_dir_all(&attach_dir)?;
+            create_dir_all(&ns_dir)?;
+
             let containers_dir = dir.join("containers");
             fs::write(
                 &config_file,
                 format!(
                     include_str!("assets/crio.conf"),
+                    attach_socket_dir = attach_dir.display(),
                     conmon = conmon,
                     containers_root = containers_dir.join("storage").display(),
                     containers_runroot = containers_dir.join("run").display(),
                     listen = socket,
                     log_dir = dir.join("log").display(),
+                    namespaces_dir = ns_dir.display(),
                     network_dir = network_dir.display(),
                     plugin_dir = plugin_dir,
                     exits_dir = dir.join("exits").display(),
                     runtime_path = crun_path,
                     runtime_root = dir.join("crun").display(),
                     signature_policy = Container::policy_json(config).display(),
-                    storage_driver = if config.multi_node() || System::in_container()? {
-                        "vfs"
-                    } else {
-                        "overlay"
-                    },
+                    storage_driver =
+                        if config.multi_node() || config.is_rootless() || System::in_container()? {
+                            "vfs"
+                        } else {
+                            "overlay"
+                        },
+                    storage_option = "",
                     version_file = dir.join("version").display(),
+                    disable_hostport_mapping = config.is_rootless(),
+                    enable_nri = !config.is_rootless(),
                 ),
             )?;
 
-            cri::write_cni_config(&network_dir, &node_name, node, network)?;
+            cri::write_pod_network_config(config, &network_dir, &node_name, node, network)?;
         }
         let config_dir_arg = format!("--config-dir={}", config_dir.display());
         let args: &[&str] = &[&config_dir_arg];
 
-        let mut process = if config.multi_node() {
+        let mut process = if config.multi_node() && !config.is_rootless() {
             // Run inside a container, resolve CNI plugin dir from $PATH at runtime
             let identifier = format!("CRI-O {}", node_name);
             let plugin_dir_arg =
@@ -139,7 +150,6 @@ impl Crio {
             let container_args: &[&str] = &[&config_dir_arg, &plugin_dir_arg];
             Container::start(config, &dir, &identifier, CRIO, &node_name, container_args)?
         } else {
-            // Run as usual process
             Process::start(&dir, "CRI-O", CRIO, args)?
         };
         process.wait_ready("No systemd watchdog enabled")?;

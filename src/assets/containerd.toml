@@ -7,6 +7,7 @@ address = "{socket}"
 
 [plugins."io.containerd.cri.v1.images"]
 sandbox_image = "registry.k8s.io/pause:3.10"
+snapshotter = "{snapshotter}"
 
 [plugins."io.containerd.cri.v1.runtime"]
 enable_unprivileged_ports = true
@@ -25,3 +26,6 @@ runtime_type = "io.containerd.runc.v2"
 [plugins."io.containerd.cri.v1.runtime".containerd.runtimes.crun.options]
 BinaryName = "{runtime_path}"
 SystemdCgroup = false
+
+[plugins."io.containerd.nri.v1.nri"]
+disable = {disable_nri}
