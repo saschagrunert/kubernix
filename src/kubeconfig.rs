@@ -5,7 +5,7 @@
 //! sets file permissions so non-root shell sessions can read them.
 
 use crate::{
-    Config,
+    API_SERVER_PORT, Config,
     kubectl::Kubectl,
     pki::{Identity, Pki},
 };
@@ -132,7 +132,7 @@ impl KubeConfig {
             "set-cluster",
             cluster,
             &format!("--certificate-authority={}", ca.display()),
-            &format!("--server=https://{}:6443", Ipv4Addr::LOCALHOST),
+            &format!("--server=https://{}:{API_SERVER_PORT}", Ipv4Addr::LOCALHOST),
             embed_certs,
         ])?;
 

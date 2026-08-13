@@ -126,14 +126,8 @@ spec:
       - name: coredns
         image: registry.k8s.io/coredns/coredns:v1.12.0
         imagePullPolicy: IfNotPresent
-        resources:
-          limits:
-            memory: 170Mi
-          requests:
-            cpu: 100m
-            memory: 70Mi
-        args: [ "-conf", "/etc/coredns/Corefile" ]
-        volumeMounts:
+{resources}        args: [ "-conf", "/etc/coredns/Corefile" ]
+{env}        volumeMounts:
         - name: config-volume
           mountPath: /etc/coredns
           readOnly: true
