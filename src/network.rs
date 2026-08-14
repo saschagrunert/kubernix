@@ -179,6 +179,25 @@ impl Network {
             )
         })
     }
+
+    /// Remove CNI bridge interfaces created by this cluster.
+    pub fn cleanup(&self) {
+        let output = match Command::new("ip").args(["link", "show"]).output() {
+            Ok(o) => o,
+            Err(_) => return,
+        };
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let name = match line.split(':').nth(1) {
+                Some(n) => n.trim(),
+                None => continue,
+            };
+            if name.starts_with(Self::INTERFACE_PREFIX) {
+                debug!("Removing network interface {}", name);
+                let _ = Command::new("ip").args(["link", "delete", name]).output();
+            }
+        }
+    }
 }
 
 #[cfg(test)]

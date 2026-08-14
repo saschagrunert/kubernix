@@ -62,38 +62,33 @@ impl Kubectl {
         Ok(())
     }
 
-    /// Wait for a pod to be ready
+    /// Wait for all pods matching a label to be ready
     pub fn wait_ready(&self, name: &str) -> Result<()> {
         debug!("Waiting for {} to be ready", name);
         let now = Instant::now();
         while now.elapsed().as_secs() < READINESS_TIMEOUT {
             let output = self.execute(&[
-                "get",
-                "pods",
+                "wait",
+                "--for=condition=Ready",
+                "pod",
                 "-n=kube-system",
                 &format!("-l=k8s-app={}", name),
-                "--no-headers",
-            ])?;
-            let stdout = String::from_utf8(output.stdout)?;
-            if let Some(status) = stdout.split_whitespace().nth(1) {
-                debug!(
-                    "{} status: {} ({}/{}s)",
-                    name,
-                    status,
-                    now.elapsed().as_secs(),
-                    READINESS_TIMEOUT,
-                );
-                if stdout.contains("1/1") {
+                "--timeout=5s",
+            ]);
+            match output {
+                Ok(_) => {
                     debug!("{} ready", name);
                     return Ok(());
                 }
-            } else {
-                debug!(
-                    "{} status not available ({}/{}s)",
-                    name,
-                    now.elapsed().as_secs(),
-                    READINESS_TIMEOUT,
-                )
+                Err(e) => {
+                    debug!(
+                        "{} not ready yet ({}/{}s): {}",
+                        name,
+                        now.elapsed().as_secs(),
+                        READINESS_TIMEOUT,
+                        e,
+                    );
+                }
             }
             sleep(Duration::from_secs(2));
         }

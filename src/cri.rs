@@ -22,6 +22,36 @@ use std::{
 /// Environment variable name for the CRI socket endpoint.
 pub const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
+/// Resolved paths for the OCI runtime and CNI plugins, shared between
+/// CRI-O and containerd startup.
+pub struct RuntimePaths {
+    pub crun: String,
+    pub plugin_dir: String,
+}
+
+impl RuntimePaths {
+    /// Resolve crun and CNI plugin paths. In multi-node non-rootless mode,
+    /// binaries are resolved from $PATH inside the container at runtime.
+    pub fn resolve(config: &Config) -> Result<Self> {
+        use crate::system::System;
+        if config.multi_node() && !config.is_rootless() {
+            Ok(Self {
+                crun: "crun".to_string(),
+                plugin_dir: "/tmp/cni-plugins".to_string(),
+            })
+        } else {
+            let crun = System::find_executable("crun")?.display().to_string();
+            let loopback = System::find_executable("loopback")?;
+            let plugin_dir = loopback
+                .parent()
+                .context("Unable to find CNI plugin dir")?
+                .display()
+                .to_string();
+            Ok(Self { crun, plugin_dir })
+        }
+    }
+}
+
 /// Maximum usable bytes in a Unix socket path (108 - 1 for null terminator).
 pub const MAX_SOCKET_PATH_LEN: usize = 107;
 

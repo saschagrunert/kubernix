@@ -9,11 +9,10 @@ use crate::{
     Config,
     component::{ClusterContext, Component, Phase},
     container::Container,
-    cri::{self, CriSocket},
+    cri::{self, CriSocket, RuntimePaths},
     network::Network,
     node::Node,
     process::{Process, ProcessState, Stoppable},
-    system::System,
 };
 use anyhow::{Context, Result};
 use std::{
@@ -65,23 +64,9 @@ impl Containerd {
     pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
         let node_name = Node::name(config, network, node);
 
-        let crun_path: String;
-        let plugin_dir: String;
-        if config.multi_node() && !config.is_rootless() {
-            // Use bare binary name so the runc v2 shim resolves crun from $PATH
-            // inside the container (nix-shell provides it).
-            crun_path = "crun".to_string();
-            // Placeholder: patched at container startup time via sed.
-            plugin_dir = "/tmp/cni-plugins".to_string();
-        } else {
-            crun_path = System::find_executable("crun")?.display().to_string();
-            let loopback = System::find_executable("loopback")?;
-            plugin_dir = loopback
-                .parent()
-                .context("Unable to find CNI plugin dir")?
-                .display()
-                .to_string();
-        };
+        let paths = RuntimePaths::resolve(config)?;
+        let crun_path = paths.crun;
+        let plugin_dir = paths.plugin_dir;
 
         let dir = Self::path(config, network, node);
         let config_file = dir.join("config.toml");
