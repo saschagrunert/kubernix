@@ -8,7 +8,7 @@
 <a href=#8 id=8 data-nosnippet>8</a>    Config,
 <a href=#9 id=9 data-nosnippet>9</a>    component::{ClusterContext, Component, Phase},
 <a href=#10 id=10 data-nosnippet>10</a>    container::Container,
-<a href=#11 id=11 data-nosnippet>11</a>    cri::{<span class="self">self</span>, CriSocket},
+<a href=#11 id=11 data-nosnippet>11</a>    cri::{<span class="self">self</span>, CriSocket, RuntimePaths},
 <a href=#12 id=12 data-nosnippet>12</a>    network::Network,
 <a href=#13 id=13 data-nosnippet>13</a>    node::Node,
 <a href=#14 id=14 data-nosnippet>14</a>    process::{Process, ProcessState, Stoppable},
@@ -66,139 +66,125 @@
 <a href=#66 id=66 data-nosnippet>66</a>    </span><span class="kw">pub fn </span>start(config: <span class="kw-2">&amp;</span>Config, node: u8, network: <span class="kw-2">&amp;</span>Network) -&gt; ProcessState {
 <a href=#67 id=67 data-nosnippet>67</a>        <span class="kw">let </span>node_name = Node::name(config, network, node);
 <a href=#68 id=68 data-nosnippet>68</a>
-<a href=#69 id=69 data-nosnippet>69</a>        <span class="comment">// In multi-node mode, CRI-O runs inside a container where host paths
-<a href=#70 id=70 data-nosnippet>70</a>        // don't exist. Use empty paths so CRI-O resolves binaries from $PATH
-<a href=#71 id=71 data-nosnippet>71</a>        // (set up by nix-shell in the container).
-<a href=#72 id=72 data-nosnippet>72</a>        </span><span class="kw">let </span>conmon: String;
-<a href=#73 id=73 data-nosnippet>73</a>        <span class="kw">let </span>crun_path: String;
-<a href=#74 id=74 data-nosnippet>74</a>        <span class="kw">let </span>plugin_dir: String;
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="kw">if </span>config.multi_node() &amp;&amp; !config.is_rootless() {
-<a href=#76 id=76 data-nosnippet>76</a>            <span class="comment">// Empty paths let CRI-O resolve conmon/crun from $PATH inside the container.
-<a href=#77 id=77 data-nosnippet>77</a>            </span>conmon = String::new();
-<a href=#78 id=78 data-nosnippet>78</a>            crun_path = String::new();
-<a href=#79 id=79 data-nosnippet>79</a>            <span class="comment">// Placeholder: overridden by --cni-plugin-dir CLI arg at startup.
-<a href=#80 id=80 data-nosnippet>80</a>            </span>plugin_dir = <span class="string">"/tmp/cni-plugins"</span>.to_string();
-<a href=#81 id=81 data-nosnippet>81</a>        } <span class="kw">else </span>{
-<a href=#82 id=82 data-nosnippet>82</a>            conmon = System::find_executable(<span class="string">"conmon"</span>)<span class="question-mark">?</span>.display().to_string();
-<a href=#83 id=83 data-nosnippet>83</a>            crun_path = System::find_executable(<span class="string">"crun"</span>)<span class="question-mark">?</span>.display().to_string();
-<a href=#84 id=84 data-nosnippet>84</a>            <span class="kw">let </span>loopback = System::find_executable(<span class="string">"loopback"</span>)<span class="question-mark">?</span>;
-<a href=#85 id=85 data-nosnippet>85</a>            plugin_dir = loopback
-<a href=#86 id=86 data-nosnippet>86</a>                .parent()
-<a href=#87 id=87 data-nosnippet>87</a>                .context(<span class="string">"Unable to find CNI plugin dir"</span>)<span class="question-mark">?
-<a href=#88 id=88 data-nosnippet>88</a>                </span>.display()
-<a href=#89 id=89 data-nosnippet>89</a>                .to_string();
-<a href=#90 id=90 data-nosnippet>90</a>        };
-<a href=#91 id=91 data-nosnippet>91</a>
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>dir = <span class="self">Self</span>::path(config, network, node);
-<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let </span>config_dir = dir.join(<span class="string">"crio.conf.d"</span>);
-<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span>config_file = config_dir.join(<span class="string">"crio.conf"</span>);
-<a href=#95 id=95 data-nosnippet>95</a>        <span class="kw">let </span>network_dir = dir.join(<span class="string">"cni"</span>);
-<a href=#96 id=96 data-nosnippet>96</a>        <span class="kw">let </span>socket = <span class="self">Self</span>::socket(config, network, node)<span class="question-mark">?</span>;
-<a href=#97 id=97 data-nosnippet>97</a>
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="kw">if </span>!dir.exists() {
-<a href=#99 id=99 data-nosnippet>99</a>            create_dir_all(<span class="kw-2">&amp;</span>dir)<span class="question-mark">?</span>;
-<a href=#100 id=100 data-nosnippet>100</a>            create_dir_all(<span class="kw-2">&amp;</span>network_dir)<span class="question-mark">?</span>;
-<a href=#101 id=101 data-nosnippet>101</a>            create_dir_all(<span class="kw-2">&amp;</span>config_dir)<span class="question-mark">?</span>;
-<a href=#102 id=102 data-nosnippet>102</a>
-<a href=#103 id=103 data-nosnippet>103</a>            <span class="kw">let </span>attach_dir = dir.join(<span class="string">"attach"</span>);
-<a href=#104 id=104 data-nosnippet>104</a>            <span class="kw">let </span>ns_dir = dir.join(<span class="string">"ns"</span>);
-<a href=#105 id=105 data-nosnippet>105</a>            create_dir_all(<span class="kw-2">&amp;</span>attach_dir)<span class="question-mark">?</span>;
-<a href=#106 id=106 data-nosnippet>106</a>            create_dir_all(<span class="kw-2">&amp;</span>ns_dir)<span class="question-mark">?</span>;
-<a href=#107 id=107 data-nosnippet>107</a>
-<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw">let </span>containers_dir = dir.join(<span class="string">"containers"</span>);
-<a href=#109 id=109 data-nosnippet>109</a>            fs::write(
-<a href=#110 id=110 data-nosnippet>110</a>                <span class="kw-2">&amp;</span>config_file,
-<a href=#111 id=111 data-nosnippet>111</a>                <span class="macro">format!</span>(
-<a href=#112 id=112 data-nosnippet>112</a>                    <span class="macro">include_str!</span>(<span class="string">"assets/crio.conf"</span>),
-<a href=#113 id=113 data-nosnippet>113</a>                    attach_socket_dir = attach_dir.display(),
-<a href=#114 id=114 data-nosnippet>114</a>                    conmon = conmon,
-<a href=#115 id=115 data-nosnippet>115</a>                    containers_root = containers_dir.join(<span class="string">"storage"</span>).display(),
-<a href=#116 id=116 data-nosnippet>116</a>                    containers_runroot = containers_dir.join(<span class="string">"run"</span>).display(),
-<a href=#117 id=117 data-nosnippet>117</a>                    listen = socket,
-<a href=#118 id=118 data-nosnippet>118</a>                    log_dir = dir.join(<span class="string">"log"</span>).display(),
-<a href=#119 id=119 data-nosnippet>119</a>                    namespaces_dir = ns_dir.display(),
-<a href=#120 id=120 data-nosnippet>120</a>                    network_dir = network_dir.display(),
-<a href=#121 id=121 data-nosnippet>121</a>                    plugin_dir = plugin_dir,
-<a href=#122 id=122 data-nosnippet>122</a>                    exits_dir = dir.join(<span class="string">"exits"</span>).display(),
-<a href=#123 id=123 data-nosnippet>123</a>                    runtime_path = crun_path,
-<a href=#124 id=124 data-nosnippet>124</a>                    runtime_root = dir.join(<span class="string">"crun"</span>).display(),
-<a href=#125 id=125 data-nosnippet>125</a>                    signature_policy = Container::policy_json(config).display(),
-<a href=#126 id=126 data-nosnippet>126</a>                    storage_driver =
-<a href=#127 id=127 data-nosnippet>127</a>                        <span class="kw">if </span>config.multi_node() || config.is_rootless() || System::in_container()<span class="question-mark">? </span>{
-<a href=#128 id=128 data-nosnippet>128</a>                            <span class="string">"vfs"
-<a href=#129 id=129 data-nosnippet>129</a>                        </span>} <span class="kw">else </span>{
-<a href=#130 id=130 data-nosnippet>130</a>                            <span class="string">"overlay"
-<a href=#131 id=131 data-nosnippet>131</a>                        </span>},
-<a href=#132 id=132 data-nosnippet>132</a>                    storage_option = <span class="string">""</span>,
-<a href=#133 id=133 data-nosnippet>133</a>                    version_file = dir.join(<span class="string">"version"</span>).display(),
-<a href=#134 id=134 data-nosnippet>134</a>                    disable_hostport_mapping = config.is_rootless(),
-<a href=#135 id=135 data-nosnippet>135</a>                    enable_nri = !config.is_rootless(),
-<a href=#136 id=136 data-nosnippet>136</a>                ),
-<a href=#137 id=137 data-nosnippet>137</a>            )<span class="question-mark">?</span>;
-<a href=#138 id=138 data-nosnippet>138</a>
-<a href=#139 id=139 data-nosnippet>139</a>            cri::write_pod_network_config(config, <span class="kw-2">&amp;</span>network_dir, <span class="kw-2">&amp;</span>node_name, node, network)<span class="question-mark">?</span>;
-<a href=#140 id=140 data-nosnippet>140</a>        }
-<a href=#141 id=141 data-nosnippet>141</a>        <span class="kw">let </span>config_dir_arg = <span class="macro">format!</span>(<span class="string">"--config-dir={}"</span>, config_dir.display());
-<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">let </span>args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str] = <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>config_dir_arg];
-<a href=#143 id=143 data-nosnippet>143</a>
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span><span class="kw-2">mut </span>process = <span class="kw">if </span>config.multi_node() &amp;&amp; !config.is_rootless() {
-<a href=#145 id=145 data-nosnippet>145</a>            <span class="comment">// Run inside a container, resolve CNI plugin dir from $PATH at runtime
-<a href=#146 id=146 data-nosnippet>146</a>            </span><span class="kw">let </span>identifier = <span class="macro">format!</span>(<span class="string">"CRI-O {}"</span>, node_name);
-<a href=#147 id=147 data-nosnippet>147</a>            <span class="kw">let </span>plugin_dir_arg =
-<a href=#148 id=148 data-nosnippet>148</a>                <span class="string">r#"--cni-plugin-dir=$(dirname $(which loopback || echo loopback_not_found))"#
-<a href=#149 id=149 data-nosnippet>149</a>                    </span>.to_string();
-<a href=#150 id=150 data-nosnippet>150</a>            <span class="kw">let </span>container_args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str] = <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>config_dir_arg, <span class="kw-2">&amp;</span>plugin_dir_arg];
-<a href=#151 id=151 data-nosnippet>151</a>            Container::start(config, <span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>identifier, CRIO, <span class="kw-2">&amp;</span>node_name, container_args)<span class="question-mark">?
-<a href=#152 id=152 data-nosnippet>152</a>        </span>} <span class="kw">else </span>{
-<a href=#153 id=153 data-nosnippet>153</a>            Process::start(<span class="kw-2">&amp;</span>dir, <span class="string">"CRI-O"</span>, CRIO, args)<span class="question-mark">?
-<a href=#154 id=154 data-nosnippet>154</a>        </span>};
-<a href=#155 id=155 data-nosnippet>155</a>        process.wait_ready(<span class="string">"No systemd watchdog enabled"</span>)<span class="question-mark">?</span>;
-<a href=#156 id=156 data-nosnippet>156</a>
-<a href=#157 id=157 data-nosnippet>157</a>        <span class="prelude-val">Ok</span>(Box::new(<span class="self">Self </span>{
-<a href=#158 id=158 data-nosnippet>158</a>            process,
-<a href=#159 id=159 data-nosnippet>159</a>            socket,
-<a href=#160 id=160 data-nosnippet>160</a>            node_name,
-<a href=#161 id=161 data-nosnippet>161</a>        }))
-<a href=#162 id=162 data-nosnippet>162</a>    }
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">let </span>paths = RuntimePaths::resolve(config)<span class="question-mark">?</span>;
+<a href=#70 id=70 data-nosnippet>70</a>        <span class="comment">// CRI-O validates runtime_path with stat; empty lets it resolve from $PATH
+<a href=#71 id=71 data-nosnippet>71</a>        </span><span class="kw">let </span>crun_path = <span class="kw">if </span>config.multi_node() &amp;&amp; !config.is_rootless() {
+<a href=#72 id=72 data-nosnippet>72</a>            String::new()
+<a href=#73 id=73 data-nosnippet>73</a>        } <span class="kw">else </span>{
+<a href=#74 id=74 data-nosnippet>74</a>            paths.crun
+<a href=#75 id=75 data-nosnippet>75</a>        };
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw">let </span>plugin_dir = paths.plugin_dir;
+<a href=#77 id=77 data-nosnippet>77</a>        <span class="kw">let </span>conmon = <span class="kw">if </span>config.multi_node() &amp;&amp; !config.is_rootless() {
+<a href=#78 id=78 data-nosnippet>78</a>            String::new()
+<a href=#79 id=79 data-nosnippet>79</a>        } <span class="kw">else </span>{
+<a href=#80 id=80 data-nosnippet>80</a>            System::find_executable(<span class="string">"conmon"</span>)<span class="question-mark">?</span>.display().to_string()
+<a href=#81 id=81 data-nosnippet>81</a>        };
+<a href=#82 id=82 data-nosnippet>82</a>
+<a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">let </span>dir = <span class="self">Self</span>::path(config, network, node);
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>config_dir = dir.join(<span class="string">"crio.conf.d"</span>);
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>config_file = config_dir.join(<span class="string">"crio.conf"</span>);
+<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let </span>network_dir = dir.join(<span class="string">"cni"</span>);
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span>socket = <span class="self">Self</span>::socket(config, network, node)<span class="question-mark">?</span>;
+<a href=#88 id=88 data-nosnippet>88</a>
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">if </span>!dir.exists() {
+<a href=#90 id=90 data-nosnippet>90</a>            create_dir_all(<span class="kw-2">&amp;</span>dir)<span class="question-mark">?</span>;
+<a href=#91 id=91 data-nosnippet>91</a>            create_dir_all(<span class="kw-2">&amp;</span>network_dir)<span class="question-mark">?</span>;
+<a href=#92 id=92 data-nosnippet>92</a>            create_dir_all(<span class="kw-2">&amp;</span>config_dir)<span class="question-mark">?</span>;
+<a href=#93 id=93 data-nosnippet>93</a>
+<a href=#94 id=94 data-nosnippet>94</a>            <span class="kw">let </span>attach_dir = dir.join(<span class="string">"attach"</span>);
+<a href=#95 id=95 data-nosnippet>95</a>            <span class="kw">let </span>ns_dir = dir.join(<span class="string">"ns"</span>);
+<a href=#96 id=96 data-nosnippet>96</a>            create_dir_all(<span class="kw-2">&amp;</span>attach_dir)<span class="question-mark">?</span>;
+<a href=#97 id=97 data-nosnippet>97</a>            create_dir_all(<span class="kw-2">&amp;</span>ns_dir)<span class="question-mark">?</span>;
+<a href=#98 id=98 data-nosnippet>98</a>
+<a href=#99 id=99 data-nosnippet>99</a>            <span class="kw">let </span>containers_dir = dir.join(<span class="string">"containers"</span>);
+<a href=#100 id=100 data-nosnippet>100</a>            fs::write(
+<a href=#101 id=101 data-nosnippet>101</a>                <span class="kw-2">&amp;</span>config_file,
+<a href=#102 id=102 data-nosnippet>102</a>                <span class="macro">format!</span>(
+<a href=#103 id=103 data-nosnippet>103</a>                    <span class="macro">include_str!</span>(<span class="string">"assets/crio.conf"</span>),
+<a href=#104 id=104 data-nosnippet>104</a>                    attach_socket_dir = attach_dir.display(),
+<a href=#105 id=105 data-nosnippet>105</a>                    conmon = conmon,
+<a href=#106 id=106 data-nosnippet>106</a>                    containers_root = containers_dir.join(<span class="string">"storage"</span>).display(),
+<a href=#107 id=107 data-nosnippet>107</a>                    containers_runroot = containers_dir.join(<span class="string">"run"</span>).display(),
+<a href=#108 id=108 data-nosnippet>108</a>                    listen = socket,
+<a href=#109 id=109 data-nosnippet>109</a>                    log_dir = dir.join(<span class="string">"log"</span>).display(),
+<a href=#110 id=110 data-nosnippet>110</a>                    namespaces_dir = ns_dir.display(),
+<a href=#111 id=111 data-nosnippet>111</a>                    network_dir = network_dir.display(),
+<a href=#112 id=112 data-nosnippet>112</a>                    plugin_dir = plugin_dir,
+<a href=#113 id=113 data-nosnippet>113</a>                    exits_dir = dir.join(<span class="string">"exits"</span>).display(),
+<a href=#114 id=114 data-nosnippet>114</a>                    runtime_path = crun_path,
+<a href=#115 id=115 data-nosnippet>115</a>                    runtime_root = dir.join(<span class="string">"crun"</span>).display(),
+<a href=#116 id=116 data-nosnippet>116</a>                    signature_policy = Container::policy_json(config).display(),
+<a href=#117 id=117 data-nosnippet>117</a>                    storage_driver = <span class="string">"overlay"</span>,
+<a href=#118 id=118 data-nosnippet>118</a>                    storage_option = <span class="string">""</span>,
+<a href=#119 id=119 data-nosnippet>119</a>                    version_file = dir.join(<span class="string">"version"</span>).display(),
+<a href=#120 id=120 data-nosnippet>120</a>                    disable_hostport_mapping = config.is_rootless(),
+<a href=#121 id=121 data-nosnippet>121</a>                    enable_nri = !config.is_rootless(),
+<a href=#122 id=122 data-nosnippet>122</a>                ),
+<a href=#123 id=123 data-nosnippet>123</a>            )<span class="question-mark">?</span>;
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a>            cri::write_pod_network_config(config, <span class="kw-2">&amp;</span>network_dir, <span class="kw-2">&amp;</span>node_name, node, network)<span class="question-mark">?</span>;
+<a href=#126 id=126 data-nosnippet>126</a>        }
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw">let </span>config_dir_arg = <span class="macro">format!</span>(<span class="string">"--config-dir={}"</span>, config_dir.display());
+<a href=#128 id=128 data-nosnippet>128</a>        <span class="kw">let </span>args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str] = <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>config_dir_arg];
+<a href=#129 id=129 data-nosnippet>129</a>
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw">let </span><span class="kw-2">mut </span>process = <span class="kw">if </span>config.multi_node() &amp;&amp; !config.is_rootless() {
+<a href=#131 id=131 data-nosnippet>131</a>            <span class="comment">// Run inside a container, resolve CNI plugin dir from $PATH at runtime
+<a href=#132 id=132 data-nosnippet>132</a>            </span><span class="kw">let </span>identifier = <span class="macro">format!</span>(<span class="string">"CRI-O {}"</span>, node_name);
+<a href=#133 id=133 data-nosnippet>133</a>            <span class="kw">let </span>plugin_dir_arg =
+<a href=#134 id=134 data-nosnippet>134</a>                <span class="string">r#"--cni-plugin-dir=$(dirname $(which loopback || echo loopback_not_found))"#
+<a href=#135 id=135 data-nosnippet>135</a>                    </span>.to_string();
+<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw">let </span>container_args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str] = <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>config_dir_arg, <span class="kw-2">&amp;</span>plugin_dir_arg];
+<a href=#137 id=137 data-nosnippet>137</a>            Container::start(config, <span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>identifier, CRIO, <span class="kw-2">&amp;</span>node_name, container_args)<span class="question-mark">?
+<a href=#138 id=138 data-nosnippet>138</a>        </span>} <span class="kw">else </span>{
+<a href=#139 id=139 data-nosnippet>139</a>            Process::start(<span class="kw-2">&amp;</span>dir, <span class="string">"CRI-O"</span>, CRIO, args)<span class="question-mark">?
+<a href=#140 id=140 data-nosnippet>140</a>        </span>};
+<a href=#141 id=141 data-nosnippet>141</a>        process.wait_ready(<span class="string">"No systemd watchdog enabled"</span>)<span class="question-mark">?</span>;
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a>        <span class="prelude-val">Ok</span>(Box::new(<span class="self">Self </span>{
+<a href=#144 id=144 data-nosnippet>144</a>            process,
+<a href=#145 id=145 data-nosnippet>145</a>            socket,
+<a href=#146 id=146 data-nosnippet>146</a>            node_name,
+<a href=#147 id=147 data-nosnippet>147</a>        }))
+<a href=#148 id=148 data-nosnippet>148</a>    }
+<a href=#149 id=149 data-nosnippet>149</a>
+<a href=#150 id=150 data-nosnippet>150</a>    <span class="doccomment">/// Retrieve the CRI socket
+<a href=#151 id=151 data-nosnippet>151</a>    </span><span class="kw">pub fn </span>socket(config: <span class="kw-2">&amp;</span>Config, network: <span class="kw-2">&amp;</span>Network, node: u8) -&gt; <span class="prelude-ty">Result</span>&lt;CriSocket&gt; {
+<a href=#152 id=152 data-nosnippet>152</a>        CriSocket::new(<span class="self">Self</span>::path(config, network, node).join(<span class="string">"crio.sock"</span>))
+<a href=#153 id=153 data-nosnippet>153</a>    }
+<a href=#154 id=154 data-nosnippet>154</a>
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="doccomment">/// Retrieve the working path for the node
+<a href=#156 id=156 data-nosnippet>156</a>    </span><span class="kw">fn </span>path(config: <span class="kw-2">&amp;</span>Config, network: <span class="kw-2">&amp;</span>Network, node: u8) -&gt; PathBuf {
+<a href=#157 id=157 data-nosnippet>157</a>        config
+<a href=#158 id=158 data-nosnippet>158</a>            .root()
+<a href=#159 id=159 data-nosnippet>159</a>            .join(CRIO)
+<a href=#160 id=160 data-nosnippet>160</a>            .join(Node::name(config, network, node))
+<a href=#161 id=161 data-nosnippet>161</a>    }
+<a href=#162 id=162 data-nosnippet>162</a>}
 <a href=#163 id=163 data-nosnippet>163</a>
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="doccomment">/// Retrieve the CRI socket
-<a href=#165 id=165 data-nosnippet>165</a>    </span><span class="kw">pub fn </span>socket(config: <span class="kw-2">&amp;</span>Config, network: <span class="kw-2">&amp;</span>Network, node: u8) -&gt; <span class="prelude-ty">Result</span>&lt;CriSocket&gt; {
-<a href=#166 id=166 data-nosnippet>166</a>        CriSocket::new(<span class="self">Self</span>::path(config, network, node).join(<span class="string">"crio.sock"</span>))
-<a href=#167 id=167 data-nosnippet>167</a>    }
+<a href=#164 id=164 data-nosnippet>164</a><span class="kw">impl </span>Stoppable <span class="kw">for </span>Crio {
+<a href=#165 id=165 data-nosnippet>165</a>    <span class="kw">fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#166 id=166 data-nosnippet>166</a>        cri::remove_all_containers(<span class="string">"CRI-O"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.socket, <span class="kw-2">&amp;</span><span class="self">self</span>.node_name)
+<a href=#167 id=167 data-nosnippet>167</a>            .with_context(|| <span class="macro">format!</span>(<span class="string">"Unable to remove CRI-O containers on {}"</span>, <span class="self">self</span>.node_name))<span class="question-mark">?</span>;
 <a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="doccomment">/// Retrieve the working path for the node
-<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="kw">fn </span>path(config: <span class="kw-2">&amp;</span>Config, network: <span class="kw-2">&amp;</span>Network, node: u8) -&gt; PathBuf {
-<a href=#171 id=171 data-nosnippet>171</a>        config
-<a href=#172 id=172 data-nosnippet>172</a>            .root()
-<a href=#173 id=173 data-nosnippet>173</a>            .join(CRIO)
-<a href=#174 id=174 data-nosnippet>174</a>            .join(Node::name(config, network, node))
-<a href=#175 id=175 data-nosnippet>175</a>    }
-<a href=#176 id=176 data-nosnippet>176</a>}
-<a href=#177 id=177 data-nosnippet>177</a>
-<a href=#178 id=178 data-nosnippet>178</a><span class="kw">impl </span>Stoppable <span class="kw">for </span>Crio {
-<a href=#179 id=179 data-nosnippet>179</a>    <span class="kw">fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#180 id=180 data-nosnippet>180</a>        cri::remove_all_containers(<span class="string">"CRI-O"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.socket, <span class="kw-2">&amp;</span><span class="self">self</span>.node_name)
-<a href=#181 id=181 data-nosnippet>181</a>            .with_context(|| <span class="macro">format!</span>(<span class="string">"Unable to remove CRI-O containers on {}"</span>, <span class="self">self</span>.node_name))<span class="question-mark">?</span>;
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="self">self</span>.process.stop()
-<a href=#184 id=184 data-nosnippet>184</a>    }
-<a href=#185 id=185 data-nosnippet>185</a>}
-<a href=#186 id=186 data-nosnippet>186</a>
-<a href=#187 id=187 data-nosnippet>187</a><span class="attr">#[cfg(test)]
-<a href=#188 id=188 data-nosnippet>188</a></span><span class="kw">mod </span>tests {
-<a href=#189 id=189 data-nosnippet>189</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#190 id=190 data-nosnippet>190</a>
-<a href=#191 id=191 data-nosnippet>191</a>    <span class="attr">#[test]
-<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">fn </span>component_metadata() {
-<a href=#193 id=193 data-nosnippet>193</a>        <span class="kw">let </span>c = CrioComponent::new(<span class="number">0</span>);
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="macro">assert_eq!</span>(c.name(), <span class="string">"CRI-O (node 0)"</span>);
-<a href=#195 id=195 data-nosnippet>195</a>        <span class="macro">assert_eq!</span>(c.phase(), Phase::Controller);
-<a href=#196 id=196 data-nosnippet>196</a>    }
-<a href=#197 id=197 data-nosnippet>197</a>
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="attr">#[test]
-<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">fn </span>component_name_per_node() {
-<a href=#200 id=200 data-nosnippet>200</a>        <span class="macro">assert_eq!</span>(CrioComponent::new(<span class="number">0</span>).name(), <span class="string">"CRI-O (node 0)"</span>);
-<a href=#201 id=201 data-nosnippet>201</a>        <span class="macro">assert_eq!</span>(CrioComponent::new(<span class="number">2</span>).name(), <span class="string">"CRI-O (node 2)"</span>);
-<a href=#202 id=202 data-nosnippet>202</a>    }
-<a href=#203 id=203 data-nosnippet>203</a>}
+<a href=#169 id=169 data-nosnippet>169</a>        <span class="self">self</span>.process.stop()
+<a href=#170 id=170 data-nosnippet>170</a>    }
+<a href=#171 id=171 data-nosnippet>171</a>}
+<a href=#172 id=172 data-nosnippet>172</a>
+<a href=#173 id=173 data-nosnippet>173</a><span class="attr">#[cfg(test)]
+<a href=#174 id=174 data-nosnippet>174</a></span><span class="kw">mod </span>tests {
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#176 id=176 data-nosnippet>176</a>
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="attr">#[test]
+<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="kw">fn </span>component_metadata() {
+<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">let </span>c = CrioComponent::new(<span class="number">0</span>);
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="macro">assert_eq!</span>(c.name(), <span class="string">"CRI-O (node 0)"</span>);
+<a href=#181 id=181 data-nosnippet>181</a>        <span class="macro">assert_eq!</span>(c.phase(), Phase::Controller);
+<a href=#182 id=182 data-nosnippet>182</a>    }
+<a href=#183 id=183 data-nosnippet>183</a>
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="attr">#[test]
+<a href=#185 id=185 data-nosnippet>185</a>    </span><span class="kw">fn </span>component_name_per_node() {
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="macro">assert_eq!</span>(CrioComponent::new(<span class="number">0</span>).name(), <span class="string">"CRI-O (node 0)"</span>);
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="macro">assert_eq!</span>(CrioComponent::new(<span class="number">2</span>).name(), <span class="string">"CRI-O (node 2)"</span>);
+<a href=#188 id=188 data-nosnippet>188</a>    }
+<a href=#189 id=189 data-nosnippet>189</a>}
 </code></pre></div></section></main></body></html>
