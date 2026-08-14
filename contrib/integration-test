@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+EXPECTED_NODES="${1:?Usage: $0 <expected-nodes>}"
+
+export KUBECONFIG="${KUBECONFIG:-$PWD/kubernix-run/kubeconfig/admin.kubeconfig}"
+
+echo "Asserting all nodes are Ready..."
+READY_COUNT=$(kubectl get nodes -o go-template='{{range .items}}{{range .status.conditions}}{{if eq .type "Ready"}}{{if eq .status "True"}}x{{end}}{{end}}{{end}}{{end}}' | wc -c)
+if [ "$READY_COUNT" -ne "$EXPECTED_NODES" ]; then
+  echo "FAIL: expected $EXPECTED_NODES ready nodes, got $READY_COUNT"
+  exit 1
+fi
+
+echo "Asserting all pods are healthy..."
+# shellcheck disable=SC2016
+TMPL_UNHEALTHY='{{range .items}}{{if and (ne .status.phase "Running") (ne .status.phase "Succeeded")}}x{{end}}{{end}}'
+timeout 60 bash -c "until [ \"\$(kubectl get pods -A -o go-template='$TMPL_UNHEALTHY' | wc -c)\" -eq 0 ]; do sleep 2; done"
+UNHEALTHY=$(kubectl get pods -A -o go-template='{{range .items}}{{if and (ne .status.phase "Running") (ne .status.phase "Succeeded")}}{{.metadata.name}}({{.status.phase}}) {{end}}{{end}}')
+if [ -n "$UNHEALTHY" ]; then
+  echo "FAIL: unhealthy pods: $UNHEALTHY"
+  exit 1
+fi
+
+echo "Asserting CoreDNS is ready..."
+if ! timeout 110 bash -c 'until kubectl -n kube-system wait --for=condition=Ready pod -l k8s-app=coredns --timeout=5s 2>/dev/null; do sleep 2; done'; then
+  echo "=== CoreDNS pod describe ==="
+  kubectl describe pod -n kube-system -l k8s-app=coredns || true
+  echo "=== CoreDNS logs ==="
+  kubectl logs -n kube-system -l k8s-app=coredns --tail=100 || true
+  echo "=== kubernetes endpoints ==="
+  kubectl get endpoints kubernetes || true
+  exit 1
+fi
+echo "CoreDNS is ready"
+
+echo "All assertions passed"

@@ -61,16 +61,6 @@ impl System {
                 fs::create_dir_all("/var/lib/kubelet/device-plugins")
                     .context("Unable to create /var/lib/kubelet/device-plugins")?;
 
-                // Override containers-storage.conf to prevent
-                // overlay-specific options from leaking into vfs mode.
-                // Written to the run directory (not /etc/containers/) to
-                // avoid permission issues inside rootlesskit copy-ups.
-                let storage_conf = config.root().join("storage.conf");
-                fs::write(&storage_conf, "[storage]\ndriver = \"vfs\"\n")
-                    .context("Unable to write rootless storage.conf")?;
-                // SAFETY: called before any threads are spawned.
-                unsafe { std::env::set_var("CONTAINERS_STORAGE_CONF", &storage_conf) };
-
                 // On NixOS, /etc/hosts is a symlink into the read-only nix
                 // store. Replace it with a regular file so multi-node can
                 // write host entries.
@@ -250,9 +240,12 @@ impl System {
         debug!("Enabling sysctl '{}'", key);
         let enable_arg = format!("{}=1", key);
         let output = Command::new("sysctl").arg("-w").arg(&enable_arg).output()?;
-        let stderr = String::from_utf8(output.stderr)?;
-        if !stderr.is_empty() {
-            bail!("Unable to set sysctl '{}': {}", enable_arg, stderr);
+        if !output.status.success() {
+            bail!(
+                "Unable to set sysctl '{}': {}",
+                enable_arg,
+                String::from_utf8(output.stderr)?,
+            );
         }
         Ok(())
     }

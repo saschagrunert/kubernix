@@ -8,7 +8,7 @@ use crate::{
     Config,
     component::{ClusterContext, Component, Phase},
     container::Container,
-    cri::{self, CriSocket},
+    cri::{self, CriSocket, RuntimePaths},
     network::Network,
     node::Node,
     process::{Process, ProcessState, Stoppable},
@@ -66,27 +66,18 @@ impl Crio {
     pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
         let node_name = Node::name(config, network, node);
 
-        // In multi-node mode, CRI-O runs inside a container where host paths
-        // don't exist. Use empty paths so CRI-O resolves binaries from $PATH
-        // (set up by nix-shell in the container).
-        let conmon: String;
-        let crun_path: String;
-        let plugin_dir: String;
-        if config.multi_node() && !config.is_rootless() {
-            // Empty paths let CRI-O resolve conmon/crun from $PATH inside the container.
-            conmon = String::new();
-            crun_path = String::new();
-            // Placeholder: overridden by --cni-plugin-dir CLI arg at startup.
-            plugin_dir = "/tmp/cni-plugins".to_string();
+        let paths = RuntimePaths::resolve(config)?;
+        // CRI-O validates runtime_path with stat; empty lets it resolve from $PATH
+        let crun_path = if config.multi_node() && !config.is_rootless() {
+            String::new()
         } else {
-            conmon = System::find_executable("conmon")?.display().to_string();
-            crun_path = System::find_executable("crun")?.display().to_string();
-            let loopback = System::find_executable("loopback")?;
-            plugin_dir = loopback
-                .parent()
-                .context("Unable to find CNI plugin dir")?
-                .display()
-                .to_string();
+            paths.crun
+        };
+        let plugin_dir = paths.plugin_dir;
+        let conmon = if config.multi_node() && !config.is_rootless() {
+            String::new()
+        } else {
+            System::find_executable("conmon")?.display().to_string()
         };
 
         let dir = Self::path(config, network, node);
@@ -123,12 +114,7 @@ impl Crio {
                     runtime_path = crun_path,
                     runtime_root = dir.join("crun").display(),
                     signature_policy = Container::policy_json(config).display(),
-                    storage_driver =
-                        if config.multi_node() || config.is_rootless() || System::in_container()? {
-                            "vfs"
-                        } else {
-                            "overlay"
-                        },
+                    storage_driver = "overlay",
                     storage_option = "",
                     version_file = dir.join("version").display(),
                     disable_hostport_mapping = config.is_rootless(),

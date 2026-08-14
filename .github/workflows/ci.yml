@@ -202,6 +202,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make lint-dependencies
 
+  lint-shellcheck:
+    name: lint / shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: shellcheck contrib/install-cfssl contrib/prepare-system contrib/integration-test src/assets/crun-rootless.sh
+
   test-msrv:
     name: test / msrv
     runs-on: ubuntu-latest
@@ -296,6 +303,7 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+      - uses: DeterminateSystems/magic-nix-cache-action@6221693898146dc97e38ad0e013488a16477a4c4 # v9
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: kubernix-x86_64
@@ -327,35 +335,7 @@ jobs:
           timeout 600 bash -c 'while [ ! -f kubernix-run/kubernix.pid ]; do sleep 1; done'
           echo "Cluster is up, running checks"
           export KUBECONFIG=$PWD/kubernix-run/kubeconfig/admin.kubeconfig
-
-          echo "Asserting all nodes are Ready..."
-          READY_COUNT=$(kubectl get nodes -o go-template='{{range .items}}{{range .status.conditions}}{{if eq .type "Ready"}}{{if eq .status "True"}}x{{end}}{{end}}{{end}}{{end}}' | wc -c)
-          if [ "$READY_COUNT" -ne "${{ matrix.nodes }}" ]; then
-            echo "FAIL: expected ${{ matrix.nodes }} ready nodes, got $READY_COUNT"
-            exit 1
-          fi
-
-          echo "Asserting all pods are healthy..."
-          timeout 60 bash -c 'until [ "$(kubectl get pods -A -o go-template="{{range .items}}{{if and (ne .status.phase \"Running\") (ne .status.phase \"Succeeded\")}}x{{end}}{{end}}" | wc -c)" -eq 0 ]; do sleep 2; done'
-          UNHEALTHY=$(kubectl get pods -A -o go-template='{{range .items}}{{if and (ne .status.phase "Running") (ne .status.phase "Succeeded")}}{{.metadata.name}}({{.status.phase}}) {{end}}{{end}}')
-          if [ -n "$UNHEALTHY" ]; then
-            echo "FAIL: unhealthy pods: $UNHEALTHY"
-            exit 1
-          fi
-
-          echo "Asserting CoreDNS is ready..."
-          if ! timeout 110 bash -c 'until kubectl -n kube-system wait --for=condition=Ready pod -l k8s-app=coredns --timeout=5s 2>/dev/null; do sleep 2; done'; then
-            echo "=== CoreDNS pod describe ==="
-            kubectl describe pod -n kube-system -l k8s-app=coredns || true
-            echo "=== CoreDNS logs ==="
-            kubectl logs -n kube-system -l k8s-app=coredns --tail=100 || true
-            echo "=== kubernetes endpoints ==="
-            kubectl get endpoints kubernetes || true
-            exit 1
-          fi
-          echo "CoreDNS is ready"
-
-          echo "All assertions passed"
+          contrib/integration-test ${{ matrix.nodes }}
           ${{ !matrix.rootless && 'sudo' || '' }} kill $KUBERNIX_PID
           wait $KUBERNIX_PID || true
         timeout-minutes: 15

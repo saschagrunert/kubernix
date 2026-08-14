@@ -553,9 +553,6 @@ impl Drop for Kubernix {
 
         info!("Cleaning up");
 
-        // Signal the addon thread to stop and give it a short window
-        // to finish. If it does not complete in time, proceed with
-        // shutdown rather than blocking for up to 120s.
         self.addon_shutdown.store(true, Ordering::Relaxed);
         if let Some(handle) = self.addon_thread.take() {
             debug!("Waiting for addon deployment to finish");
@@ -566,13 +563,14 @@ impl Drop for Kubernix {
             if handle.is_finished() {
                 let _ = handle.join();
             } else {
-                debug!("Addon thread did not finish in time, proceeding with shutdown");
+                debug!("Addon thread did not finish in time, detaching");
             }
         }
 
         self.stop();
         self.umount();
         self.cleanup_rootless_storage();
+        self.network.cleanup();
         self.system.cleanup();
         info!("Cleanup done");
 

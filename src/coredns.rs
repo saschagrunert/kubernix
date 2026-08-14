@@ -28,7 +28,7 @@ impl CoreDns {
         Ok(())
     }
 
-    fn render(dns: Ipv4Addr, rootless: bool) -> String {
+    fn render(dns: Ipv4Addr, skip_resources: bool) -> String {
         // CoreDNS uses hostNetwork, so it can always reach the API server
         // at 127.0.0.1. Setting these env vars explicitly avoids depending
         // on kube-proxy ClusterIP routing being ready when CoreDNS starts.
@@ -42,7 +42,7 @@ impl CoreDns {
             ),
             API_SERVER_PORT,
         );
-        let resources = if rootless {
+        let resources = if skip_resources {
             ""
         } else {
             concat!(

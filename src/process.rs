@@ -82,25 +82,12 @@ impl Process {
         // Write the executed command into the dir
         create_dir_all(dir)?;
 
-        // If the run file exists, execute only that one
         let run_file = dir.join("run.json");
-        let run = if !run_file.exists() {
-            debug!(
-                "No previous run file '{}' found, writing new one",
-                run_file.display()
-            );
-            // Write the run file
-            let f = Run {
-                command: System::find_executable(command)?,
-                args: args.iter().map(|x| (*x).to_string()).collect(),
-            };
-            fs::write(&run_file, serde_json::to_string_pretty(&f)?)?;
-            f
-        } else {
-            debug!("Re using run file '{}'", run_file.display());
-            let contents = fs::read_to_string(&run_file)?;
-            serde_json::from_str(&contents)?
+        let run = Run {
+            command: System::find_executable(command)?,
+            args: args.iter().map(|x| (*x).to_string()).collect(),
         };
+        fs::write(&run_file, serde_json::to_string_pretty(&run)?)?;
 
         // Prepare the log dir and file
         let mut log_file = dir.join(command);
@@ -226,20 +213,39 @@ impl Stoppable for Process {
             )
         })?;
 
-        // Send SIGTERM to the process
         let pid = i32::try_from(self.pid)
             .with_context(|| format!("PID {} exceeds i32 range", self.pid))?;
-        kill(Pid::from_raw(pid), Signal::SIGTERM)?;
+        let nix_pid = Pid::from_raw(pid);
 
-        // Join the waiting thread
-        if let Some(handle) = self.watch.take()
-            && handle.join().is_err()
-        {
-            bail!(
-                "Unable to stop process {} (via {})",
-                self.name,
-                self.command
-            );
+        kill(nix_pid, Signal::SIGTERM)?;
+
+        if let Some(handle) = self.watch.take() {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            while !handle.is_finished() && Instant::now() < deadline {
+                sleep(Duration::from_millis(100));
+            }
+            if handle.is_finished() {
+                if handle.join().is_err() {
+                    bail!(
+                        "Unable to stop process {} (via {})",
+                        self.name,
+                        self.command,
+                    );
+                }
+            } else {
+                debug!(
+                    "Process {} (via {}) did not exit after SIGTERM, sending SIGKILL",
+                    self.name, self.command,
+                );
+                let _ = kill(nix_pid, Signal::SIGKILL);
+                if handle.join().is_err() {
+                    bail!(
+                        "Unable to stop process {} (via {})",
+                        self.name,
+                        self.command,
+                    );
+                }
+            }
         }
         debug!("Process {} (via {}) stopped", self.name, self.command);
         Ok(())
