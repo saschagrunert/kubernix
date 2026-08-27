@@ -16,7 +16,7 @@
 <a href=#16 id=16 data-nosnippet>16</a>        <span class="macro">info!</span>(<span class="string">"Deploying CoreDNS and waiting to be ready"</span>);
 <a href=#17 id=17 data-nosnippet>17</a>
 <a href=#18 id=18 data-nosnippet>18</a>        <span class="kw">let </span>dir = config.root().join(<span class="string">"coredns"</span>);
-<a href=#19 id=19 data-nosnippet>19</a>        create_dir_all(<span class="kw-2">&amp;</span>dir)<span class="question-mark">?</span>;
+<a href=#19 id=19 data-nosnippet>19</a>        create_dir_all(<span class="kw-2">&amp;</span>dir).context(<span class="string">"Unable to create CoreDNS directory"</span>)<span class="question-mark">?</span>;
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a>        <span class="kw">let </span>yml = <span class="self">Self</span>::render(network.dns()<span class="question-mark">?</span>, config.is_rootless());
 <a href=#22 id=22 data-nosnippet>22</a>        <span class="kw">let </span>file = dir.join(<span class="string">"coredns.yml"</span>);

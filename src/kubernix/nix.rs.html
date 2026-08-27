@@ -6,7 +6,7 @@
 <a href=#6 id=6 data-nosnippet>6</a>//! forwarding all CLI options.
 <a href=#7 id=7 data-nosnippet>7</a>
 <a href=#8 id=8 data-nosnippet>8</a></span><span class="kw">use crate</span>::{Config, system::System};
-<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>anyhow::{<span class="prelude-ty">Result</span>, bail};
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>, bail};
 <a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>log::{debug, info};
 <a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>std::{
 <a href=#12 id=12 data-nosnippet>12</a>    env::{current_exe, var},
@@ -79,17 +79,17 @@
 <a href=#79 id=79 data-nosnippet>79</a>        }
 <a href=#80 id=80 data-nosnippet>80</a>
 <a href=#81 id=81 data-nosnippet>81</a>        <span class="comment">// Run the shell, forwarding all config options
-<a href=#82 id=82 data-nosnippet>82</a>        </span><span class="kw">let </span>exe = <span class="macro">format!</span>(<span class="string">"{}"</span>, current_exe()<span class="question-mark">?</span>.display());
-<a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">let </span>root = <span class="macro">format!</span>(<span class="string">"{}"</span>, config.root().display());
-<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>log_level = <span class="macro">format!</span>(<span class="string">"{}"</span>, config.log_level());
-<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>log_format = <span class="macro">format!</span>(<span class="string">"{}"</span>, config.log_format());
-<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let </span>cidr = <span class="macro">format!</span>(<span class="string">"{}"</span>, config.cidr());
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span>nodes = <span class="macro">format!</span>(<span class="string">"{}"</span>, config.nodes());
+<a href=#82 id=82 data-nosnippet>82</a>        </span><span class="kw">let </span>exe = current_exe()<span class="question-mark">?</span>.display().to_string();
+<a href=#83 id=83 data-nosnippet>83</a>        <span class="kw">let </span>root = config.root().display().to_string();
+<a href=#84 id=84 data-nosnippet>84</a>        <span class="kw">let </span>log_level = config.log_level().to_string();
+<a href=#85 id=85 data-nosnippet>85</a>        <span class="kw">let </span>log_format = config.log_format().to_string();
+<a href=#86 id=86 data-nosnippet>86</a>        <span class="kw">let </span>cidr = config.cidr().to_string();
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw">let </span>nodes = config.nodes().to_string();
 <a href=#88 id=88 data-nosnippet>88</a>        <span class="kw">let </span>container_runtime = config.container_runtime();
-<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let </span>cri_runtime = <span class="macro">format!</span>(<span class="string">"{}"</span>, config.cri_runtime());
+<a href=#89 id=89 data-nosnippet>89</a>        <span class="kw">let </span>cri_runtime = config.cri_runtime().to_string();
 <a href=#90 id=90 data-nosnippet>90</a>
 <a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span>shell_val: String = config.shell().unwrap_or_default().to_owned();
-<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>overlay_val = config.overlay().map(|o| <span class="macro">format!</span>(<span class="string">"{}"</span>, o.display()));
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>overlay_val = config.overlay().map(|o| o.display().to_string());
 <a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let </span><span class="kw-2">mut </span>args = <span class="macro">vec!</span>[
 <a href=#94 id=94 data-nosnippet>94</a>            exe.as_str(),
 <a href=#95 id=95 data-nosnippet>95</a>            <span class="string">"--root"</span>,
@@ -113,7 +113,7 @@
 <a href=#113 id=113 data-nosnippet>113</a>            args.push(overlay.as_str());
 <a href=#114 id=114 data-nosnippet>114</a>        }
 <a href=#115 id=115 data-nosnippet>115</a>
-<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>dockerfile_val = config.dockerfile().map(|d| <span class="macro">format!</span>(<span class="string">"{}"</span>, d.display()));
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw">let </span>dockerfile_val = config.dockerfile().map(|d| d.display().to_string());
 <a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(<span class="kw-2">ref </span>dockerfile) = dockerfile_val {
 <a href=#118 id=118 data-nosnippet>118</a>            args.push(<span class="string">"--dockerfile"</span>);
 <a href=#119 id=119 data-nosnippet>119</a>            args.push(dockerfile.as_str());
@@ -158,7 +158,7 @@
 <a href=#158 id=158 data-nosnippet>158</a>        <span class="kw">for </span>arg <span class="kw">in </span>args {
 <a href=#159 id=159 data-nosnippet>159</a>            cmd.arg(arg);
 <a href=#160 id=160 data-nosnippet>160</a>        }
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>status = cmd.status()<span class="question-mark">?</span>;
+<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">let </span>status = cmd.status().context(<span class="string">"Unable to run nix develop"</span>)<span class="question-mark">?</span>;
 <a href=#162 id=162 data-nosnippet>162</a>        <span class="kw">if </span>!status.success() {
 <a href=#163 id=163 data-nosnippet>163</a>            <span class="macro">bail!</span>(<span class="string">"nix develop exited with status {}"</span>, status);
 <a href=#164 id=164 data-nosnippet>164</a>        }
