@@ -100,50 +100,51 @@
 <a href=#100 id=100 data-nosnippet>100</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"--service-cluster-ip-range={}"</span>, network.service_cidr()),
 <a href=#101 id=101 data-nosnippet>101</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"--tls-cert-file={}"</span>, pki.apiserver().cert().display()),
 <a href=#102 id=102 data-nosnippet>102</a>                <span class="kw-2">&amp;</span><span class="macro">format!</span>(<span class="string">"--tls-private-key-file={}"</span>, pki.apiserver().key().display()),
-<a href=#103 id=103 data-nosnippet>103</a>                <span class="string">"--v=2"</span>,
-<a href=#104 id=104 data-nosnippet>104</a>            ],
-<a href=#105 id=105 data-nosnippet>105</a>        )<span class="question-mark">?</span>;
-<a href=#106 id=106 data-nosnippet>106</a>
-<a href=#107 id=107 data-nosnippet>107</a>        process.wait_ready(<span class="string">"Serving securely"</span>)<span class="question-mark">?</span>;
-<a href=#108 id=108 data-nosnippet>108</a>        <span class="self">Self</span>::setup_rbac(<span class="kw-2">&amp;</span>dir, kubectl)<span class="question-mark">?</span>;
-<a href=#109 id=109 data-nosnippet>109</a>        <span class="prelude-val">Ok</span>(Box::new(<span class="self">Self </span>{ process }))
-<a href=#110 id=110 data-nosnippet>110</a>    }
-<a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a>    <span class="kw">fn </span>setup_rbac(dir: <span class="kw-2">&amp;</span>Path, kubectl: <span class="kw-2">&amp;</span>Kubectl) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="macro">debug!</span>(<span class="string">"Creating API Server RBAC rule for kubelet"</span>);
-<a href=#114 id=114 data-nosnippet>114</a>        <span class="kw">let </span>file = dir.join(<span class="string">"rbac.yml"</span>);
-<a href=#115 id=115 data-nosnippet>115</a>        write_if_changed(<span class="kw-2">&amp;</span>file, <span class="macro">include_str!</span>(<span class="string">"assets/apiserver.yml"</span>))<span class="question-mark">?</span>;
-<a href=#116 id=116 data-nosnippet>116</a>
-<a href=#117 id=117 data-nosnippet>117</a>        kubectl
-<a href=#118 id=118 data-nosnippet>118</a>            .apply(<span class="kw-2">&amp;</span>file)
-<a href=#119 id=119 data-nosnippet>119</a>            .context(<span class="string">"Unable to deploy API server RBAC rules"</span>)<span class="question-mark">?</span>;
-<a href=#120 id=120 data-nosnippet>120</a>
-<a href=#121 id=121 data-nosnippet>121</a>        <span class="macro">debug!</span>(<span class="string">"API Server RBAC rule created"</span>);
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="prelude-val">Ok</span>(())
-<a href=#123 id=123 data-nosnippet>123</a>    }
-<a href=#124 id=124 data-nosnippet>124</a>}
-<a href=#125 id=125 data-nosnippet>125</a>
-<a href=#126 id=126 data-nosnippet>126</a><span class="macro">stoppable!</span>(ApiServer);
-<a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a><span class="attr">#[cfg(test)]
-<a href=#129 id=129 data-nosnippet>129</a></span><span class="kw">mod </span>tests {
-<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="attr">#[test]
-<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">fn </span>rbac_asset_contains_expected_rules() {
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">let </span>rbac = <span class="macro">include_str!</span>(<span class="string">"assets/apiserver.yml"</span>);
-<a href=#135 id=135 data-nosnippet>135</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"kind: ClusterRole"</span>));
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"kind: ClusterRoleBinding"</span>));
-<a href=#137 id=137 data-nosnippet>137</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"system:kube-apiserver-to-kubelet"</span>));
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"nodes/proxy"</span>));
-<a href=#139 id=139 data-nosnippet>139</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"nodes/stats"</span>));
-<a href=#140 id=140 data-nosnippet>140</a>    }
-<a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a>    <span class="attr">#[test]
-<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">fn </span>component_metadata() {
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>c = ApiServerComponent;
-<a href=#145 id=145 data-nosnippet>145</a>        <span class="macro">assert_eq!</span>(c.name(), <span class="string">"API Server"</span>);
-<a href=#146 id=146 data-nosnippet>146</a>        <span class="macro">assert_eq!</span>(c.phase(), Phase::ControlPlane);
-<a href=#147 id=147 data-nosnippet>147</a>    }
-<a href=#148 id=148 data-nosnippet>148</a>}
+<a href=#103 id=103 data-nosnippet>103</a>                <span class="string">"--profiling=false"</span>,
+<a href=#104 id=104 data-nosnippet>104</a>                <span class="string">"--v=2"</span>,
+<a href=#105 id=105 data-nosnippet>105</a>            ],
+<a href=#106 id=106 data-nosnippet>106</a>        )<span class="question-mark">?</span>;
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a>        process.wait_ready(<span class="string">"Serving securely"</span>)<span class="question-mark">?</span>;
+<a href=#109 id=109 data-nosnippet>109</a>        <span class="self">Self</span>::setup_rbac(<span class="kw-2">&amp;</span>dir, kubectl)<span class="question-mark">?</span>;
+<a href=#110 id=110 data-nosnippet>110</a>        <span class="prelude-val">Ok</span>(Box::new(<span class="self">Self </span>{ process }))
+<a href=#111 id=111 data-nosnippet>111</a>    }
+<a href=#112 id=112 data-nosnippet>112</a>
+<a href=#113 id=113 data-nosnippet>113</a>    <span class="kw">fn </span>setup_rbac(dir: <span class="kw-2">&amp;</span>Path, kubectl: <span class="kw-2">&amp;</span>Kubectl) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#114 id=114 data-nosnippet>114</a>        <span class="macro">debug!</span>(<span class="string">"Creating API Server RBAC rule for kubelet"</span>);
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">let </span>file = dir.join(<span class="string">"rbac.yml"</span>);
+<a href=#116 id=116 data-nosnippet>116</a>        write_if_changed(<span class="kw-2">&amp;</span>file, <span class="macro">include_str!</span>(<span class="string">"assets/apiserver.yml"</span>))<span class="question-mark">?</span>;
+<a href=#117 id=117 data-nosnippet>117</a>
+<a href=#118 id=118 data-nosnippet>118</a>        kubectl
+<a href=#119 id=119 data-nosnippet>119</a>            .apply(<span class="kw-2">&amp;</span>file)
+<a href=#120 id=120 data-nosnippet>120</a>            .context(<span class="string">"Unable to deploy API server RBAC rules"</span>)<span class="question-mark">?</span>;
+<a href=#121 id=121 data-nosnippet>121</a>
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="macro">debug!</span>(<span class="string">"API Server RBAC rule created"</span>);
+<a href=#123 id=123 data-nosnippet>123</a>        <span class="prelude-val">Ok</span>(())
+<a href=#124 id=124 data-nosnippet>124</a>    }
+<a href=#125 id=125 data-nosnippet>125</a>}
+<a href=#126 id=126 data-nosnippet>126</a>
+<a href=#127 id=127 data-nosnippet>127</a><span class="macro">stoppable!</span>(ApiServer);
+<a href=#128 id=128 data-nosnippet>128</a>
+<a href=#129 id=129 data-nosnippet>129</a><span class="attr">#[cfg(test)]
+<a href=#130 id=130 data-nosnippet>130</a></span><span class="kw">mod </span>tests {
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#132 id=132 data-nosnippet>132</a>
+<a href=#133 id=133 data-nosnippet>133</a>    <span class="attr">#[test]
+<a href=#134 id=134 data-nosnippet>134</a>    </span><span class="kw">fn </span>rbac_asset_contains_expected_rules() {
+<a href=#135 id=135 data-nosnippet>135</a>        <span class="kw">let </span>rbac = <span class="macro">include_str!</span>(<span class="string">"assets/apiserver.yml"</span>);
+<a href=#136 id=136 data-nosnippet>136</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"kind: ClusterRole"</span>));
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"kind: ClusterRoleBinding"</span>));
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"system:kube-apiserver-to-kubelet"</span>));
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"nodes/proxy"</span>));
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="macro">assert!</span>(rbac.contains(<span class="string">"nodes/stats"</span>));
+<a href=#141 id=141 data-nosnippet>141</a>    }
+<a href=#142 id=142 data-nosnippet>142</a>
+<a href=#143 id=143 data-nosnippet>143</a>    <span class="attr">#[test]
+<a href=#144 id=144 data-nosnippet>144</a>    </span><span class="kw">fn </span>component_metadata() {
+<a href=#145 id=145 data-nosnippet>145</a>        <span class="kw">let </span>c = ApiServerComponent;
+<a href=#146 id=146 data-nosnippet>146</a>        <span class="macro">assert_eq!</span>(c.name(), <span class="string">"API Server"</span>);
+<a href=#147 id=147 data-nosnippet>147</a>        <span class="macro">assert_eq!</span>(c.phase(), Phase::ControlPlane);
+<a href=#148 id=148 data-nosnippet>148</a>    }
+<a href=#149 id=149 data-nosnippet>149</a>}
 </code></pre></div></section></main></body></html>

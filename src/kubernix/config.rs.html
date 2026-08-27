@@ -77,7 +77,7 @@
 <a href=#77 id=77 data-nosnippet>77</a>        .literal(styling::AnsiColor::Cyan.on_default().bold())
 <a href=#78 id=78 data-nosnippet>78</a>        .placeholder(styling::AnsiColor::Cyan.on_default())
 <a href=#79 id=79 data-nosnippet>79</a>)]
-<a href=#80 id=80 data-nosnippet>80</a></span><span class="doccomment">/// The global configuration
+<a href=#80 id=80 data-nosnippet>80</a></span><span class="doccomment">/// Kubernix runtime configuration parsed from CLI arguments and config files.
 <a href=#81 id=81 data-nosnippet>81</a></span><span class="kw">pub struct </span>Config {
 <a href=#82 id=82 data-nosnippet>82</a>    <span class="attr">#[command(subcommand)]
 <a href=#83 id=83 data-nosnippet>83</a>    </span><span class="doccomment">/// All available subcommands
@@ -576,12 +576,33 @@
 <a href=#576 id=576 data-nosnippet>576</a>    }
 <a href=#577 id=577 data-nosnippet>577</a>
 <a href=#578 id=578 data-nosnippet>578</a>    <span class="attr">#[test]
-<a href=#579 id=579 data-nosnippet>579</a>    </span><span class="kw">fn </span>rootless_not_serialized() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#580 id=580 data-nosnippet>580</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = test_config()<span class="question-mark">?</span>;
-<a href=#581 id=581 data-nosnippet>581</a>        c.set_rootless(<span class="bool-val">true</span>);
-<a href=#582 id=582 data-nosnippet>582</a>        <span class="kw">let </span>toml = toml::to_string(<span class="kw-2">&amp;</span>c).unwrap();
-<a href=#583 id=583 data-nosnippet>583</a>        <span class="macro">assert!</span>(!toml.contains(<span class="string">"rootless"</span>));
-<a href=#584 id=584 data-nosnippet>584</a>        <span class="prelude-val">Ok</span>(())
-<a href=#585 id=585 data-nosnippet>585</a>    }
-<a href=#586 id=586 data-nosnippet>586</a>}
+<a href=#579 id=579 data-nosnippet>579</a>    </span><span class="kw">fn </span>validate_addon_known() {
+<a href=#580 id=580 data-nosnippet>580</a>        <span class="macro">assert!</span>(Config::validate_addon(<span class="string">"coredns"</span>).is_ok());
+<a href=#581 id=581 data-nosnippet>581</a>    }
+<a href=#582 id=582 data-nosnippet>582</a>
+<a href=#583 id=583 data-nosnippet>583</a>    <span class="attr">#[test]
+<a href=#584 id=584 data-nosnippet>584</a>    </span><span class="kw">fn </span>validate_addon_unknown() {
+<a href=#585 id=585 data-nosnippet>585</a>        <span class="kw">let </span>result = Config::validate_addon(<span class="string">"invalid"</span>);
+<a href=#586 id=586 data-nosnippet>586</a>        <span class="macro">assert!</span>(result.is_err());
+<a href=#587 id=587 data-nosnippet>587</a>        <span class="macro">assert!</span>(result.unwrap_err().contains(<span class="string">"unknown addon"</span>));
+<a href=#588 id=588 data-nosnippet>588</a>    }
+<a href=#589 id=589 data-nosnippet>589</a>
+<a href=#590 id=590 data-nosnippet>590</a>    <span class="attr">#[test]
+<a href=#591 id=591 data-nosnippet>591</a>    </span><span class="kw">fn </span>multi_node_threshold() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#592 id=592 data-nosnippet>592</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = test_config()<span class="question-mark">?</span>;
+<a href=#593 id=593 data-nosnippet>593</a>        <span class="macro">assert!</span>(!c.multi_node());
+<a href=#594 id=594 data-nosnippet>594</a>        c.nodes = <span class="number">2</span>;
+<a href=#595 id=595 data-nosnippet>595</a>        <span class="macro">assert!</span>(c.multi_node());
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="prelude-val">Ok</span>(())
+<a href=#597 id=597 data-nosnippet>597</a>    }
+<a href=#598 id=598 data-nosnippet>598</a>
+<a href=#599 id=599 data-nosnippet>599</a>    <span class="attr">#[test]
+<a href=#600 id=600 data-nosnippet>600</a>    </span><span class="kw">fn </span>rootless_not_serialized() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#601 id=601 data-nosnippet>601</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = test_config()<span class="question-mark">?</span>;
+<a href=#602 id=602 data-nosnippet>602</a>        c.set_rootless(<span class="bool-val">true</span>);
+<a href=#603 id=603 data-nosnippet>603</a>        <span class="kw">let </span>toml = toml::to_string(<span class="kw-2">&amp;</span>c).unwrap();
+<a href=#604 id=604 data-nosnippet>604</a>        <span class="macro">assert!</span>(!toml.contains(<span class="string">"rootless"</span>));
+<a href=#605 id=605 data-nosnippet>605</a>        <span class="prelude-val">Ok</span>(())
+<a href=#606 id=606 data-nosnippet>606</a>    }
+<a href=#607 id=607 data-nosnippet>607</a>}
 </code></pre></div></section></main></body></html>
