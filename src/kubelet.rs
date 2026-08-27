@@ -78,7 +78,7 @@ impl Kubelet {
             )
         }
 
-        create_dir_all(&dir)?;
+        create_dir_all(&dir).context("Unable to create kubelet directory")?;
 
         let identity = pki
             .kubelets()

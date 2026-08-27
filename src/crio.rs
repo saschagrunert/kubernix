@@ -87,14 +87,14 @@ impl Crio {
         let socket = Self::socket(config, network, node)?;
 
         if !dir.exists() {
-            create_dir_all(&dir)?;
-            create_dir_all(&network_dir)?;
-            create_dir_all(&config_dir)?;
+            create_dir_all(&dir).context("Unable to create CRI-O directory")?;
+            create_dir_all(&network_dir).context("Unable to create CRI-O CNI directory")?;
+            create_dir_all(&config_dir).context("Unable to create CRI-O config directory")?;
 
             let attach_dir = dir.join("attach");
             let ns_dir = dir.join("ns");
-            create_dir_all(&attach_dir)?;
-            create_dir_all(&ns_dir)?;
+            create_dir_all(&attach_dir).context("Unable to create CRI-O attach directory")?;
+            create_dir_all(&ns_dir).context("Unable to create CRI-O namespace directory")?;
 
             let containers_dir = dir.join("containers");
             fs::write(
@@ -120,7 +120,8 @@ impl Crio {
                     disable_hostport_mapping = config.is_rootless(),
                     enable_nri = !config.is_rootless(),
                 ),
-            )?;
+            )
+            .context("Unable to write CRI-O config")?;
 
             cri::write_pod_network_config(config, &network_dir, &node_name, node, network)?;
         }

@@ -100,6 +100,7 @@ impl ApiServer {
                 &format!("--service-cluster-ip-range={}", network.service_cidr()),
                 &format!("--tls-cert-file={}", pki.apiserver().cert().display()),
                 &format!("--tls-private-key-file={}", pki.apiserver().key().display()),
+                "--profiling=false",
                 "--v=2",
             ],
         )?;

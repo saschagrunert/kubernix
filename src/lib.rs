@@ -40,7 +40,8 @@ pub(crate) fn write_if_changed(path: &std::path::Path, content: &str) -> anyhow:
     {
         return Ok(());
     }
-    std::fs::write(path, content)?;
+    std::fs::write(path, content)
+        .with_context(|| format!("Unable to write '{}'", path.display()))?;
     Ok(())
 }
 
@@ -375,7 +376,9 @@ impl Kubernix {
             }
             registry.register(Box::new(kubelet::KubeletComponent::new(node)));
         }
-        if !config.is_rootless() {
+        if config.is_rootless() {
+            debug!("Skipping kube-proxy in rootless mode (no iptables access)");
+        } else {
             registry.register(Box::new(proxy::ProxyComponent));
         }
         registry

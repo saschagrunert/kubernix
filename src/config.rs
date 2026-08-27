@@ -77,7 +77,7 @@ impl fmt::Display for CriRuntime {
         .literal(styling::AnsiColor::Cyan.on_default().bold())
         .placeholder(styling::AnsiColor::Cyan.on_default())
 )]
-/// The global configuration
+/// Kubernix runtime configuration parsed from CLI arguments and config files.
 pub struct Config {
     #[command(subcommand)]
     /// All available subcommands
@@ -572,6 +572,27 @@ root = "root"
     fn rootless_set_and_get() -> Result<()> {
         let c = test_config_rootless()?;
         assert!(c.is_rootless());
+        Ok(())
+    }
+
+    #[test]
+    fn validate_addon_known() {
+        assert!(Config::validate_addon("coredns").is_ok());
+    }
+
+    #[test]
+    fn validate_addon_unknown() {
+        let result = Config::validate_addon("invalid");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown addon"));
+    }
+
+    #[test]
+    fn multi_node_threshold() -> Result<()> {
+        let mut c = test_config()?;
+        assert!(!c.multi_node());
+        c.nodes = 2;
+        assert!(c.multi_node());
         Ok(())
     }
 

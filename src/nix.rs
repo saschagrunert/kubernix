@@ -29,14 +29,16 @@ impl Nix {
 
         // Write the configuration if not existing
         if !dir.exists() {
-            create_dir_all(&dir)?;
+            create_dir_all(&dir).context("Unable to create nix directory")?;
 
             fs::write(
                 dir.join("flake.nix"),
                 include_str!("../nix/runtime-flake.nix")
                     .replace("KUBERNIX_SYSTEM", Self::nix_system()?),
-            )?;
-            fs::write(dir.join("flake.lock"), include_str!("../flake.lock"))?;
+            )
+            .context("Unable to write flake.nix")?;
+            fs::write(dir.join("flake.lock"), include_str!("../flake.lock"))
+                .context("Unable to write flake.lock")?;
 
             for pkg in config.packages() {
                 if !pkg
@@ -54,7 +56,8 @@ impl Nix {
             fs::write(
                 dir.join("packages.nix"),
                 include_str!("../nix/packages.nix").replace("/* PACKAGES */", packages),
-            )?;
+            )
+            .context("Unable to write packages.nix")?;
 
             // Apply the overlay if existing
             let target_overlay = dir.join("overlay.nix");
@@ -62,13 +65,14 @@ impl Nix {
                 // User defined overlay
                 Some(overlay) => {
                     info!("Using custom overlay '{}'", overlay.display());
-                    fs::copy(overlay, target_overlay)?;
+                    fs::copy(overlay, &target_overlay).context("Unable to copy custom overlay")?;
                 }
 
                 // The default overlay
                 None => {
                     debug!("Using default overlay");
-                    fs::write(target_overlay, include_str!("../nix/overlay.nix"))?;
+                    fs::write(&target_overlay, include_str!("../nix/overlay.nix"))
+                        .context("Unable to write default overlay")?;
                 }
             }
 
