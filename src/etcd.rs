@@ -10,6 +10,7 @@ use crate::{
     pki::Pki,
     process::{Process, ProcessState, stoppable},
 };
+use anyhow::Context;
 use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
@@ -39,7 +40,7 @@ impl Etcd {
     pub fn start(config: &Config, network: &Network, pki: &Pki) -> ProcessState {
         const ETCD: &str = "etcd";
         let dir = config.root().join(ETCD);
-        create_dir_all(&dir)?;
+        create_dir_all(&dir).context("Unable to create etcd directory")?;
 
         let mut process = Process::start(
             &dir,

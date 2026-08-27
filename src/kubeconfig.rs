@@ -77,7 +77,7 @@ impl KubeConfig {
             })
         } else {
             info!("Creating kubeconfigs");
-            create_dir_all(&dir)?;
+            create_dir_all(&dir).context("Unable to create kubeconfig directory")?;
 
             let ca = pki.ca().cert();
 
@@ -105,10 +105,12 @@ impl KubeConfig {
             );
 
             let mut it = configs.into_iter();
-            let proxy = it.next().unwrap()?;
-            let controller_manager = it.next().unwrap()?;
-            let scheduler = it.next().unwrap()?;
-            let admin = it.next().unwrap()?;
+            let proxy = it.next().context("missing proxy kubeconfig result")??;
+            let controller_manager = it
+                .next()
+                .context("missing controller-manager kubeconfig result")??;
+            let scheduler = it.next().context("missing scheduler kubeconfig result")??;
+            let admin = it.next().context("missing admin kubeconfig result")??;
             debug_assert!(it.next().is_none());
 
             Ok(KubeConfig {

@@ -464,7 +464,8 @@ impl Kubernix {
                 "KUBECONFIG",
                 self.kubectl.kubeconfig().display(),
             ),
-        )?;
+        )
+        .context("Unable to write environment file")?;
         Ok(())
     }
 

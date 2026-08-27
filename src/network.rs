@@ -150,11 +150,12 @@ impl Network {
             .filter(|x| !x.contains(Self::INTERFACE_PREFIX))
             .filter_map(|x| x.split_whitespace().next())
             .filter_map(|x| x.parse::<Ipv4Network>().ok())
-            .filter(|x| x.is_supernet_of(cidr))
+            .filter(|x| x.is_supernet_of(cidr) || cidr.is_supernet_of(*x))
             .for_each(|x| {
                 warn!(
-                    "There seems to be an overlapping IP route {}. {}",
-                    x, "the cluster may not work as expected",
+                    "Overlapping IP route {} detected (cluster CIDR: {}), \
+                     the cluster may not work as expected",
+                    x, cidr,
                 );
             });
         Ok(())

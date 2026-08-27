@@ -5,7 +5,7 @@
 //! shares the host network namespace and mounts the runtime root directory.
 
 use crate::{Config, nix::Nix, podman::Podman, process::Process, system::System};
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use log::{LevelFilter, debug, info, trace};
 use std::{
     fmt::Display,
@@ -28,7 +28,8 @@ impl Container {
 
         // Write the policy file
         let policy_json = Self::policy_json(config);
-        fs::write(&policy_json, include_str!("assets/policy.json"))?;
+        fs::write(&policy_json, include_str!("assets/policy.json"))
+            .context("Unable to write container signature policy")?;
 
         // Nothing needs to be done on single node or rootless runs
         if !config.multi_node() || config.is_rootless() {
@@ -139,7 +140,7 @@ impl Container {
         // Podman specific arguments
         let podman_args = Podman::default_args(config)?;
         if Podman::is_configured(config) {
-            args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::<Vec<_>>())
+            args_vec.extend(podman_args.iter().map(String::as_str));
         }
 
         // Mount /dev/mapper if available (requires privileges)
@@ -176,7 +177,7 @@ impl Container {
 
         let podman_args = Podman::default_args(config)?;
         if Podman::is_configured(config) {
-            args_vec.extend(podman_args.iter().map(|x| x.as_str()).collect::<Vec<_>>())
+            args_vec.extend(podman_args.iter().map(String::as_str));
         }
 
         let name = Self::prefixed_container_name(container_name);

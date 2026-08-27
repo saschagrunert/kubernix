@@ -157,7 +157,8 @@ pub struct Config {
         env = "KUBERNIX_NODES",
         long = "nodes",
         short = 'n',
-        value_name = "NODES"
+        value_name = "NODES",
+        value_parser = clap::value_parser!(u8).range(1..=64),
     )]
     /// The number of nodes to be registered
     nodes: u8,
@@ -212,6 +213,7 @@ pub struct Config {
         short = 'a',
         num_args = 0..,
         value_name = "ADDON",
+        value_parser = Config::validate_addon,
     )]
     /// Cluster addons to deploy (available: coredns)
     addons: Vec<String>,
@@ -367,6 +369,20 @@ impl Config {
     /// Returns true if multi node support is enabled
     pub fn multi_node(&self) -> bool {
         self.nodes() > 1
+    }
+
+    const VALID_ADDONS: &'static [&'static str] = &["coredns"];
+
+    fn validate_addon(s: &str) -> std::result::Result<String, String> {
+        if Self::VALID_ADDONS.contains(&s) {
+            Ok(s.to_string())
+        } else {
+            Err(format!(
+                "unknown addon '{}', valid addons: {}",
+                s,
+                Self::VALID_ADDONS.join(", ")
+            ))
+        }
     }
 
     fn create_root_dir(&self) -> Result<()> {

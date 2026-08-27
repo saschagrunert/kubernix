@@ -16,7 +16,7 @@ impl CoreDns {
         info!("Deploying CoreDNS and waiting to be ready");
 
         let dir = config.root().join("coredns");
-        create_dir_all(&dir)?;
+        create_dir_all(&dir).context("Unable to create CoreDNS directory")?;
 
         let yml = Self::render(network.dns()?, config.is_rootless());
         let file = dir.join("coredns.yml");

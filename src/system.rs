@@ -186,12 +186,10 @@ impl System {
     /// Return the full path to the default system shell
     pub fn shell() -> Result<String> {
         let shell = var("SHELL").unwrap_or_else(|_| "sh".into());
-        Ok(format!(
-            "{}",
-            Self::find_executable(&shell)
-                .with_context(|| format!("Unable to find system shell '{}'", shell))?
-                .display()
-        ))
+        Ok(Self::find_executable(&shell)
+            .with_context(|| format!("Unable to find system shell '{}'", shell))?
+            .display()
+            .to_string())
     }
 
     /// Check if a kernel module is already loaded

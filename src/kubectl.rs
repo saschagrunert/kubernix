@@ -4,7 +4,7 @@
 //! manifests, configuring kubeconfig files, and waiting for pod readiness.
 
 use crate::process::READINESS_TIMEOUT;
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use log::{debug, trace};
 use std::{
     path::{Path, PathBuf},
@@ -37,7 +37,8 @@ impl Kubectl {
             .args(args)
             .arg("--kubeconfig")
             .arg(&self.kubeconfig)
-            .output()?;
+            .output()
+            .context("Unable to run kubectl")?;
         if !output.status.success() {
             trace!("kubectl args: {:?}", args);
             debug!("kubectl output: {:?}", output);

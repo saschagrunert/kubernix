@@ -4,12 +4,11 @@ use std::process::exit;
 
 pub fn main() {
     if let Err(e) = run() {
-        Logger::error(
-            &e.chain()
-                .map(|x| x.to_string())
-                .collect::<Vec<_>>()
-                .join(": "),
-        );
+        let chain: Vec<String> = e.chain().map(|x| x.to_string()).collect();
+        Logger::error(&chain[0]);
+        for (i, cause) in chain.iter().enumerate().skip(1) {
+            Logger::error(&format!("  {}: {}", i, cause));
+        }
         exit(1);
     }
 }

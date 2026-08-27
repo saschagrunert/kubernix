@@ -55,7 +55,7 @@ impl ApiServer {
         kubectl: &Kubectl,
     ) -> ProcessState {
         let dir = config.root().join("apiserver");
-        create_dir_all(&dir)?;
+        create_dir_all(&dir).context("Unable to create API server directory")?;
 
         let mut process = Process::start(
             &dir,

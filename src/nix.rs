@@ -6,7 +6,7 @@
 //! forwarding all CLI options.
 
 use crate::{Config, system::System};
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use log::{debug, info};
 use std::{
     env::{current_exe, var},
@@ -79,17 +79,17 @@ impl Nix {
         }
 
         // Run the shell, forwarding all config options
-        let exe = format!("{}", current_exe()?.display());
-        let root = format!("{}", config.root().display());
-        let log_level = format!("{}", config.log_level());
-        let log_format = format!("{}", config.log_format());
-        let cidr = format!("{}", config.cidr());
-        let nodes = format!("{}", config.nodes());
+        let exe = current_exe()?.display().to_string();
+        let root = config.root().display().to_string();
+        let log_level = config.log_level().to_string();
+        let log_format = config.log_format().to_string();
+        let cidr = config.cidr().to_string();
+        let nodes = config.nodes().to_string();
         let container_runtime = config.container_runtime();
-        let cri_runtime = format!("{}", config.cri_runtime());
+        let cri_runtime = config.cri_runtime().to_string();
 
         let shell_val: String = config.shell().unwrap_or_default().to_owned();
-        let overlay_val = config.overlay().map(|o| format!("{}", o.display()));
+        let overlay_val = config.overlay().map(|o| o.display().to_string());
         let mut args = vec![
             exe.as_str(),
             "--root",
@@ -113,7 +113,7 @@ impl Nix {
             args.push(overlay.as_str());
         }
 
-        let dockerfile_val = config.dockerfile().map(|d| format!("{}", d.display()));
+        let dockerfile_val = config.dockerfile().map(|d| d.display().to_string());
         if let Some(ref dockerfile) = dockerfile_val {
             args.push("--dockerfile");
             args.push(dockerfile.as_str());
@@ -158,7 +158,7 @@ impl Nix {
         for arg in args {
             cmd.arg(arg);
         }
-        let status = cmd.status()?;
+        let status = cmd.status().context("Unable to run nix develop")?;
         if !status.success() {
             bail!("nix develop exited with status {}", status);
         }

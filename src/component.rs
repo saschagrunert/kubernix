@@ -74,6 +74,12 @@ pub struct ComponentRegistry {
     components: Vec<Box<dyn Component>>,
 }
 
+impl Default for ComponentRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ComponentRegistry {
     /// Create an empty registry
     pub fn new() -> Self {

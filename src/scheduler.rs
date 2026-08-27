@@ -10,6 +10,7 @@ use crate::{
     process::{Process, ProcessState, stoppable},
     write_if_changed,
 };
+use anyhow::Context;
 use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
@@ -38,7 +39,7 @@ impl Scheduler {
     /// Start the scheduler with the given cluster configuration.
     pub fn start(config: &Config, kubeconfig: &KubeConfig) -> ProcessState {
         let dir = config.root().join("scheduler");
-        create_dir_all(&dir)?;
+        create_dir_all(&dir).context("Unable to create scheduler directory")?;
 
         let yml = format!(
             include_str!("assets/scheduler.yml"),

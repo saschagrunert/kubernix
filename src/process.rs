@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, create_dir_all},
     io::{BufRead, BufReader},
+    os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread::{JoinHandle, sleep, spawn},
@@ -80,14 +81,15 @@ impl Process {
         info!("Starting {}", identifier);
 
         // Write the executed command into the dir
-        create_dir_all(dir)?;
+        create_dir_all(dir).context("Unable to create process directory")?;
 
         let run_file = dir.join("run.json");
         let run = Run {
             command: System::find_executable(command)?,
             args: args.iter().map(|x| (*x).to_string()).collect(),
         };
-        fs::write(&run_file, serde_json::to_string_pretty(&run)?)?;
+        fs::write(&run_file, serde_json::to_string_pretty(&run)?)
+            .context("Unable to write process run file")?;
 
         // Prepare the log dir and file
         let mut log_file = dir.join(command);
@@ -95,13 +97,23 @@ impl Process {
         let out_file = File::create(&log_file)?;
         let err_file = out_file.try_clone()?;
 
-        // Spawn the process child
-        let mut child = Command::new(run.command)
-            .args(run.args)
+        // Spawn the process child in its own session so we can kill the
+        // entire process group during shutdown.
+        let mut cmd = Command::new(run.command);
+        cmd.args(run.args)
             .stderr(Stdio::from(err_file))
-            .stdout(Stdio::from(out_file))
+            .stdout(Stdio::from(out_file));
+        // SAFETY: setsid() is async-signal-safe per POSIX.
+        unsafe {
+            cmd.pre_exec(|| {
+                nix::unistd::setsid()
+                    .map(|_| ())
+                    .map_err(std::io::Error::from)
+            });
+        }
+        let mut child = cmd
             .spawn()
-            .with_context(|| format!("Unable to start process '{}' ({})", identifier, command,))?;
+            .with_context(|| format!("Unable to start process '{}' ({})", identifier, command))?;
 
         // Start the watcher thread
         let (kill, killed) = bounded(1);
@@ -215,9 +227,14 @@ impl Stoppable for Process {
 
         let pid = i32::try_from(self.pid)
             .with_context(|| format!("PID {} exceeds i32 range", self.pid))?;
-        let nix_pid = Pid::from_raw(pid);
+        let pgid = Pid::from_raw(-pid);
 
-        kill(nix_pid, Signal::SIGTERM)?;
+        kill(pgid, Signal::SIGTERM).with_context(|| {
+            format!(
+                "Unable to send SIGTERM to process group of {} (via {})",
+                self.name, self.command,
+            )
+        })?;
 
         if let Some(handle) = self.watch.take() {
             let deadline = Instant::now() + Duration::from_secs(10);
@@ -237,7 +254,7 @@ impl Stoppable for Process {
                     "Process {} (via {}) did not exit after SIGTERM, sending SIGKILL",
                     self.name, self.command,
                 );
-                let _ = kill(nix_pid, Signal::SIGKILL);
+                let _ = kill(pgid, Signal::SIGKILL);
                 if handle.join().is_err() {
                     bail!(
                         "Unable to stop process {} (via {})",
@@ -249,6 +266,16 @@ impl Stoppable for Process {
         }
         debug!("Process {} (via {}) stopped", self.name, self.command);
         Ok(())
+    }
+}
+
+impl Drop for Process {
+    fn drop(&mut self) {
+        if self.watch.is_some()
+            && let Err(e) = self.stop()
+        {
+            debug!("Failed to stop process {} during drop: {}", self.name, e);
+        }
     }
 }
 
