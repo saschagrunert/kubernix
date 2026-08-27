@@ -84,18 +84,19 @@ impl Containerd {
         };
 
         if !dir.exists() {
-            create_dir_all(&dir)?;
-            create_dir_all(&cni_conf_dir)?;
+            create_dir_all(&dir).context("Unable to create containerd directory")?;
+            create_dir_all(&cni_conf_dir).context("Unable to create containerd CNI directory")?;
 
             if config.is_rootless() {
                 let wrapper = dir.join("crun-rootless");
                 let script =
                     include_str!("assets/crun-rootless.sh").replace("__CRUN_PATH__", &crun_path);
-                fs::write(&wrapper, script)?;
+                fs::write(&wrapper, script).context("Unable to write crun-rootless wrapper")?;
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
-                    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))?;
+                    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))
+                        .context("Unable to set crun-rootless wrapper permissions")?;
                 }
             }
 
@@ -116,7 +117,8 @@ impl Containerd {
                     disable_apparmor = config.is_rootless(),
                     disable_nri = config.is_rootless(),
                 ),
-            )?;
+            )
+            .context("Unable to write containerd config")?;
 
             cri::write_pod_network_config(config, &cni_conf_dir, &node_name, node, network)?;
         }
@@ -129,7 +131,7 @@ impl Containerd {
         if config.is_rootless() && create_dir_all("/run/containerd/s").is_err() {
             fs::remove_dir_all("/run/containerd")
                 .context("Failed to remove host-owned /run/containerd")?;
-            create_dir_all("/run/containerd/s")?;
+            create_dir_all("/run/containerd/s").context("Unable to create /run/containerd/s")?;
         }
 
         let config_arg = format!("--config={}", config_file.display());

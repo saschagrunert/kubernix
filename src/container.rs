@@ -54,7 +54,7 @@ impl Container {
         if !file.exists() {
             if let Some(custom) = config.dockerfile() {
                 debug!("Using custom Dockerfile '{}'", custom.display());
-                fs::copy(custom, &file)?;
+                fs::copy(custom, &file).context("Unable to copy custom Dockerfile")?;
             } else {
                 fs::write(
                     &file,
@@ -63,7 +63,8 @@ impl Container {
                         nix = Nix::DIR,
                         root = DEFAULT_ROOT
                     ),
-                )?;
+                )
+                .context("Unable to write Dockerfile")?;
             }
         }
 
@@ -72,7 +73,7 @@ impl Container {
         // container image does not need.
         let dockerignore = config.root().join(".dockerignore");
         if !dockerignore.exists() {
-            fs::write(&dockerignore, "nix/.git\n")?;
+            fs::write(&dockerignore, "nix/.git\n").context("Unable to write .dockerignore")?;
         }
 
         // Prepare the arguments
@@ -81,7 +82,7 @@ impl Container {
         } else {
             vec!["build".into()]
         };
-        args.extend(vec![format!("-t={}", DEFAULT_IMAGE), ".".into()]);
+        args.extend([format!("-t={DEFAULT_IMAGE}"), ".".into()]);
         trace!("Container runtime build args: {:?}", args);
 
         // Run the build
@@ -144,7 +145,7 @@ impl Container {
         }
 
         // Mount /dev/mapper if available (requires privileges)
-        let dev_mapper = PathBuf::from("/").join("dev").join("mapper");
+        let dev_mapper = PathBuf::from("/dev/mapper");
         let arg_volume_dev_mapper = &Self::volume_arg(dev_mapper.display());
         if !config.is_rootless() && dev_mapper.exists() {
             args_vec.push(arg_volume_dev_mapper);
@@ -185,7 +186,7 @@ impl Container {
         let mut cmd_parts = vec![process_name.to_string()];
         cmd_parts.extend(args.iter().map(|a| a.to_string()));
         let run_cmd = cmd_parts.join(" ");
-        args_vec.extend(vec![
+        args_vec.extend([
             "exec",
             &name,
             "nix",

@@ -14,6 +14,9 @@ use std::{
     process::Command,
 };
 
+const ETCD_CLIENT_PORT: u16 = 2379;
+const ETCD_PEER_PORT: u16 = 2380;
+
 #[derive(Clone)]
 #[must_use]
 pub struct Network {
@@ -114,8 +117,8 @@ impl Network {
         }
 
         // Set the rest of the networking related adresses and paths
-        let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2379);
-        let etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 2380);
+        let etcd_client = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), ETCD_CLIENT_PORT);
+        let etcd_peer = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), ETCD_PEER_PORT);
         let hostname = gethostname()
             .context("Unable to get hostname")?
             .to_str()
@@ -285,5 +288,28 @@ pub mod tests {
     fn subnet_prefix_too_small() {
         // /30 can hold 4 IPs; need 3 subnets, impossible
         assert!(Network::subnet_prefix(30, 1).is_err());
+    }
+
+    #[test]
+    fn cidrs_do_not_overlap() -> Result<()> {
+        let c = test_config()?;
+        let n = Network::new(&c)?;
+        let cluster = n.cluster_cidr();
+        let service = n.service_cidr();
+        assert!(
+            !cluster.is_supernet_of(*service) && !service.is_supernet_of(*cluster),
+            "cluster and service CIDRs must not overlap"
+        );
+        for pod in n.pod_cidrs() {
+            assert!(
+                !cluster.is_supernet_of(*pod) && !pod.is_supernet_of(*cluster),
+                "pod CIDR must not overlap with cluster CIDR"
+            );
+            assert!(
+                !service.is_supernet_of(*pod) && !pod.is_supernet_of(*service),
+                "pod CIDR must not overlap with service CIDR"
+            );
+        }
+        Ok(())
     }
 }
