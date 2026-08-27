@@ -4,12 +4,13 @@
 //! manifest consumed by the API server's `--encryption-provider-config` flag.
 
 use crate::Config;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use log::info;
 use rand::random;
 use std::{
     fs::{self, create_dir_all},
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 
@@ -28,7 +29,7 @@ impl EncryptionConfig {
     /// reuse an existing one to support cluster restarts.
     pub fn new(config: &Config) -> Result<EncryptionConfig> {
         let dir = &config.root().join("encryptionconfig");
-        create_dir_all(dir)?;
+        create_dir_all(dir).context("Unable to create encryption config directory")?;
         let path = dir.join("config.yml");
 
         // Create only if not already existing to make cluster reuse work
@@ -37,7 +38,9 @@ impl EncryptionConfig {
             let rnd: [u8; 32] = random();
             let b64 = STANDARD.encode(rnd);
             let yml = format!(include_str!("assets/encryptionconfig.yml"), b64);
-            fs::write(&path, yml)?;
+            fs::write(&path, yml).context("Unable to write encryption config")?;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+                .context("Unable to restrict encryption config permissions")?;
         }
 
         Ok(EncryptionConfig { path })

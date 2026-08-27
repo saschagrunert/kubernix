@@ -12,11 +12,12 @@ use serde_json::{json, to_string_pretty};
 use std::{
     fs::{self, create_dir_all},
     net::Ipv4Addr,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
-const RSA_KEY_SIZE: u32 = 2048;
+const RSA_KEY_SIZE: u32 = 3072;
 const CERT_EXPIRY: &str = "8760h";
 
 #[must_use]
@@ -196,7 +197,7 @@ impl Pki {
             })
         } else {
             info!("Generating certificates");
-            create_dir_all(dir)?;
+            create_dir_all(dir).context("Unable to create PKI directory")?;
             let ca_config = Self::write_ca_config(dir)?;
             let ca = Self::setup_ca(dir)?;
 
@@ -253,12 +254,14 @@ impl Pki {
             );
 
             let mut it = certs.into_iter();
-            let admin = it.next().unwrap()?;
-            let apiserver = it.next().unwrap()?;
-            let controller_manager = it.next().unwrap()?;
-            let proxy = it.next().unwrap()?;
-            let scheduler = it.next().unwrap()?;
-            let service_account = it.next().unwrap()?;
+            let admin = it.next().context("missing admin cert result")??;
+            let apiserver = it.next().context("missing apiserver cert result")??;
+            let controller_manager = it
+                .next()
+                .context("missing controller-manager cert result")??;
+            let proxy = it.next().context("missing proxy cert result")??;
+            let scheduler = it.next().context("missing scheduler cert result")??;
+            let service_account = it.next().context("missing service-account cert result")??;
             debug_assert!(it.next().is_none());
 
             Ok(Pki {
@@ -286,7 +289,8 @@ impl Pki {
             .arg(csr)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()?;
+            .spawn()
+            .context("Unable to spawn cfssl for CA generation")?;
 
         Self::pipe_cfssl_to_cfssljson(cfssl, &dir.join(CA_NAME), CA_NAME)?;
         debug!("CA certificates created");
@@ -359,7 +363,8 @@ impl Pki {
             .arg(csr)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()?;
+            .spawn()
+            .with_context(|| format!("Unable to spawn cfssl for '{}'", name))?;
 
         Self::pipe_cfssl_to_cfssljson(cfssl, &pki_config.dir().join(name), name)?;
         debug!("Certificate created for {}", name);
@@ -378,9 +383,12 @@ impl Pki {
             .arg("-bare")
             .arg(output_prefix)
             .stdin(pipe)
-            .output()?;
+            .output()
+            .with_context(|| format!("Unable to run cfssljson for '{}'", name))?;
 
-        let cfssl_output = cfssl.wait_with_output()?;
+        let cfssl_output = cfssl
+            .wait_with_output()
+            .with_context(|| format!("Unable to wait for cfssl output for '{}'", name))?;
         if !output.status.success() {
             debug!(
                 "cfssl stderr: {}",
@@ -388,6 +396,13 @@ impl Pki {
             );
             debug!("cfssljson output: {:?}", output);
             bail!("Unable to generate certificate for {}", name);
+        }
+
+        let key_file = output_prefix.with_file_name(format!("{}-key.pem", name));
+        if key_file.exists() {
+            fs::set_permissions(&key_file, fs::Permissions::from_mode(0o600)).with_context(
+                || format!("Unable to restrict permissions on '{}'", key_file.display()),
+            )?;
         }
         Ok(())
     }
@@ -404,7 +419,8 @@ impl Pki {
                 "OU": "kubernetes",
             }]
         });
-        fs::write(dest, to_string_pretty(&csr)?)?;
+        fs::write(dest, to_string_pretty(&csr)?)
+            .with_context(|| format!("Unable to write CSR to '{}'", dest.display()))?;
         Ok(())
     }
 
@@ -428,7 +444,7 @@ impl Pki {
             }
         });
         let dest = dir.join("ca-config.json");
-        fs::write(&dest, to_string_pretty(&cfg)?)?;
+        fs::write(&dest, to_string_pretty(&cfg)?).context("Unable to write CA config")?;
         Ok(dest)
     }
 

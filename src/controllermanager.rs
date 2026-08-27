@@ -11,6 +11,7 @@ use crate::{
     pki::Pki,
     process::{Process, ProcessState, stoppable},
 };
+use anyhow::Context;
 use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
@@ -44,14 +45,14 @@ impl ControllerManager {
         kubeconfig: &KubeConfig,
     ) -> ProcessState {
         let dir = config.root().join("controllermanager");
-        create_dir_all(&dir)?;
+        create_dir_all(&dir).context("Unable to create controller-manager directory")?;
 
         let mut process = Process::start(
             &dir,
             "Controller Manager",
             "kube-controller-manager",
             &[
-                "--bind-address=0.0.0.0",
+                "--bind-address=127.0.0.1",
                 &format!("--cluster-cidr={}", network.cluster_cidr()),
                 "--cluster-name=kubernetes",
                 &format!("--cluster-signing-cert-file={}", pki.ca().cert().display()),

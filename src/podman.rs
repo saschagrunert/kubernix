@@ -4,7 +4,7 @@
 //! execution, including conmon, crun, and storage driver configuration.
 
 use crate::{Config, system::System};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use log::LevelFilter;
 use std::{
     fs::{self, create_dir_all},
@@ -27,11 +27,12 @@ impl Podman {
     pub fn build_args(config: &Config, policy_json: &Path) -> Result<Vec<String>> {
         // Prepare the CNI dir
         let dir = Self::cni_dir(config);
-        create_dir_all(&dir)?;
+        create_dir_all(&dir).context("Unable to create podman CNI directory")?;
         fs::write(
             dir.join("87-podman-bridge.conflist"),
             include_str!("assets/podman-bridge.json"),
-        )?;
+        )
+        .context("Unable to write podman bridge config")?;
 
         let mut args = Self::default_args(config)?;
         args.extend(vec![
