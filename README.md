@@ -45,22 +45,22 @@ The following technology stack is currently being used:
 | cfssl           | v1.6.5   |
 | cni-plugins     | v1.9.1   |
 | conmon          | v2.2.1   |
-| conntrack-tools | v1.4.8   |
-| containerd      | v2.3.3   |
-| cri-o-wrapper   | v1.36.3  |
+| conntrack-tools | v1.4.9   |
+| containerd      | v2.3.4   |
+| cri-o-wrapper   | v1.36.4  |
 | cri-tools       | v1.36.0  |
-| crun            | v1.27.1  |
+| crun            | v1.29.1  |
 | etcd            | v3.6.14  |
 | iproute2        | v7.1.0   |
 | iptables        | v1.8.13  |
 | kmod            | v31      |
-| kubectl         | v1.36.3  |
-| kubernetes      | v1.36.3  |
+| kubectl         | v1.37.0  |
+| kubernetes      | v1.37.0  |
 | nss-cacert      | v3.126   |
-| podman          | v5.8.4   |
+| podman          | v5.8.6   |
 | rootlesskit     | v2.3.6   |
 | socat           | v1.8.1.3 |
-| sysctl          | v4.0.6   |
+| sysctl          | v4.0.7   |
 | util-linux      | v2.42.2  |
 
 Some other tools are not explicitly mentioned here, because they are no

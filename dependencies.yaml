@@ -7,7 +7,7 @@ dependencies:
         match: CFSSL_VERSION=
 
   - name: zeitgeist
-    version: 0.7.0
+    version: 0.8.0
     refPaths:
       - path: Makefile
         match: ZEITGEIST_VERSION \?= v

@@ -1,6 +1,6 @@
 ARGS ?=
 SUDO ?= sudo -E
-ZEITGEIST_VERSION ?= v0.7.0
+ZEITGEIST_VERSION ?= v0.8.0
 
 # Avoid cargo/nix warnings about HOME ownership when running via sudo
 ifeq ($(shell id -u),0)
@@ -37,6 +37,11 @@ help: ## Display this help.
 .PHONY: nix-update
 nix-update: ## Update pinned nixpkgs to latest nixpkgs-unstable.
 	nix flake update nixpkgs
+	$(MAKE) update-readme
+
+.PHONY: update-readme
+update-readme: ## Regenerate the README versions table from the nix devShell.
+	hack/update-readme-versions.sh
 
 ##@ Build targets:
 
