@@ -187,7 +187,7 @@ metadata:
 spec:
   selector:
     k8s-app: coredns
-  clusterIP: {}
+  clusterIP: {dns}
   ports:
   - name: dns
     port: 53

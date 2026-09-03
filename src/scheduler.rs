@@ -43,7 +43,7 @@ impl Scheduler {
 
         let yml = format!(
             include_str!("assets/scheduler.yml"),
-            kubeconfig.scheduler().display()
+            kubeconfig = kubeconfig.scheduler().display(),
         );
         let cfg = &dir.join("config.yml");
         write_if_changed(cfg, &yml)?;
@@ -70,7 +70,7 @@ mod tests {
     fn config_template_renders() {
         let yml = format!(
             include_str!("assets/scheduler.yml"),
-            "/tmp/scheduler.kubeconfig"
+            kubeconfig = "/tmp/scheduler.kubeconfig",
         );
         assert!(yml.contains("apiVersion: kubescheduler.config.k8s.io/v1"));
         assert!(yml.contains("kubeconfig: \"/tmp/scheduler.kubeconfig\""));

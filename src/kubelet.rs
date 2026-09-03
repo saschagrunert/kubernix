@@ -95,6 +95,7 @@ impl Kubelet {
         let key = identity.key().display().to_string();
         let port = KUBELET_PORT_BASE + u16::from(node);
         let healthz_port = HEALTHZ_PORT_BASE + u16::from(node);
+        let cri_socket = cri::cri_socket(config, network, node)?.to_socket_string();
         let yml = if config.is_rootless() {
             format!(
                 include_str!("assets/kubelet-rootless.yml"),
@@ -103,6 +104,7 @@ impl Kubelet {
                 cidr = cidr,
                 cert = cert,
                 key = key,
+                cri_socket = cri_socket,
                 port = port,
                 healthzPort = healthz_port,
             )
@@ -114,6 +116,7 @@ impl Kubelet {
                 cidr = cidr,
                 cert = cert,
                 key = key,
+                cri_socket = cri_socket,
                 port = port,
                 healthzPort = healthz_port,
             )
@@ -124,10 +127,6 @@ impl Kubelet {
         let args = &[
             &format!("--config={}", cfg.display()),
             &format!("--root-dir={}", root_dir.display()),
-            &format!(
-                "--container-runtime-endpoint={}",
-                cri::cri_socket(config, network, node)?.to_socket_string(),
-            ),
             &format!(
                 "--kubeconfig={}",
                 kubeconfig
@@ -186,6 +185,7 @@ mod tests {
             cidr = "10.10.128.0/18",
             cert = "/tmp/kubelet.pem",
             key = "/tmp/kubelet-key.pem",
+            cri_socket = "unix:///run/crio/crio.sock",
             port = KUBELET_PORT_BASE,
             healthzPort = HEALTHZ_PORT_BASE,
         );
@@ -194,6 +194,7 @@ mod tests {
         assert!(yml.contains("clusterDNS:"));
         assert!(yml.contains("- \"10.10.64.2\""));
         assert!(yml.contains("podCIDR: \"10.10.128.0/18\""));
+        assert!(yml.contains("containerRuntimeEndpoint: \"unix:///run/crio/crio.sock\""));
         assert!(yml.contains(&format!("port: {}", KUBELET_PORT_BASE)));
         assert!(yml.contains(&format!("healthzPort: {}", HEALTHZ_PORT_BASE)));
     }
@@ -228,11 +229,13 @@ mod tests {
             cidr = "10.10.128.0/18",
             cert = "/tmp/kubelet.pem",
             key = "/tmp/kubelet-key.pem",
+            cri_socket = "unix:///run/crio/crio.sock",
             port = KUBELET_PORT_BASE,
             healthzPort = HEALTHZ_PORT_BASE,
         );
         assert!(yml.contains("kind: KubeletConfiguration"));
         assert!(yml.contains("cgroupDriver: \"none\""));
+        assert!(yml.contains("containerRuntimeEndpoint: \"unix:///run/crio/crio.sock\""));
         assert!(yml.contains("KubeletInUserNamespace: true"));
     }
 }

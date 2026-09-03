@@ -47,8 +47,8 @@ impl Proxy {
 
         let yml = format!(
             include_str!("assets/proxy.yml"),
-            kubeconfig.proxy().display(),
-            network.cluster_cidr(),
+            kubeconfig = kubeconfig.proxy().display(),
+            cluster_cidr = network.cluster_cidr(),
         );
         let cfg = dir.join("config.yml");
         write_if_changed(&cfg, &yml)?;
@@ -85,7 +85,8 @@ mod tests {
     fn config_template_renders() {
         let yml = format!(
             include_str!("assets/proxy.yml"),
-            "/tmp/proxy.kubeconfig", "10.10.0.0/18",
+            kubeconfig = "/tmp/proxy.kubeconfig",
+            cluster_cidr = "10.10.0.0/18",
         );
         assert!(yml.contains("kind: KubeProxyConfiguration"));
         assert!(yml.contains("kubeconfig: \"/tmp/proxy.kubeconfig\""));

@@ -15,7 +15,8 @@ fi
 echo "Asserting all pods are healthy..."
 # shellcheck disable=SC2016
 TMPL_UNHEALTHY='{{range .items}}{{if and (ne .status.phase "Running") (ne .status.phase "Succeeded")}}x{{end}}{{end}}'
-timeout 60 bash -c "until [ \"\$(kubectl get pods -A -o go-template='$TMPL_UNHEALTHY' | wc -c)\" -eq 0 ]; do sleep 2; done"
+TMPL_COUNT='{{len .items}}'
+timeout 60 bash -c "until [ \"\$(kubectl get pods -A -o go-template='$TMPL_COUNT')\" -gt 0 ] && [ \"\$(kubectl get pods -A -o go-template='$TMPL_UNHEALTHY' | wc -c)\" -eq 0 ]; do sleep 2; done"
 UNHEALTHY=$(kubectl get pods -A -o go-template='{{range .items}}{{if and (ne .status.phase "Running") (ne .status.phase "Succeeded")}}{{.metadata.name}}({{.status.phase}}) {{end}}{{end}}')
 if [ -n "$UNHEALTHY" ]; then
   echo "FAIL: unhealthy pods: $UNHEALTHY"

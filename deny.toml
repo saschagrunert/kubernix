@@ -13,8 +13,11 @@ allow = [
 ]
 
 [bans]
-multiple-versions = "warn"
+multiple-versions = "deny"
 wildcards = "allow"
+skip = [
+    { crate = "syn@2", reason = "proc-macro ecosystem transitioning from syn 2 to 3" },
+]
 
 [sources]
 unknown-registry = "warn"

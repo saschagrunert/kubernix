@@ -69,7 +69,7 @@ use ::nix::{
     unistd::getuid,
 };
 use anyhow::{Context, Result, bail};
-use log::{debug, error, info, set_boxed_logger};
+use log::{debug, error, info, set_boxed_logger, warn};
 use signal_hook::{
     consts::signal::{SIGHUP, SIGINT, SIGTERM},
     flag,
@@ -163,6 +163,10 @@ impl Kubernix {
             false
         };
 
+        // Set rootless before config loading so try_load_file
+        // preserves it across the struct replacement.
+        config.set_rootless(rootless);
+
         // Prepare the configuration
         if config.root().exists() {
             config.try_load_file()?;
@@ -170,10 +174,6 @@ impl Kubernix {
             config.to_file()?;
         }
         config.canonicalize_root()?;
-
-        // Set rootless after config loading since try_load_file
-        // replaces the whole struct (resetting #[serde(skip)] fields).
-        config.set_rootless(rootless);
 
         // Setup the logger
         set_boxed_logger(Logger::new(config.log_level(), config.log_format()))
@@ -377,7 +377,7 @@ impl Kubernix {
             registry.register(Box::new(kubelet::KubeletComponent::new(node)));
         }
         if config.is_rootless() {
-            debug!("Skipping kube-proxy in rootless mode (no iptables access)");
+            warn!("Skipping kube-proxy in rootless mode, Service ClusterIP routing will not work");
         } else {
             registry.register(Box::new(proxy::ProxyComponent));
         }

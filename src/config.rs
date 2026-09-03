@@ -309,8 +309,9 @@ pub enum SubCommand {
     Shell,
 }
 
-impl Default for Config {
-    fn default() -> Self {
+impl Config {
+    /// Parse configuration from CLI arguments.
+    pub fn from_args() -> Self {
         let mut config = Self::parse();
         if config.shell.is_none() {
             config.shell = System::shell().ok();
@@ -342,11 +343,15 @@ impl Config {
         Ok(())
     }
 
-    /// Read the configuration from the internal set root path
+    /// Read the configuration from the internal set root path.
     /// If not existing, write the current configuration to the path.
+    ///
+    /// The `rootless` field is preserved from the current instance
+    /// since it is marked `#[serde(skip)]` and not present in the file.
     pub fn try_load_file(&mut self) -> Result<()> {
         let file = self.root().join(Self::FILENAME);
         if file.exists() {
+            let rootless = self.rootless;
             *self = toml::from_str(&read_to_string(&file).with_context(|| {
                 format!(
                     "Unable to read expected configuration file '{}'",
@@ -354,6 +359,7 @@ impl Config {
                 )
             })?)
             .with_context(|| format!("Unable to load config file '{}'", file.display()))?;
+            self.rootless = rootless;
         } else {
             self.to_file()?;
         }
@@ -433,7 +439,7 @@ pub mod tests {
     fn canonicalize_root_success() -> Result<()> {
         let mut c = Config {
             root: tempdir()?.keep(),
-            ..Config::default()
+            ..Config::parse_from([""; 0])
         };
         c.canonicalize_root()
     }
@@ -442,7 +448,7 @@ pub mod tests {
     fn canonicalize_root_failure() {
         let mut c = Config {
             root: Path::new("/").join("proc").join("invalid"),
-            ..Config::default()
+            ..Config::parse_from([""; 0])
         };
         assert!(c.canonicalize_root().is_err())
     }
@@ -451,7 +457,7 @@ pub mod tests {
     fn to_file_success() -> Result<()> {
         let c = Config {
             root: tempdir()?.keep(),
-            ..Config::default()
+            ..Config::parse_from([""; 0])
         };
         c.to_file()
     }
@@ -460,7 +466,7 @@ pub mod tests {
     fn to_file_failure() {
         let c = Config {
             root: Path::new("/").join("proc").join("invalid"),
-            ..Config::default()
+            ..Config::parse_from([""; 0])
         };
         assert!(c.to_file().is_err())
     }
@@ -469,7 +475,7 @@ pub mod tests {
     fn try_load_file_success() -> Result<()> {
         let mut c = Config {
             root: tempdir()?.keep(),
-            ..Config::default()
+            ..Config::parse_from([""; 0])
         };
         fs::write(
             c.root.join(Config::FILENAME),
@@ -500,7 +506,7 @@ root = "root"
     fn try_load_file_with_dockerfile() -> Result<()> {
         let mut c = Config {
             root: tempdir()?.keep(),
-            ..Config::default()
+            ..Config::parse_from([""; 0])
         };
         fs::write(
             c.root.join(Config::FILENAME),
@@ -529,7 +535,7 @@ root = "root"
     fn try_load_file_without_cri_runtime() -> Result<()> {
         let mut c = Config {
             root: tempdir()?.keep(),
-            ..Config::default()
+            ..Config::parse_from([""; 0])
         };
         fs::write(
             c.root.join(Config::FILENAME),
@@ -554,7 +560,7 @@ root = "root"
     fn try_load_file_failure() -> Result<()> {
         let mut c = Config {
             root: tempdir()?.keep(),
-            ..Config::default()
+            ..Config::parse_from([""; 0])
         };
         fs::write(c.root.join(Config::FILENAME), "invalid")?;
         assert!(c.try_load_file().is_err());
@@ -602,6 +608,19 @@ root = "root"
         c.set_rootless(true);
         let toml = toml::to_string(&c).unwrap();
         assert!(!toml.contains("rootless"));
+        Ok(())
+    }
+
+    #[test]
+    fn try_load_file_preserves_rootless() -> Result<()> {
+        let mut c = Config {
+            root: tempdir()?.keep(),
+            ..Config::parse_from([""; 0])
+        };
+        c.to_file()?;
+        c.set_rootless(true);
+        c.try_load_file()?;
+        assert!(c.is_rootless());
         Ok(())
     }
 }
