@@ -69,7 +69,7 @@
 <a href=#69 id=69 data-nosnippet>69</a>    unistd::getuid,
 <a href=#70 id=70 data-nosnippet>70</a>};
 <a href=#71 id=71 data-nosnippet>71</a><span class="kw">use </span>anyhow::{Context, <span class="prelude-ty">Result</span>, bail};
-<a href=#72 id=72 data-nosnippet>72</a><span class="kw">use </span>log::{debug, error, info, set_boxed_logger};
+<a href=#72 id=72 data-nosnippet>72</a><span class="kw">use </span>log::{debug, error, info, set_boxed_logger, warn};
 <a href=#73 id=73 data-nosnippet>73</a><span class="kw">use </span>signal_hook::{
 <a href=#74 id=74 data-nosnippet>74</a>    consts::signal::{SIGHUP, SIGINT, SIGTERM},
 <a href=#75 id=75 data-nosnippet>75</a>    flag,
@@ -163,17 +163,17 @@
 <a href=#163 id=163 data-nosnippet>163</a>            <span class="bool-val">false
 <a href=#164 id=164 data-nosnippet>164</a>        </span>};
 <a href=#165 id=165 data-nosnippet>165</a>
-<a href=#166 id=166 data-nosnippet>166</a>        <span class="comment">// Prepare the configuration
-<a href=#167 id=167 data-nosnippet>167</a>        </span><span class="kw">if </span>config.root().exists() {
-<a href=#168 id=168 data-nosnippet>168</a>            config.try_load_file()<span class="question-mark">?</span>;
-<a href=#169 id=169 data-nosnippet>169</a>        } <span class="kw">else </span>{
-<a href=#170 id=170 data-nosnippet>170</a>            config.to_file()<span class="question-mark">?</span>;
-<a href=#171 id=171 data-nosnippet>171</a>        }
-<a href=#172 id=172 data-nosnippet>172</a>        config.canonicalize_root()<span class="question-mark">?</span>;
-<a href=#173 id=173 data-nosnippet>173</a>
-<a href=#174 id=174 data-nosnippet>174</a>        <span class="comment">// Set rootless after config loading since try_load_file
-<a href=#175 id=175 data-nosnippet>175</a>        // replaces the whole struct (resetting #[serde(skip)] fields).
-<a href=#176 id=176 data-nosnippet>176</a>        </span>config.set_rootless(rootless);
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="comment">// Set rootless before config loading so try_load_file
+<a href=#167 id=167 data-nosnippet>167</a>        // preserves it across the struct replacement.
+<a href=#168 id=168 data-nosnippet>168</a>        </span>config.set_rootless(rootless);
+<a href=#169 id=169 data-nosnippet>169</a>
+<a href=#170 id=170 data-nosnippet>170</a>        <span class="comment">// Prepare the configuration
+<a href=#171 id=171 data-nosnippet>171</a>        </span><span class="kw">if </span>config.root().exists() {
+<a href=#172 id=172 data-nosnippet>172</a>            config.try_load_file()<span class="question-mark">?</span>;
+<a href=#173 id=173 data-nosnippet>173</a>        } <span class="kw">else </span>{
+<a href=#174 id=174 data-nosnippet>174</a>            config.to_file()<span class="question-mark">?</span>;
+<a href=#175 id=175 data-nosnippet>175</a>        }
+<a href=#176 id=176 data-nosnippet>176</a>        config.canonicalize_root()<span class="question-mark">?</span>;
 <a href=#177 id=177 data-nosnippet>177</a>
 <a href=#178 id=178 data-nosnippet>178</a>        <span class="comment">// Setup the logger
 <a href=#179 id=179 data-nosnippet>179</a>        </span>set_boxed_logger(Logger::new(config.log_level(), config.log_format()))
@@ -377,7 +377,7 @@
 <a href=#377 id=377 data-nosnippet>377</a>            registry.register(Box::new(kubelet::KubeletComponent::new(node)));
 <a href=#378 id=378 data-nosnippet>378</a>        }
 <a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">if </span>config.is_rootless() {
-<a href=#380 id=380 data-nosnippet>380</a>            <span class="macro">debug!</span>(<span class="string">"Skipping kube-proxy in rootless mode (no iptables access)"</span>);
+<a href=#380 id=380 data-nosnippet>380</a>            <span class="macro">warn!</span>(<span class="string">"Skipping kube-proxy in rootless mode, Service ClusterIP routing will not work"</span>);
 <a href=#381 id=381 data-nosnippet>381</a>        } <span class="kw">else </span>{
 <a href=#382 id=382 data-nosnippet>382</a>            registry.register(Box::new(proxy::ProxyComponent));
 <a href=#383 id=383 data-nosnippet>383</a>        }
