@@ -58,11 +58,13 @@ build: ## Build in debug mode.
 build-release: ## Build in release mode.
 	cargo build --release
 
+STATIC_TARGET ?= $(shell uname -m | sed 's/x86_64/x86_64-unknown-linux-gnu/;s/aarch64/aarch64-unknown-linux-gnu/')
+
 .PHONY: build-static
 build-static: ## Build the static release binary for the host architecture.
-	RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --target x86_64-unknown-linux-gnu
-	strip -s target/x86_64-unknown-linux-gnu/release/kubernix
-	ldd target/x86_64-unknown-linux-gnu/release/kubernix 2>&1 | grep -qE '(statically linked)|(not a dynamic executable)'
+	RUSTFLAGS="-C target-feature=+crt-static" cargo build --release --target $(STATIC_TARGET)
+	strip -s target/$(STATIC_TARGET)/release/kubernix
+	ldd target/$(STATIC_TARGET)/release/kubernix 2>&1 | grep -qE '(statically linked)|(not a dynamic executable)'
 
 CROSS_TARGET ?= x86_64-unknown-linux-gnu
 

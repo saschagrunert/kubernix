@@ -2,6 +2,6 @@
 kind: KubeProxyConfiguration
 apiVersion: kubeproxy.config.k8s.io/v1alpha1
 clientConnection:
-  kubeconfig: "{}"
+  kubeconfig: "{kubeconfig}"
 mode: "iptables"
-clusterCIDR: "{}"
+clusterCIDR: "{cluster_cidr}"

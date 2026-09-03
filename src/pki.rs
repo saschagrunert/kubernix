@@ -17,8 +17,8 @@ use std::{
     process::{Command, Stdio},
 };
 
-const RSA_KEY_SIZE: u32 = 3072;
-const CERT_EXPIRY: &str = "8760h";
+const ECDSA_KEY_SIZE: u32 = 256;
+const CERT_EXPIRY: &str = "87600h";
 
 #[must_use]
 pub struct Pki {
@@ -26,6 +26,7 @@ pub struct Pki {
     apiserver: Identity,
     ca: Identity,
     controller_manager: Identity,
+    etcd: Identity,
     kubelets: Vec<Identity>,
     proxy: Identity,
     scheduler: Identity,
@@ -51,6 +52,11 @@ impl Pki {
     /// Controller manager identity (system:kube-controller-manager).
     pub fn controller_manager(&self) -> &Identity {
         &self.controller_manager
+    }
+
+    /// etcd server and peer TLS identity.
+    pub fn etcd(&self) -> &Identity {
+        &self.etcd
     }
 
     /// Per-node kubelet identities (system:node:<name>).
@@ -144,6 +150,7 @@ const APISERVER_NAME: &str = "kubernetes";
 const CA_NAME: &str = "ca";
 const CONTROLLER_MANAGER_NAME: &str = "kube-controller-manager";
 const CONTROLLER_MANAGER_USER: &str = "system:kube-controller-manager";
+const ETCD_NAME: &str = "etcd";
 const PROXY_NAME: &str = "kube-proxy";
 const PROXY_USER: &str = "system:kube-proxy";
 const SCHEDULER_NAME: &str = "kube-scheduler";
@@ -190,6 +197,7 @@ impl Pki {
                     CONTROLLER_MANAGER_NAME,
                     CONTROLLER_MANAGER_USER,
                 ),
+                etcd: Identity::new(dir, ETCD_NAME, ETCD_NAME),
                 kubelets,
                 proxy: Identity::new(dir, PROXY_NAME, PROXY_USER),
                 scheduler: Identity::new(dir, SCHEDULER_NAME, SCHEDULER_USER),
@@ -229,10 +237,11 @@ impl Pki {
             };
 
             type CertFn = fn(&PkiConfig) -> Result<Identity>;
-            let cert_fns: [CertFn; 6] = [
+            let cert_fns: [CertFn; 7] = [
                 Self::setup_admin,
                 Self::setup_apiserver,
                 Self::setup_controller_manager,
+                Self::setup_etcd,
                 Self::setup_proxy,
                 Self::setup_scheduler,
                 Self::setup_service_account,
@@ -259,6 +268,7 @@ impl Pki {
             let controller_manager = it
                 .next()
                 .context("missing controller-manager cert result")??;
+            let etcd = it.next().context("missing etcd cert result")??;
             let proxy = it.next().context("missing proxy cert result")??;
             let scheduler = it.next().context("missing scheduler cert result")??;
             let service_account = it.next().context("missing service-account cert result")??;
@@ -268,6 +278,7 @@ impl Pki {
                 admin,
                 apiserver,
                 controller_manager,
+                etcd,
                 proxy,
                 scheduler,
                 service_account,
@@ -319,6 +330,12 @@ impl Pki {
             &csr_file,
             CONTROLLER_MANAGER_USER,
         )
+    }
+
+    fn setup_etcd(pki_config: &PkiConfig) -> Result<Identity> {
+        let csr_file = pki_config.dir().join("etcd-csr.json");
+        Self::write_csr(ETCD_NAME, ETCD_NAME, &csr_file)?;
+        Self::generate(pki_config, ETCD_NAME, &csr_file, ETCD_NAME)
     }
 
     fn setup_proxy(pki_config: &PkiConfig) -> Result<Identity> {
@@ -411,8 +428,8 @@ impl Pki {
         let csr = json!({
             "CN": cn,
             "key": {
-                "algo": "rsa",
-                "size": RSA_KEY_SIZE
+                "algo": "ecdsa",
+                "size": ECDSA_KEY_SIZE
             },
             "names": [{
                 "O": o,
@@ -434,7 +451,6 @@ impl Pki {
                     "kubernetes": {
                         "usages": [
                             "signing",
-                            "key encipherment",
                             "server auth",
                             "client auth"
                         ],

@@ -117,7 +117,7 @@ fn write_cni_config(
     fs::write(
         cni_conf_dir.join("10-bridge.json"),
         to_string_pretty(&json!({
-            "cniVersion": "0.3.1",
+            "cniVersion": "1.0.0",
             "name": format!("kubernix-{}", node_name),
             "type": "bridge",
             "bridge": format!("{}.{}", Network::INTERFACE_PREFIX, node),
@@ -148,7 +148,7 @@ fn write_rootless_cni_config(
     fs::write(
         cni_conf_dir.join("10-ptp.json"),
         to_string_pretty(&json!({
-            "cniVersion": "0.3.1",
+            "cniVersion": "1.0.0",
             "name": format!("kubernix-{}", node_name),
             "type": "ptp",
             "ipam": {

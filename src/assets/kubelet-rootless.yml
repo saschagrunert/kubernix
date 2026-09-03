@@ -21,6 +21,7 @@ cgroupDriver: "none"
 cgroupsPerQOS: false
 failSwapOn: false
 enforceNodeAllocatable: []
+containerRuntimeEndpoint: "{cri_socket}"
 port: {port}
 healthzPort: {healthzPort}
 featureGates:

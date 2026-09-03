@@ -5,8 +5,8 @@ resources:
   - resources:
       - secrets
     providers:
-      - aescbc:
+      - secretbox:
           keys:
             - name: key1
-              secret: {}
+              secret: {secret}
       - identity: {{}}

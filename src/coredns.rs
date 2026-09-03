@@ -56,7 +56,7 @@ impl CoreDns {
         };
         format!(
             include_str!("assets/coredns.yml"),
-            dns,
+            dns = dns,
             env = env,
             resources = resources,
         )

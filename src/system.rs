@@ -142,12 +142,19 @@ impl System {
 
     /// Returns true if the process is running inside a container
     pub fn in_container() -> Result<bool> {
-        Ok(
-            read_to_string(PathBuf::from("/").join("proc").join("1").join("cgroup"))
-                .context("Unable to retrieve systems container status")?
-                .lines()
-                .any(|x| x.contains("libpod") || x.contains("podman") || x.contains("docker")),
-        )
+        if Path::new("/.dockerenv").exists() || Path::new("/run/.containerenv").exists() {
+            return Ok(true);
+        }
+        Ok(read_to_string(Path::new("/proc/1/cgroup"))
+            .context("Unable to retrieve systems container status")?
+            .lines()
+            .any(|x| {
+                x.contains("libpod")
+                    || x.contains("podman")
+                    || x.contains("docker")
+                    || x.contains("containerd")
+                    || x.contains("lxc")
+            }))
     }
 
     /// Restore the initial system state
@@ -249,7 +256,7 @@ impl System {
     }
 
     fn hosts() -> PathBuf {
-        PathBuf::from("/").join("etc").join("hosts")
+        PathBuf::from("/etc/hosts")
     }
 }
 

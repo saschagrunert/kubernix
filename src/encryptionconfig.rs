@@ -1,6 +1,6 @@
 //! Kubernetes encryption-at-rest configuration.
 //!
-//! Generates a random AES-CBC key and writes the EncryptionConfiguration
+//! Generates a random secretbox key and writes the EncryptionConfiguration
 //! manifest consumed by the API server's `--encryption-provider-config` flag.
 
 use crate::Config;
@@ -25,7 +25,7 @@ impl EncryptionConfig {
         &self.path
     }
 
-    /// Generate the encryption config with a random AES-CBC key, or
+    /// Generate the encryption config with a random secretbox key, or
     /// reuse an existing one to support cluster restarts.
     pub fn new(config: &Config) -> Result<EncryptionConfig> {
         let dir = &config.root().join("encryptionconfig");
@@ -37,7 +37,7 @@ impl EncryptionConfig {
             info!("Creating encryption config");
             let rnd: [u8; 32] = random();
             let b64 = STANDARD.encode(rnd);
-            let yml = format!(include_str!("assets/encryptionconfig.yml"), b64);
+            let yml = format!(include_str!("assets/encryptionconfig.yml"), secret = b64);
             fs::write(&path, yml).context("Unable to write encryption config")?;
             fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
                 .context("Unable to restrict encryption config permissions")?;

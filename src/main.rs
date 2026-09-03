@@ -15,7 +15,7 @@ pub fn main() {
 
 fn run() -> Result<()> {
     // Parse CLI arguments
-    let config = Config::default();
+    let config = Config::from_args();
 
     if config.subcommand().is_some() {
         // Spawn only a new shell
