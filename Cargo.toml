@@ -1,6 +1,6 @@
 [package]
 name = "kubernix"
-version = "0.3.5"
+version = "0.3.6"
 authors = ["Sascha Grunert <mail@saschagrunert.de>"]
 edition = "2024"
 rust-version = "1.88"
