@@ -46,9 +46,9 @@ The following technology stack is currently being used:
 | cni-plugins     | v1.9.1   |
 | conmon          | v2.2.1   |
 | conntrack-tools | v1.4.9   |
-| containerd      | v2.3.4   |
-| cri-o-wrapper   | v1.36.4  |
-| cri-tools       | v1.36.0  |
+| containerd      | v2.3.5   |
+| cri-o-wrapper   | v1.37.0  |
+| cri-tools       | v1.37.0  |
 | crun            | v1.29.1  |
 | etcd            | v3.6.14  |
 | iproute2        | v7.1.0   |
@@ -61,7 +61,7 @@ The following technology stack is currently being used:
 | rootlesskit     | v2.3.6   |
 | socat           | v1.8.1.3 |
 | sysctl          | v4.0.7   |
-| util-linux      | v2.42.2  |
+| util-linux      | v2.42.3  |
 
 Some other tools are not explicitly mentioned here, because they are no
 first-level dependencies.
