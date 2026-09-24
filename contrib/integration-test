@@ -1,9 +1,72 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-EXPECTED_NODES="${1:?Usage: $0 <expected-nodes>}"
+USAGE="Usage: $0 <expected-nodes> [<cri-runtime> <oci-runtime>]"
+EXPECTED_NODES="${1:?$USAGE}"
+CRI_RUNTIME="${2:-crio}"
+OCI_RUNTIME="${3:-crun}"
 
-export KUBECONFIG="${KUBECONFIG:-$PWD/kubernix-run/kubeconfig/admin.kubeconfig}"
+# Command prefix used to inspect the OCI runtime state directories, which
+# are only accessible by root when not running in rootless mode.
+SUDO="${SUDO:-}"
+
+# In rootless mode, runc is not supported, which skips the RuntimeClass
+# check, and only hostNetwork pods are supported.
+ROOTLESS="${ROOTLESS:-false}"
+
+# Prefix of the pod IPs, matching the default cluster CIDR.
+POD_IP_PREFIX="${POD_IP_PREFIX:-10.10.}"
+
+KUBERNIX_ROOT="${KUBERNIX_ROOT:-$PWD/kubernix-run}"
+export KUBECONFIG="${KUBECONFIG:-$KUBERNIX_ROOT/kubeconfig/admin.kubeconfig}"
+
+case "$OCI_RUNTIME" in
+  crun) OTHER_OCI_RUNTIME=runc ;;
+  runc) OTHER_OCI_RUNTIME=crun ;;
+  *)
+    echo "$USAGE"
+    exit 1
+    ;;
+esac
+
+# Print the ID of the first container of the first matching pod, without
+# the CRI prefix (for example cri-o:// or containerd://).
+container_id() {
+  local id
+  id=$(kubectl get pods "$@" -o jsonpath='{.items[0].status.containerStatuses[0].containerID}')
+  echo "${id#*://}"
+}
+
+# Succeed if the container ID is tracked in the state directory of the
+# given OCI runtime on any node.
+in_runtime_root() {
+  local runtime=$1 id=$2 dir
+  for dir in "$KUBERNIX_ROOT/$CRI_RUNTIME"/*/"$runtime"; do
+    [ -e "$dir" ] || continue
+    if [ -n "$($SUDO find "$dir" -maxdepth 2 -name "$id" -print -quit)" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Assert that the container is run by the expected OCI runtime only.
+assert_runtime() {
+  local what=$1 id=$2 expected=$3 other=$4
+  if [ -z "$id" ]; then
+    echo "FAIL: no container ID found for $what"
+    exit 1
+  fi
+  if ! in_runtime_root "$expected" "$id"; then
+    echo "FAIL: $what container $id not found in the $expected state directory"
+    exit 1
+  fi
+  if in_runtime_root "$other" "$id"; then
+    echo "FAIL: $what container $id found in the $other state directory"
+    exit 1
+  fi
+  echo "$what container $id uses $expected"
+}
 
 echo "Asserting all nodes are Ready..."
 READY_COUNT=$(kubectl get nodes -o go-template='{{range .items}}{{range .status.conditions}}{{if eq .type "Ready"}}{{if eq .status "True"}}x{{end}}{{end}}{{end}}{{end}}' | wc -c)
@@ -34,5 +97,68 @@ if ! timeout 110 bash -c 'until kubectl -n kube-system wait --for=condition=Read
   exit 1
 fi
 echo "CoreDNS is ready"
+
+echo "Asserting CoreDNS uses the default OCI runtime $OCI_RUNTIME..."
+assert_runtime CoreDNS "$(container_id -n kube-system -l k8s-app=coredns)" \
+  "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME"
+
+# Run a test pod and wait until it is ready. The optional arguments are the
+# runtime class name and whether the pod uses the host network.
+run_pod() {
+  local name=$1 runtime_class=${2:-} host_network=${3:-false}
+  kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $name
+  labels:
+    app: $name
+spec:
+  hostNetwork: $host_network
+  ${runtime_class:+runtimeClassName: $runtime_class}
+  containers:
+    - name: pause
+      image: registry.k8s.io/pause:3.10
+EOF
+  if ! kubectl wait --for=condition=Ready "pod/$name" --timeout=120s; then
+    kubectl describe pod "$name" || true
+    exit 1
+  fi
+}
+
+if [ "$ROOTLESS" = true ]; then
+  # Pods with their own network namespace are not supported in rootless mode.
+  echo "Asserting a hostNetwork pod runs on $OCI_RUNTIME..."
+  run_pod default-runtime-test "" true
+else
+  echo "Asserting a pod with its own network namespace runs on $OCI_RUNTIME..."
+  run_pod default-runtime-test
+  POD_IP=$(kubectl get pod default-runtime-test -o jsonpath='{.status.podIP}')
+  if [[ "$POD_IP" != "$POD_IP_PREFIX"* ]]; then
+    echo "FAIL: pod IP '$POD_IP' is not in the cluster CIDR (${POD_IP_PREFIX}*)"
+    exit 1
+  fi
+  echo "Pod got IP $POD_IP"
+fi
+assert_runtime "Default runtime test pod" "$(container_id -l app=default-runtime-test)" \
+  "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME"
+kubectl delete pod default-runtime-test --wait=false
+
+if [ "$ROOTLESS" = true ]; then
+  echo "Skipping RuntimeClass check, $OTHER_OCI_RUNTIME is not supported in rootless mode"
+else
+  echo "Asserting a pod with RuntimeClass $OTHER_OCI_RUNTIME uses it..."
+  kubectl apply -f - <<EOF
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: $OTHER_OCI_RUNTIME
+handler: $OTHER_OCI_RUNTIME
+EOF
+  run_pod runtime-class-test "$OTHER_OCI_RUNTIME"
+  assert_runtime "RuntimeClass $OTHER_OCI_RUNTIME pod" \
+    "$(container_id -l app=runtime-class-test)" "$OTHER_OCI_RUNTIME" "$OCI_RUNTIME"
+  kubectl delete pod runtime-class-test --wait=false
+fi
 
 echo "All assertions passed"

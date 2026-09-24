@@ -1,5 +1,5 @@
 #!/bin/sh
-command -v jq >/dev/null 2>&1 || { echo "crun-rootless: jq required but not found" >&2; exit 127; }
+command -v jq >/dev/null 2>&1 || { echo "oci-rootless: jq required but not found" >&2; exit 127; }
 bundle=""
 prev=""
 for arg in "$@"; do
@@ -28,4 +28,4 @@ if [ -n "$bundle" ] && [ -f "$bundle/config.json" ]; then
     fi
   done
 fi
-exec __CRUN_PATH__ "$@"
+exec __RUNTIME_PATH__ "$@"

@@ -17,7 +17,7 @@ use crate::{
 use anyhow::{Context, Result};
 use std::{
     fs::{self, create_dir_all},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 /// Component wrapper for registry-based startup (per-node).
@@ -67,13 +67,6 @@ impl Crio {
         let node_name = Node::name(config, network, node);
 
         let paths = RuntimePaths::resolve(config)?;
-        // CRI-O validates runtime_path with stat; empty lets it resolve from $PATH
-        let crun_path = if config.multi_node() && !config.is_rootless() {
-            String::new()
-        } else {
-            paths.crun
-        };
-        let plugin_dir = paths.plugin_dir;
         let conmon = if config.multi_node() && !config.is_rootless() {
             String::new()
         } else {
@@ -96,30 +89,9 @@ impl Crio {
             create_dir_all(&attach_dir).context("Unable to create CRI-O attach directory")?;
             create_dir_all(&ns_dir).context("Unable to create CRI-O namespace directory")?;
 
-            let containers_dir = dir.join("containers");
             fs::write(
                 &config_file,
-                format!(
-                    include_str!("assets/crio.conf"),
-                    attach_socket_dir = attach_dir.display(),
-                    conmon = conmon,
-                    containers_root = containers_dir.join("storage").display(),
-                    containers_runroot = containers_dir.join("run").display(),
-                    listen = socket,
-                    log_dir = dir.join("log").display(),
-                    namespaces_dir = ns_dir.display(),
-                    network_dir = network_dir.display(),
-                    plugin_dir = plugin_dir,
-                    exits_dir = dir.join("exits").display(),
-                    runtime_path = crun_path,
-                    runtime_root = dir.join("crun").display(),
-                    signature_policy = Container::policy_json(config).display(),
-                    storage_driver = "overlay",
-                    storage_option = "",
-                    version_file = dir.join("version").display(),
-                    disable_hostport_mapping = config.is_rootless(),
-                    enable_nri = !config.is_rootless(),
-                ),
+                Self::render_config(config, &dir, &socket, &conmon, &paths),
             )
             .context("Unable to write CRI-O config")?;
 
@@ -148,6 +120,63 @@ impl Crio {
         }))
     }
 
+    /// Render the CRI-O configuration for the node working directory.
+    ///
+    /// Both OCI runtimes are registered as runtime handlers with their own
+    /// state directory, the configured one is used as default.
+    fn render_config(
+        config: &Config,
+        dir: &Path,
+        socket: &CriSocket,
+        conmon: &str,
+        paths: &RuntimePaths,
+    ) -> String {
+        // CRI-O validates runtime_path with stat; empty lets it resolve the
+        // handler name from $PATH inside the node container.
+        let runtimes = paths
+            .runtimes
+            .iter()
+            .map(|(runtime, path)| {
+                let path = if config.multi_node() && !config.is_rootless() {
+                    ""
+                } else {
+                    path.as_str()
+                };
+                format!(
+                    "[crio.runtime.runtimes.{name}]\n\
+                     runtime_path = \"{path}\"\n\
+                     runtime_root = \"{root}\"\n\
+                     runtime_type = \"oci\"\n",
+                    name = runtime,
+                    root = dir.join(runtime.name()).display(),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let containers_dir = dir.join("containers");
+        format!(
+            include_str!("assets/crio.conf"),
+            attach_socket_dir = dir.join("attach").display(),
+            conmon = conmon,
+            containers_root = containers_dir.join("storage").display(),
+            containers_runroot = containers_dir.join("run").display(),
+            listen = socket,
+            log_dir = dir.join("log").display(),
+            namespaces_dir = dir.join("ns").display(),
+            network_dir = dir.join("cni").display(),
+            plugin_dir = paths.plugin_dir,
+            exits_dir = dir.join("exits").display(),
+            default_runtime = config.oci_runtime(),
+            runtimes = runtimes,
+            signature_policy = Container::policy_json(config).display(),
+            storage_driver = "overlay",
+            storage_option = "",
+            version_file = dir.join("version").display(),
+            disable_hostport_mapping = config.is_rootless(),
+            enable_nri = !config.is_rootless(),
+        )
+    }
+
     /// Retrieve the CRI socket
     pub fn socket(config: &Config, network: &Network, node: u8) -> Result<CriSocket> {
         CriSocket::new(Self::path(config, network, node).join("crio.sock"))
@@ -174,6 +203,8 @@ impl Stoppable for Crio {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::OciRuntime;
+    use clap::Parser;
 
     #[test]
     fn component_metadata() {
@@ -186,5 +217,77 @@ mod tests {
     fn component_name_per_node() {
         assert_eq!(CrioComponent::new(0).name(), "CRI-O (node 0)");
         assert_eq!(CrioComponent::new(2).name(), "CRI-O (node 2)");
+    }
+
+    fn test_paths() -> RuntimePaths {
+        RuntimePaths {
+            runtimes: vec![
+                (OciRuntime::Crun, "/nix/bin/crun".into()),
+                (OciRuntime::Runc, "/nix/bin/runc".into()),
+            ],
+            plugin_dir: "/nix/cni".into(),
+        }
+    }
+
+    fn render_with(config: &Config, paths: &RuntimePaths) -> Result<toml::Value> {
+        let dir = PathBuf::from("/kubernix/crio/node");
+        let socket = CriSocket::new(dir.join("crio.sock"))?;
+        let content = Crio::render_config(config, &dir, &socket, "/bin/conmon", paths);
+        Ok(toml::from_str(&content)?)
+    }
+
+    fn render(config: &Config) -> Result<toml::Value> {
+        render_with(config, &test_paths())
+    }
+
+    #[test]
+    fn render_config_skips_missing_runtime() -> Result<()> {
+        let mut paths = test_paths();
+        paths.runtimes.retain(|(r, _)| *r == OciRuntime::Crun);
+        let v = render_with(&Config::parse_from(["kubernix"]), &paths)?;
+        let runtimes = &v["crio"]["runtime"]["runtimes"];
+        assert!(runtimes.get("crun").is_some());
+        assert!(runtimes.get("runc").is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn render_config_registers_both_runtimes() -> Result<()> {
+        let v = render(&Config::parse_from(["kubernix"]))?;
+        let runtime = &v["crio"]["runtime"];
+        assert_eq!(runtime["default_runtime"].as_str(), Some("crun"));
+        let crun = &runtime["runtimes"]["crun"];
+        assert_eq!(crun["runtime_path"].as_str(), Some("/nix/bin/crun"));
+        assert_eq!(
+            crun["runtime_root"].as_str(),
+            Some("/kubernix/crio/node/crun")
+        );
+        let runc = &runtime["runtimes"]["runc"];
+        assert_eq!(runc["runtime_path"].as_str(), Some("/nix/bin/runc"));
+        assert_eq!(
+            runc["runtime_root"].as_str(),
+            Some("/kubernix/crio/node/runc")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn render_config_default_runc() -> Result<()> {
+        let v = render(&Config::parse_from(["kubernix", "--oci-runtime=runc"]))?;
+        assert_eq!(
+            v["crio"]["runtime"]["default_runtime"].as_str(),
+            Some("runc")
+        );
+        assert!(v["crio"]["runtime"]["runtimes"].get("crun").is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn render_config_multi_node_resolves_from_path() -> Result<()> {
+        let v = render(&Config::parse_from(["kubernix", "--nodes=2"]))?;
+        let runtimes = &v["crio"]["runtime"]["runtimes"];
+        assert_eq!(runtimes["crun"]["runtime_path"].as_str(), Some(""));
+        assert_eq!(runtimes["runc"]["runtime_path"].as_str(), Some(""));
+        Ok(())
     }
 }

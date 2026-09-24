@@ -106,6 +106,10 @@ impl ApiServer {
         )?;
 
         process.wait_ready("Serving securely")?;
+        // The log line only indicates that the server listens, controllers
+        // started right after it may fail on post start hooks which are not
+        // done yet (for example rbac/bootstrap-roles).
+        kubectl.wait_api_ready()?;
         Self::setup_rbac(&dir, kubectl)?;
         Ok(Box::new(Self { process }))
     }

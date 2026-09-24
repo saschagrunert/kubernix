@@ -19,14 +19,8 @@ bin_dirs = ["{plugin_dir}"]
 conf_dir = "{cni_conf_dir}"
 
 [plugins."io.containerd.cri.v1.runtime".containerd]
-default_runtime_name = "crun"
+default_runtime_name = "{default_runtime}"
 
-[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.crun]
-runtime_type = "io.containerd.runc.v2"
-
-[plugins."io.containerd.cri.v1.runtime".containerd.runtimes.crun.options]
-BinaryName = "{runtime_path}"
-SystemdCgroup = false
-
+{runtimes}
 [plugins."io.containerd.nri.v1.nri"]
 disable = {disable_nri}

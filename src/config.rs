@@ -1,6 +1,6 @@
 //! Configuration related structures
 use crate::{podman::Podman, system::System};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand as ClapSubcommand, ValueEnum, builder::styling};
 use ipnetwork::Ipv4Network;
 use log::LevelFilter;
@@ -62,6 +62,46 @@ impl fmt::Display for CriRuntime {
             CriRuntime::Crio => write!(f, "crio"),
             CriRuntime::Containerd => write!(f, "containerd"),
         }
+    }
+}
+
+/// OCI runtime used as the default handler of the CRI runtime.
+///
+/// Both runtimes are always registered as CRI handlers, so pods can select
+/// the other one via a `RuntimeClass`.
+///
+/// ```
+/// use kubernix::OciRuntime;
+///
+/// assert_eq!(OciRuntime::Crun.to_string(), "crun");
+/// assert_eq!(OciRuntime::Runc.to_string(), "runc");
+/// ```
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum OciRuntime {
+    /// crun OCI runtime (default)
+    #[default]
+    Crun,
+    /// runc OCI runtime
+    Runc,
+}
+
+impl OciRuntime {
+    /// All supported OCI runtimes, registered as CRI runtime handlers.
+    pub const ALL: [OciRuntime; 2] = [OciRuntime::Crun, OciRuntime::Runc];
+
+    /// The runtime handler and executable name.
+    pub fn name(self) -> &'static str {
+        match self {
+            OciRuntime::Crun => "crun",
+            OciRuntime::Runc => "runc",
+        }
+    }
+}
+
+impl fmt::Display for OciRuntime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name())
     }
 }
 
@@ -202,6 +242,16 @@ pub struct Config {
     /// The CRI runtime to use (crio or containerd)
     cri_runtime: CriRuntime,
 
+    #[serde(default)]
+    #[arg(
+        default_value = "crun",
+        env = "KUBERNIX_OCI_RUNTIME",
+        long = "oci-runtime",
+        value_name = "OCI_RUNTIME"
+    )]
+    /// The default OCI runtime (crun or runc), both are registered as runtime handlers
+    oci_runtime: OciRuntime,
+
     #[serde(skip)]
     #[arg(skip)]
     rootless: bool,
@@ -285,6 +335,11 @@ impl Config {
         self.cri_runtime
     }
 
+    /// Default OCI runtime handler (crun or runc).
+    pub fn oci_runtime(&self) -> OciRuntime {
+        self.oci_runtime
+    }
+
     /// Cluster addons to deploy after bootstrap (e.g. `coredns`).
     pub fn addons(&self) -> &[String] {
         &self.addons
@@ -362,6 +417,18 @@ impl Config {
             self.rootless = rootless;
         } else {
             self.to_file()?;
+        }
+        Ok(())
+    }
+
+    /// Validate option combinations which are not supported.
+    pub fn validate(&self) -> Result<()> {
+        if self.is_rootless() && self.oci_runtime() == OciRuntime::Runc {
+            bail!(
+                "The OCI runtime 'runc' is not supported in rootless mode, \
+                 because it cannot mount sysfs without owning the network \
+                 namespace. Use '--oci-runtime crun' or run as root."
+            )
         }
         Ok(())
     }
@@ -498,6 +565,7 @@ root = "root"
         assert_eq!(c.log_format(), LogFormat::Text);
         assert_eq!(&c.cidr().to_string(), "1.1.1.1/16");
         assert_eq!(c.cri_runtime(), CriRuntime::Crio);
+        assert_eq!(c.oci_runtime(), OciRuntime::Crun);
         assert!(c.dockerfile().is_none());
         Ok(())
     }
@@ -520,6 +588,7 @@ log-format = "json"
 log-level = "DEBUG"
 no-shell = false
 nodes = 1
+oci-runtime = "runc"
 packages = []
 root = "root"
             "#,
@@ -527,6 +596,7 @@ root = "root"
         c.try_load_file()?;
         assert_eq!(c.log_format(), LogFormat::Json);
         assert_eq!(c.cri_runtime(), CriRuntime::Containerd);
+        assert_eq!(c.oci_runtime(), OciRuntime::Runc);
         assert_eq!(c.dockerfile(), Some(Path::new("/tmp/MyDockerfile")));
         Ok(())
     }
@@ -553,7 +623,65 @@ root = "root"
         )?;
         c.try_load_file()?;
         assert_eq!(c.cri_runtime(), CriRuntime::Crio);
+        assert_eq!(c.oci_runtime(), OciRuntime::Crun);
         Ok(())
+    }
+
+    #[test]
+    fn oci_runtime_default_crun() {
+        let c = Config::parse_from([""; 0]);
+        assert_eq!(c.oci_runtime(), OciRuntime::Crun);
+    }
+
+    #[test]
+    fn oci_runtime_from_args() {
+        let c = Config::parse_from(["kubernix", "--oci-runtime", "runc"]);
+        assert_eq!(c.oci_runtime(), OciRuntime::Runc);
+        let c = Config::parse_from(["kubernix", "--oci-runtime=crun"]);
+        assert_eq!(c.oci_runtime(), OciRuntime::Crun);
+    }
+
+    #[test]
+    fn oci_runtime_invalid() {
+        assert!(Config::try_parse_from(["kubernix", "--oci-runtime", "youki"]).is_err());
+    }
+
+    #[test]
+    fn oci_runtime_serialized() -> Result<()> {
+        let mut c = test_config()?;
+        c.oci_runtime = OciRuntime::Runc;
+        let toml = toml::to_string(&c)?;
+        assert!(toml.contains(r#"oci-runtime = "runc""#));
+        Ok(())
+    }
+
+    #[test]
+    fn validate_default_success() -> Result<()> {
+        test_config()?.validate()?;
+        test_config_rootless()?.validate()
+    }
+
+    #[test]
+    fn validate_runc_root_success() -> Result<()> {
+        let mut c = test_config()?;
+        c.oci_runtime = OciRuntime::Runc;
+        c.validate()
+    }
+
+    #[test]
+    fn validate_runc_rootless_failure() -> Result<()> {
+        let mut c = test_config_rootless()?;
+        c.oci_runtime = OciRuntime::Runc;
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("not supported in rootless mode"));
+        Ok(())
+    }
+
+    #[test]
+    fn oci_runtime_names() {
+        assert_eq!(OciRuntime::ALL, [OciRuntime::Crun, OciRuntime::Runc]);
+        assert_eq!(OciRuntime::Crun.name(), "crun");
+        assert_eq!(OciRuntime::Runc.name(), "runc");
     }
 
     #[test]

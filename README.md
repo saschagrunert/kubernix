@@ -57,8 +57,9 @@ The following technology stack is currently being used:
 | kubectl         | v1.37.0  |
 | kubernetes      | v1.37.0  |
 | nss-cacert      | v3.126   |
-| podman          | v5.8.6   |
+| podman          | v5.8.7   |
 | rootlesskit     | v2.3.6   |
+| runc            | v1.4.3   |
 | socat           | v1.8.1.3 |
 | sysctl          | v4.0.7   |
 | util-linux      | v2.42.3  |
@@ -108,6 +109,7 @@ To bootstrap your first cluster, download one of the latest [release binaries][1
 build the application via:
 
 [18]: https://github.com/saschagrunert/kubernix/releases/latest
+[19]: https://github.com/saschagrunert/kubernix/issues/1413
 
 ```shell
 $ make build-release
@@ -134,8 +136,12 @@ delegation. On Ubuntu 23.10+, you may also need to set
 `kernel.apparmor_restrict_unprivileged_userns=0`. Kube-proxy is skipped without
 root (it needs iptables access), so ClusterIP-based Service routing is not
 available. Pod egress to external networks also requires masquerading, which
-is not possible without iptables. Pod-to-pod communication within the
-cluster works normally.
+is not possible without iptables. Only pods using `hostNetwork: true` are
+supported, pods which need their own network namespace fail to get a sandbox,
+because the user namespace does not own the host network namespace
+([#1413][19]). Only crun is
+supported as OCI runtime in rootless mode, because runc cannot mount sysfs into
+containers there (see [OCI Runtimes](#oci-runtimes)).
 
 In multi-node rootless mode, all nodes run as direct processes (no container
 isolation) with `--hostname-override` for node identity. Running with `sudo`
@@ -188,15 +194,20 @@ For example, the log files for the different running components are now
 available within their corresponding directory:
 
 ```
-> ls -1 **.log
+> ls -1 */*.log */*/*.log
 apiserver/kube-apiserver.log
 controllermanager/kube-controller-manager.log
-crio/crio.log  # or containerd/ when using --cri-runtime=containerd
+crio/<node>/crio.log  # or containerd/<node>/containerd.log
 etcd/etcd.log
-kubelet/kubelet.log
+kubelet/<node>/kubelet.log
 proxy/kube-proxy.log
 scheduler/kube-scheduler.log
 ```
+
+The CRI runtime and kubelet data is stored per node, where `<node>` is the
+hostname for a single node cluster and `node-0`, `node-1`, … in multinode mode.
+If a component runs inside a node container, then its log file is named after
+the container runtime, for example `crio/node-1/podman.log`.
 
 If you want to spawn an additional shell session, simply run `kubernix shell`
 in the same directory as where the initial bootstrap happened.
@@ -254,6 +265,15 @@ components. For example, etcd gets started via:
 }
 ```
 
+The generated Nix environment in the `nix` directory is an exception: it gets
+regenerated if it differs from the one of the running KuberNix version, for
+example after an upgrade or when the content of the overlay changed. The
+multinode base image is tagged with a hash of its inputs
+(`kubernix:base-<hash>`), so it gets rebuilt as well. Old images can be removed
+via `podman rmi`. All other component configurations and the `kubernix.toml`
+are reused as they are, so remove the run root to pick up new defaults, like
+the `runc` runtime handler.
+
 ### Configuration
 
 KuberNix has some configuration possibilities, which are currently:
@@ -272,11 +292,40 @@ KuberNix has some configuration possibilities, which are currently:
 | `-d, --dockerfile`        | Custom Dockerfile for multi-node container image builds                             |                | `KUBERNIX_DOCKERFILE`        |
 | `-p, --packages`          | Additional Nix dependencies to be added to the environment                          |                | `KUBERNIX_PACKAGES`          |
 | `--cri-runtime`           | CRI runtime to use (`crio` or `containerd`)                                         | `crio`         | `KUBERNIX_CRI_RUNTIME`       |
+| `--oci-runtime`           | Default OCI runtime (`crun` or `runc`, only `crun` in rootless mode)                | `crun`         | `KUBERNIX_OCI_RUNTIME`       |
 | `-a, --addons`            | Cluster addons to deploy (available: coredns)                                       | `coredns`      | `KUBERNIX_ADDONS`            |
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
 up over the necessary cluster components.
+
+#### OCI Runtimes
+
+Both [crun][31] and [runc][32] are registered as runtime handlers named `crun`
+and `runc` for CRI-O as well as containerd, each with its own state directory
+(`<cri>/<node>/crun` and `<cri>/<node>/runc`). The `--oci-runtime` option
+selects the handler used for pods without a runtime class, while pods can
+select the other one via a [RuntimeClass][33]:
+
+```yaml
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: runc
+handler: runc
+```
+
+If the other runtime cannot be found, then KuberNix warns and does not register
+its handler, while a missing default runtime is an error. This works in single
+node and multinode mode. In rootless mode only crun is supported: the `runc`
+handler is not registered and KuberNix refuses to start with `--oci-runtime
+runc`, because runc cannot mount sysfs into containers without owning the
+network namespace. The container runtime used for the node containers in
+multinode mode (`--container-runtime`) is not affected by this option.
+
+[31]: https://github.com/containers/crun
+[32]: https://github.com/opencontainers/runc
+[33]: https://kubernetes.io/docs/concepts/containers/runtime-class
 
 #### Multinode Support
 

@@ -11,6 +11,7 @@ use log::{debug, info};
 use std::{
     env::{current_exe, var},
     fs::{self, create_dir_all},
+    path::Path,
     process::Command,
 };
 
@@ -19,6 +20,9 @@ pub struct Nix;
 
 impl Nix {
     pub const DIR: &'static str = "nix";
+
+    /// Files of the generated Nix environment.
+    pub const FILES: [&'static str; 4] = ["flake.nix", "flake.lock", "packages.nix", "overlay.nix"];
     const NIX_ENV: &'static str = "IN_NIX";
 
     /// Bootstrap the nix environment
@@ -27,55 +31,9 @@ impl Nix {
         debug!("Nix environment not found, bootstrapping one");
         let dir = config.root().join(Self::DIR);
 
-        // Write the configuration if not existing
-        if !dir.exists() {
-            create_dir_all(&dir).context("Unable to create nix directory")?;
-
-            fs::write(
-                dir.join("flake.nix"),
-                include_str!("../nix/runtime-flake.nix")
-                    .replace("KUBERNIX_SYSTEM", Self::nix_system()?),
-            )
-            .context("Unable to write flake.nix")?;
-            fs::write(dir.join("flake.lock"), include_str!("../flake.lock"))
-                .context("Unable to write flake.lock")?;
-
-            for pkg in config.packages() {
-                if !pkg
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.')
-                {
-                    bail!(
-                        "Invalid package name '{}': only alphanumeric characters, dashes, underscores, and dots are allowed",
-                        pkg,
-                    );
-                }
-            }
-            let packages = &config.packages().join(" ");
-            debug!("Adding additional packages: {:?}", config.packages());
-            fs::write(
-                dir.join("packages.nix"),
-                include_str!("../nix/packages.nix").replace("/* PACKAGES */", packages),
-            )
-            .context("Unable to write packages.nix")?;
-
-            // Apply the overlay if existing
-            let target_overlay = dir.join("overlay.nix");
-            match config.overlay() {
-                // User defined overlay
-                Some(overlay) => {
-                    info!("Using custom overlay '{}'", overlay.display());
-                    fs::copy(overlay, &target_overlay).context("Unable to copy custom overlay")?;
-                }
-
-                // The default overlay
-                None => {
-                    debug!("Using default overlay");
-                    fs::write(&target_overlay, include_str!("../nix/overlay.nix"))
-                        .context("Unable to write default overlay")?;
-                }
-            }
-
+        // Write the environment, regenerating it if the rendered files
+        // differ, for example after upgrading kubernix or changing packages.
+        if Self::write_files(&dir, &Self::render_files(&config)?)? {
             // Initialize a standalone git repo so that Nix flakes can
             // discover the generated files. Without this, Nix would use
             // the parent git worktree and filter to only tracked files.
@@ -91,6 +49,7 @@ impl Nix {
         let nodes = config.nodes().to_string();
         let container_runtime = config.container_runtime();
         let cri_runtime = config.cri_runtime().to_string();
+        let oci_runtime = config.oci_runtime().to_string();
 
         let shell_val: String = config.shell().unwrap_or_default().to_owned();
         let overlay_val = config.overlay().map(|o| o.display().to_string());
@@ -110,6 +69,8 @@ impl Nix {
             container_runtime,
             "--cri-runtime",
             cri_runtime.as_str(),
+            "--oci-runtime",
+            oci_runtime.as_str(),
         ];
 
         if let Some(ref overlay) = overlay_val {
@@ -169,9 +130,76 @@ impl Nix {
         Ok(())
     }
 
+    /// Render all files of the Nix environment as (file name, content).
+    fn render_files(config: &Config) -> Result<Vec<(&'static str, String)>> {
+        for pkg in config.packages() {
+            if !pkg
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.')
+            {
+                bail!(
+                    "Invalid package name '{}': only alphanumeric characters, dashes, underscores, and dots are allowed",
+                    pkg,
+                );
+            }
+        }
+        debug!("Adding additional packages: {:?}", config.packages());
+
+        let overlay = match config.overlay() {
+            // User defined overlay
+            Some(overlay) => {
+                info!("Using custom overlay '{}'", overlay.display());
+                fs::read_to_string(overlay).context("Unable to read custom overlay")?
+            }
+
+            // The default overlay
+            None => {
+                debug!("Using default overlay");
+                include_str!("../nix/overlay.nix").into()
+            }
+        };
+
+        let [flake, lock, packages, overlay_file] = Self::FILES;
+        Ok(vec![
+            (
+                flake,
+                include_str!("../nix/runtime-flake.nix")
+                    .replace("KUBERNIX_SYSTEM", Self::nix_system()?),
+            ),
+            (lock, include_str!("../flake.lock").into()),
+            (
+                packages,
+                include_str!("../nix/packages.nix")
+                    .replace("/* PACKAGES */", &config.packages().join(" ")),
+            ),
+            (overlay_file, overlay),
+        ])
+    }
+
+    /// Write the files into the directory if the directory is new or any
+    /// content differs. Returns true if something has been written.
+    fn write_files(dir: &Path, files: &[(&str, String)]) -> Result<bool> {
+        let exists = dir.exists();
+        let changed = files.iter().any(|(name, content)| {
+            fs::read_to_string(dir.join(name)).ok().as_ref() != Some(content)
+        });
+        if exists && !changed {
+            return Ok(false);
+        }
+        if exists {
+            info!("Nix environment is outdated, regenerating it");
+        }
+        create_dir_all(dir).context("Unable to create nix directory")?;
+        for (name, content) in files {
+            fs::write(dir.join(name), content)
+                .with_context(|| format!("Unable to write {}", name))?;
+        }
+        Ok(true)
+    }
+
     /// Initialize a git repo in the given directory so Nix flakes
     /// treats it as a standalone source tree.
-    fn git_init(dir: &std::path::Path) -> Result<()> {
+    fn git_init(dir: &Path) -> Result<()> {
         let git = System::find_executable("git")?;
         let run = |args: &[&str]| -> Result<()> {
             let status = Command::new(&git).arg("-C").arg(dir).args(args).status()?;
@@ -210,8 +238,34 @@ impl Nix {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
     use tempfile::tempdir;
+
+    #[test]
+    fn write_files_only_on_change() -> Result<()> {
+        let dir = tempdir()?.keep().join("nix");
+        let files = vec![("a.nix", "a".to_string()), ("b.nix", "b".to_string())];
+        assert!(Nix::write_files(&dir, &files)?);
+        assert!(!Nix::write_files(&dir, &files)?);
+
+        let changed = vec![("a.nix", "a".to_string()), ("b.nix", "c".to_string())];
+        assert!(Nix::write_files(&dir, &changed)?);
+        assert_eq!(fs::read_to_string(dir.join("b.nix"))?, "c");
+
+        fs::remove_file(dir.join("a.nix"))?;
+        assert!(Nix::write_files(&dir, &changed)?);
+        assert!(dir.join("a.nix").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn render_files_contains_runc() -> Result<()> {
+        let config = crate::config::tests::test_config()?;
+        let files = Nix::render_files(&config)?;
+        let packages = &files.iter().find(|(n, _)| *n == "packages.nix").unwrap().1;
+        assert!(packages.contains("runc"));
+        assert!(packages.contains("crun"));
+        Ok(())
+    }
 
     #[test]
     fn nix_system_success() {

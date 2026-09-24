@@ -14,7 +14,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-const DEFAULT_IMAGE: &str = "kubernix:base";
+const IMAGE_PREFIX: &str = "kubernix:base";
 const DEFAULT_ROOT: &str = "kubernix";
 
 /// Provides container image building and process execution for multi-node clusters.
@@ -36,18 +36,6 @@ impl Container {
             return Ok(());
         }
 
-        // Skip rebuild if the image already exists
-        if Self::image_exists(config) {
-            info!(
-                "Container image '{}' already exists, skipping build",
-                DEFAULT_IMAGE
-            );
-            return Ok(());
-        }
-
-        // Build the base container image
-        info!("Building base container image '{}'", DEFAULT_IMAGE);
-
         // Prepare the Dockerfile: use a custom one if provided, otherwise
         // fall back to the embedded default.
         let file = config.root().join("Dockerfile");
@@ -68,6 +56,18 @@ impl Container {
             }
         }
 
+        // Skip rebuild if the image for the current environment already
+        // exists. The tag contains a hash of the build inputs, so a changed
+        // Nix environment results in a new image.
+        let image = Self::image(config)?;
+        if Self::image_exists(config, &image) {
+            info!("Container image '{}' already exists, skipping build", image);
+            return Ok(());
+        }
+
+        // Build the base container image
+        info!("Building base container image '{}'", image);
+
         // Exclude .git from the container build context since the
         // runtime nix directory uses a standalone git repo that the
         // container image does not need.
@@ -82,7 +82,7 @@ impl Container {
         } else {
             vec!["build".into()]
         };
-        args.extend([format!("-t={DEFAULT_IMAGE}"), ".".into()]);
+        args.extend([format!("-t={image}"), ".".into()]);
         trace!("Container runtime build args: {:?}", args);
 
         // Run the build
@@ -96,7 +96,7 @@ impl Container {
         if !status.success() {
             bail!(
                 "Unable to build container base image '{}' using '{}' (exit: {})",
-                DEFAULT_IMAGE,
+                image,
                 config.container_runtime(),
                 status,
             );
@@ -152,7 +152,8 @@ impl Container {
         }
 
         // Add the process and the user provided args
-        args_vec.extend(&[DEFAULT_IMAGE, process_name]);
+        let image = Self::image(config)?;
+        args_vec.extend(&[image.as_str(), process_name]);
         args_vec.extend(args);
 
         // Start the process
@@ -236,11 +237,43 @@ impl Container {
         }
     }
 
+    /// The base image name, tagged with a hash of the Nix environment and
+    /// the Dockerfile, which are the inputs of the image build.
+    fn image(config: &Config) -> Result<String> {
+        let nix_dir = config.root().join(Nix::DIR);
+        let mut inputs = vec![];
+        for file in Nix::FILES {
+            let path = nix_dir.join(file);
+            inputs.push(
+                fs::read(&path).with_context(|| format!("Unable to read '{}'", path.display()))?,
+            );
+        }
+        let dockerfile = config.root().join("Dockerfile");
+        inputs.push(
+            fs::read(&dockerfile)
+                .with_context(|| format!("Unable to read '{}'", dockerfile.display()))?,
+        );
+        Ok(Self::image_name(&inputs))
+    }
+
+    /// The base image name for the provided build inputs.
+    fn image_name(inputs: &[Vec<u8>]) -> String {
+        // FNV-1a, stable across Rust versions and platforms.
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for input in inputs {
+            for byte in (input.len() as u64).to_le_bytes().iter().chain(input) {
+                hash ^= u64::from(*byte);
+                hash = hash.wrapping_mul(0x0100_0000_01b3);
+            }
+        }
+        format!("{}-{:016x}", IMAGE_PREFIX, hash)
+    }
+
     /// Check whether the base container image already exists.
     /// Uses `image inspect` which works for both podman and docker.
-    fn image_exists(config: &Config) -> bool {
+    fn image_exists(config: &Config, image: &str) -> bool {
         Command::new(config.container_runtime())
-            .args(["image", "inspect", DEFAULT_IMAGE])
+            .args(["image", "inspect", image])
             .stderr(Stdio::null())
             .stdout(Stdio::null())
             .status()
@@ -262,6 +295,24 @@ mod tests {
         assert_eq!(
             Container::prefixed_container_name("node-0"),
             "kubernix-node-0"
+        );
+    }
+
+    #[test]
+    fn image_name_depends_on_inputs() {
+        let a = Container::image_name(&[b"crun".to_vec(), b"df".to_vec()]);
+        assert!(a.starts_with("kubernix:base-"));
+        assert_eq!(
+            a,
+            Container::image_name(&[b"crun".to_vec(), b"df".to_vec()])
+        );
+        assert_ne!(
+            a,
+            Container::image_name(&[b"crun runc".to_vec(), b"df".to_vec()])
+        );
+        assert_ne!(
+            a,
+            Container::image_name(&[b"crund".to_vec(), b"f".to_vec()])
         );
     }
 

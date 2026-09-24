@@ -95,6 +95,51 @@ impl Kubectl {
         }
         bail!("Unable to wait for {} pod", name)
     }
+
+    /// Wait until the API server reports readiness via `/readyz`, which
+    /// includes the post start hooks like the RBAC bootstrap roles.
+    pub fn wait_api_ready(&self) -> Result<()> {
+        debug!("Waiting for the API server /readyz endpoint");
+        poll(
+            Duration::from_secs(READINESS_TIMEOUT),
+            Duration::from_secs(1),
+            || {
+                let output = self.execute(&["get", "--raw=/readyz"])?;
+                Ok(String::from_utf8_lossy(&output.stdout).trim() == "ok")
+            },
+        )
+        .context("API server did not become ready")?;
+        debug!("API server /readyz is ok");
+        Ok(())
+    }
+}
+
+/// Run `check` every `interval` until it returns true or `timeout` elapsed.
+/// Errors of `check` are treated as not ready yet, the last one is part of
+/// the timeout error.
+fn poll<F>(timeout: Duration, interval: Duration, mut check: F) -> Result<()>
+where
+    F: FnMut() -> Result<bool>,
+{
+    let start = Instant::now();
+    loop {
+        let last_error = match check() {
+            Ok(true) => return Ok(()),
+            Ok(false) => None,
+            Err(e) => {
+                trace!("Not ready yet: {:#}", e);
+                Some(e)
+            }
+        };
+        if start.elapsed() >= timeout {
+            let msg = format!("Timed out after {}s", timeout.as_secs());
+            return Err(match last_error {
+                Some(e) => e.context(msg),
+                None => anyhow::anyhow!(msg),
+            });
+        }
+        sleep(interval);
+    }
 }
 
 #[cfg(test)]
@@ -107,6 +152,35 @@ mod tests {
         let k = Kubectl::new(&PathBuf::from(""));
         k.execute(&[])?;
         Ok(())
+    }
+
+    #[test]
+    fn poll_success_after_retries() -> Result<()> {
+        let mut calls = 0;
+        poll(Duration::from_secs(5), Duration::ZERO, || {
+            calls += 1;
+            match calls {
+                1 => bail!("connection refused"),
+                2 => Ok(false),
+                _ => Ok(true),
+            }
+        })?;
+        assert_eq!(calls, 3);
+        Ok(())
+    }
+
+    #[test]
+    fn poll_timeout_contains_last_error() {
+        let err = poll(Duration::ZERO, Duration::ZERO, || bail!("not healthy")).unwrap_err();
+        let msg = format!("{:#}", err);
+        assert!(msg.contains("Timed out after 0s"));
+        assert!(msg.contains("not healthy"));
+    }
+
+    #[test]
+    fn poll_timeout_without_error() {
+        let err = poll(Duration::ZERO, Duration::ZERO, || Ok(false)).unwrap_err();
+        assert_eq!(err.to_string(), "Timed out after 0s");
     }
 
     #[test]
