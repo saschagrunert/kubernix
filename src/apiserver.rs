@@ -62,6 +62,8 @@ impl ApiServer {
             "API Server",
             "kube-apiserver",
             &[
+                // Like kubeadm and kind, workloads like node agents need it.
+                "--allow-privileged=true",
                 "--audit-log-maxage=30",
                 "--audit-log-maxbackup=3",
                 "--audit-log-maxsize=100",
