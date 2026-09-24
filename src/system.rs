@@ -21,6 +21,23 @@ pub struct System {
 }
 
 impl System {
+    /// Host paths recreated inside the rootlesskit mount namespace, because
+    /// the copy-up keeps them owned by the host root and not writable.
+    /// `/var/lib/cni` holds the CNI result cache of CRI-O and containerd,
+    /// which is not configurable.
+    const ROOTLESS_DIRS: &'static [&'static str] = &[
+        "/var/lib/kubelet",
+        "/var/lib/crio",
+        "/var/lib/cni",
+        "/var/lib/containers",
+        "/var/cache/containers",
+        "/var/log/pods",
+        "/var/log/containers",
+        "/var/log/crio",
+        "/run/lock",
+        "/run/containers",
+    ];
+
     /// Create a new system
     pub fn setup(config: &Config) -> Result<Self> {
         if config.is_rootless() {
@@ -36,20 +53,10 @@ impl System {
                 // in the user namespace) and are not writable. Recreate paths
                 // that kubernix components write to under rootlesskit copy-ups.
                 // When adding a new component that writes to a host path under
-                // /var or /run, add the path here too.
-                for dir in &[
-                    "/var/lib/kubelet",
-                    "/var/lib/crio",
-                    "/var/lib/containers",
-                    "/var/cache/containers",
-                    "/var/log/pods",
-                    "/var/log/containers",
-                    "/var/log/crio",
-                    "/run/lock",
-                    "/run/containers",
-                ] {
+                // /var or /run, add the path to ROOTLESS_DIRS.
+                for dir in Self::ROOTLESS_DIRS {
                     let path = PathBuf::from(dir);
-                    if path.exists()
+                    if (path.exists() || path.is_symlink())
                         && let Err(e) = fs::remove_dir_all(&path)
                     {
                         warn!("Unable to remove '{}': {}", dir, e);
@@ -276,6 +283,11 @@ mod tests {
     #[test]
     fn sysctl_failure() {
         assert!(System::sysctl_enable("invalid").is_err());
+    }
+
+    #[test]
+    fn rootless_dirs_contain_cni_cache() {
+        assert!(System::ROOTLESS_DIRS.contains(&"/var/lib/cni"));
     }
 
     #[test]

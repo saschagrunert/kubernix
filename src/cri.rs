@@ -4,13 +4,13 @@
 //! implementations.
 
 use crate::{
-    config::{Config, CriRuntime},
+    config::{Config, CriRuntime, OciRuntime},
     containerd::Containerd,
     crio::Crio,
     network::Network,
 };
 use anyhow::{Context, Result, bail};
-use log::debug;
+use log::{debug, warn};
 use serde_json::{json, to_string_pretty};
 use std::{
     fmt::{self, Display, Formatter},
@@ -22,33 +22,74 @@ use std::{
 /// Environment variable name for the CRI socket endpoint.
 pub const RUNTIME_ENV: &str = "CONTAINER_RUNTIME_ENDPOINT";
 
-/// Resolved paths for the OCI runtime and CNI plugins, shared between
+/// Resolved paths for the OCI runtimes and CNI plugins, shared between
 /// CRI-O and containerd startup.
 pub struct RuntimePaths {
-    pub crun: String,
+    /// Available OCI runtimes and their executable paths, registered as
+    /// runtime handlers.
+    pub runtimes: Vec<(OciRuntime, String)>,
     pub plugin_dir: String,
 }
 
 impl RuntimePaths {
-    /// Resolve crun and CNI plugin paths. In multi-node non-rootless mode,
-    /// binaries are resolved from $PATH inside the container at runtime.
+    /// Resolve the OCI runtime and CNI plugin paths. In multi-node
+    /// non-rootless mode, binaries are resolved from $PATH inside the
+    /// container at runtime.
     pub fn resolve(config: &Config) -> Result<Self> {
         use crate::system::System;
         if config.multi_node() && !config.is_rootless() {
             Ok(Self {
-                crun: "crun".to_string(),
+                runtimes: OciRuntime::ALL
+                    .iter()
+                    .map(|r| (*r, r.name().to_string()))
+                    .collect(),
                 plugin_dir: "/tmp/cni-plugins".to_string(),
             })
         } else {
-            let crun = System::find_executable("crun")?.display().to_string();
+            let mut runtimes = Self::available_runtimes(config.oci_runtime(), |r| {
+                Ok(System::find_executable(r.name())?.display().to_string())
+            })?;
+            if config.is_rootless() {
+                // runc cannot mount sysfs in rootless mode, see Config::validate
+                runtimes.retain(|(r, _)| *r != OciRuntime::Runc);
+            }
             let loopback = System::find_executable("loopback")?;
             let plugin_dir = loopback
                 .parent()
                 .context("Unable to find CNI plugin dir")?
                 .display()
                 .to_string();
-            Ok(Self { crun, plugin_dir })
+            Ok(Self {
+                runtimes,
+                plugin_dir,
+            })
         }
+    }
+
+    /// Look up all OCI runtimes. A missing default runtime is an error,
+    /// while other missing runtimes are skipped with a warning, for
+    /// example in an environment created by an older kubernix version.
+    fn available_runtimes<F>(default: OciRuntime, find: F) -> Result<Vec<(OciRuntime, String)>>
+    where
+        F: Fn(OciRuntime) -> Result<String>,
+    {
+        let mut runtimes = vec![];
+        for runtime in OciRuntime::ALL {
+            match find(runtime) {
+                Ok(path) => runtimes.push((runtime, path)),
+                Err(e) if runtime == default => {
+                    return Err(e.context(format!(
+                        "Unable to find the default OCI runtime '{}'",
+                        runtime
+                    )));
+                }
+                Err(e) => warn!(
+                    "Not registering the OCI runtime handler '{}': {:#}",
+                    runtime, e
+                ),
+            }
+        }
+        Ok(runtimes)
     }
 }
 
@@ -103,6 +144,13 @@ pub fn write_pod_network_config(
     }
 }
 
+/// Directory used by the host-local IPAM plugin to store the allocated IPs,
+/// instead of the default `/var/lib/cni/networks`, which is not writable in
+/// rootless mode. CNI skips directories when loading the network configs.
+fn ipam_data_dir(cni_conf_dir: &Path) -> PathBuf {
+    cni_conf_dir.join("networks")
+}
+
 /// Write the CNI bridge network configuration for a node (root mode).
 fn write_cni_config(
     cni_conf_dir: &Path,
@@ -126,6 +174,7 @@ fn write_cni_config(
             "hairpinMode": true,
             "ipam": {
                 "type": "host-local",
+                "dataDir": ipam_data_dir(cni_conf_dir),
                 "routes": [{ "dst": "0.0.0.0/0" }],
                 "ranges": [[{ "subnet": cidr }]]
             }
@@ -153,6 +202,7 @@ fn write_rootless_cni_config(
             "type": "ptp",
             "ipam": {
                 "type": "host-local",
+                "dataDir": ipam_data_dir(cni_conf_dir),
                 "routes": [{ "dst": "0.0.0.0/0" }],
                 "ranges": [[{ "subnet": cidr }]]
             }
@@ -203,6 +253,45 @@ pub fn remove_all_containers(label: &str, socket: &CriSocket, node_name: &str) -
 mod tests {
     use super::*;
 
+    fn find_only(available: OciRuntime) -> impl Fn(OciRuntime) -> Result<String> {
+        move |r| {
+            if r == available {
+                Ok(format!("/bin/{}", r))
+            } else {
+                bail!("{} not found", r)
+            }
+        }
+    }
+
+    #[test]
+    fn available_runtimes_all() -> Result<()> {
+        let runtimes =
+            RuntimePaths::available_runtimes(OciRuntime::Crun, |r| Ok(format!("/bin/{}", r)))?;
+        assert_eq!(
+            runtimes,
+            vec![
+                (OciRuntime::Crun, "/bin/crun".to_string()),
+                (OciRuntime::Runc, "/bin/runc".to_string()),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn available_runtimes_skips_missing_non_default() -> Result<()> {
+        let runtimes =
+            RuntimePaths::available_runtimes(OciRuntime::Crun, find_only(OciRuntime::Crun))?;
+        assert_eq!(runtimes, vec![(OciRuntime::Crun, "/bin/crun".to_string())]);
+        Ok(())
+    }
+
+    #[test]
+    fn available_runtimes_fails_on_missing_default() {
+        let err = RuntimePaths::available_runtimes(OciRuntime::Runc, find_only(OciRuntime::Crun))
+            .unwrap_err();
+        assert!(format!("{:#}", err).contains("default OCI runtime 'runc'"));
+    }
+
     #[test]
     fn cri_socket_success() -> Result<()> {
         CriSocket::new("/some/path.sock".into())?;
@@ -231,6 +320,10 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&content)?;
         assert_eq!(v["type"], "ptp");
         assert_eq!(v["ipam"]["type"], "host-local");
+        assert_eq!(
+            v["ipam"]["dataDir"].as_str(),
+            Some(dir.path().join("networks").to_str().unwrap())
+        );
         Ok(())
     }
 
@@ -243,6 +336,10 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&content)?;
         assert_eq!(v["type"], "bridge");
         assert_eq!(v["isGateway"], true);
+        assert_eq!(
+            v["ipam"]["dataDir"].as_str(),
+            Some(dir.path().join("networks").to_str().unwrap())
+        );
         Ok(())
     }
 }

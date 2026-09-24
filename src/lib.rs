@@ -27,7 +27,7 @@ mod proxy;
 mod scheduler;
 mod system;
 
-pub use config::{Config, CriRuntime, LogFormat, SubCommand};
+pub use config::{Config, CriRuntime, LogFormat, OciRuntime, SubCommand};
 pub use logger::Logger;
 
 /// Write `content` to `path` only if the file does not exist or its
@@ -170,7 +170,9 @@ impl Kubernix {
         // Prepare the configuration
         if config.root().exists() {
             config.try_load_file()?;
+            config.validate()?;
         } else {
+            config.validate()?;
             config.to_file()?;
         }
         config.canonicalize_root()?;

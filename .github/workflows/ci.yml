@@ -220,7 +220,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: shellcheck contrib/install-cfssl contrib/prepare-system contrib/integration-test src/assets/crun-rootless.sh hack/update-readme-versions.sh
+      - run: shellcheck contrib/install-cfssl contrib/prepare-system contrib/integration-test src/assets/oci-rootless.sh hack/update-readme-versions.sh
 
   test-msrv:
     name: test / msrv
@@ -271,44 +271,24 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   test-integration:
-    name: test / integration / ${{ matrix.cri_runtime }} / ${{ matrix.mode }}${{ matrix.rootless && ' / rootless' || '' }}
+    name: test / integration / ${{ matrix.cri_runtime }} / ${{ matrix.oci_runtime }} / ${{ matrix.mode }}${{ matrix.rootless && ' / rootless' || '' }}
     runs-on: ubuntu-latest
     needs: build-cross
     strategy:
       fail-fast: false
       matrix:
+        cri_runtime: [crio, containerd]
+        oci_runtime: [crun, runc]
+        mode: [single, multi]
+        rootless: [false, true]
         include:
           - mode: single
             nodes: 1
-            cri_runtime: crio
-            rootless: false
           - mode: multi
             nodes: 2
-            cri_runtime: crio
-            rootless: false
-          - mode: single
-            nodes: 1
-            cri_runtime: containerd
-            rootless: false
-          - mode: multi
-            nodes: 2
-            cri_runtime: containerd
-            rootless: false
-          - mode: single
-            nodes: 1
-            cri_runtime: crio
-            rootless: true
-          - mode: single
-            nodes: 1
-            cri_runtime: containerd
-            rootless: true
-          - mode: multi
-            nodes: 2
-            cri_runtime: crio
-            rootless: true
-          - mode: multi
-            nodes: 2
-            cri_runtime: containerd
+        exclude:
+          # runc is not supported in rootless mode
+          - oci_runtime: runc
             rootless: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -342,13 +322,35 @@ jobs:
           sudo systemctl disable --now apparmor || true
           sudo sh -c 'mkdir -p /etc/systemd/system/user-.slice.d && printf "[Slice]\nDelegate=yes\n" > /etc/systemd/system/user-.slice.d/delegate.conf && systemctl daemon-reload'
       - name: Run integration test
+        id: integration
         run: |
-          ${{ !matrix.rootless && 'sudo -E env "PATH=$PATH"' || '' }} ./kubernix --log-level=debug --no-shell --nodes=${{ matrix.nodes }} --cri-runtime=${{ matrix.cri_runtime }} &
+          ${{ !matrix.rootless && 'sudo -E env "PATH=$PATH"' || '' }} ./kubernix --log-level=debug --no-shell --nodes=${{ matrix.nodes }} --cri-runtime=${{ matrix.cri_runtime }} --oci-runtime=${{ matrix.oci_runtime }} &
           KUBERNIX_PID=$!
           timeout 600 bash -c 'while [ ! -f kubernix-run/kubernix.pid ]; do sleep 1; done'
           echo "Cluster is up, running checks"
           export KUBECONFIG=$PWD/kubernix-run/kubeconfig/admin.kubeconfig
-          contrib/integration-test ${{ matrix.nodes }}
+          SUDO=${{ !matrix.rootless && 'sudo' || '' }} ROOTLESS=${{ matrix.rootless }} contrib/integration-test ${{ matrix.nodes }} ${{ matrix.cri_runtime }} ${{ matrix.oci_runtime }}
           ${{ !matrix.rootless && 'sudo' || '' }} kill $KUBERNIX_PID
           wait $KUBERNIX_PID || true
         timeout-minutes: 15
+      - name: Dump logs on failure
+        if: ${{ always() && steps.integration.outcome != 'success' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          export KUBECONFIG=$PWD/kubernix-run/kubeconfig/admin.kubeconfig
+          for f in $(sudo find kubernix-run -name '*.log' -type f \( -path '*/crio/*' -o -path '*/containerd/*' -o -path '*/kubelet/*' \) -not -path '*/containers/*' -not -path '*/root/*' -not -path '*/state/*' | sort); do
+            echo "::group::$f"
+            sudo tail -n 1000 "$f" || true
+            echo "::endgroup::"
+          done
+          echo "::group::kubectl get pods"
+          timeout 30 kubectl get pods -A -o wide || true
+          echo "::endgroup::"
+          echo "::group::kubectl describe pods -n kube-system"
+          timeout 30 kubectl describe pods -n kube-system || true
+          timeout 30 kubectl describe pods -n default || true
+          echo "::endgroup::"
+          echo "::group::kubectl get events"
+          timeout 30 kubectl get events -A --sort-by=.lastTimestamp || true
+          echo "::endgroup::"
