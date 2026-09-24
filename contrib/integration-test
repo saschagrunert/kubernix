@@ -98,6 +98,23 @@ if ! timeout 110 bash -c 'until kubectl -n kube-system wait --for=condition=Read
 fi
 echo "CoreDNS is ready"
 
+echo "Asserting the API server admits privileged pods..."
+# A server side dry run passes the admission, which is what the API server
+# flag controls, without depending on the node being able to run the pod.
+kubectl apply --dry-run=server -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: privileged-test
+spec:
+  containers:
+    - name: pause
+      image: registry.k8s.io/pause:3.10
+      securityContext:
+        privileged: true
+EOF
+echo "Privileged pods are admitted"
+
 echo "Asserting CoreDNS uses the default OCI runtime $OCI_RUNTIME..."
 assert_runtime CoreDNS "$(container_id -n kube-system -l k8s-app=coredns)" \
   "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME"
