@@ -86,7 +86,11 @@ impl Network {
     pub fn new(config: &Config) -> Result<Self> {
         // subnet_prefix() fails if the CIDR cannot fit all required subnets
         let subnet_prefix = Self::subnet_prefix(config.cidr().prefix(), config.nodes())?;
-        Self::warn_overlapping_route(config.cidr())?;
+        // In rootless mode, the routes of the host are only visible before
+        // entering the network namespace of rootlesskit.
+        if !config.is_rootless() {
+            Self::warn_overlapping_route(config.cidr(), "cluster CIDR")?;
+        }
 
         // Calculate the CIDRs using the dynamic subnet prefix
         let cluster_cidr = Ipv4Network::new(config.cidr().ip(), subnet_prefix)?;
@@ -135,8 +139,8 @@ impl Network {
         })
     }
 
-    /// Check if there are overlapping routes and warn
-    fn warn_overlapping_route(cidr: Ipv4Network) -> Result<()> {
+    /// Check if there are routes overlapping the named network and warn
+    pub fn warn_overlapping_route(cidr: Ipv4Network, name: &str) -> Result<()> {
         let cmd = Command::new("ip")
             .arg("route")
             .output()
@@ -156,9 +160,9 @@ impl Network {
             .filter(|x| x.is_supernet_of(cidr) || cidr.is_supernet_of(*x))
             .for_each(|x| {
                 warn!(
-                    "Overlapping IP route {} detected (cluster CIDR: {}), \
+                    "Overlapping IP route {} detected ({}: {}), \
                      the cluster may not work as expected",
-                    x, cidr,
+                    x, name, cidr,
                 );
             });
         Ok(())

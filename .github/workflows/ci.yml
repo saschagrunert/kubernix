@@ -286,10 +286,6 @@ jobs:
             nodes: 1
           - mode: multi
             nodes: 2
-        exclude:
-          # runc is not supported in rootless mode
-          - oci_runtime: runc
-            rootless: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
@@ -307,6 +303,7 @@ jobs:
           echo "127.0.0.1 test" | sudo tee -a /etc/hosts
           sudo hostnamectl set-hostname test
       - name: Free port 53 for CoreDNS
+        if: ${{ !matrix.rootless }}
         run: |
           echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf
           sudo systemctl stop systemd-resolved || true
@@ -318,7 +315,6 @@ jobs:
         run: |
           sudo sh -c 'echo "kernel.unprivileged_userns_clone=1" > /etc/sysctl.d/rootless.conf && sysctl --system'
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
-          sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
           sudo systemctl disable --now apparmor || true
           sudo sh -c 'mkdir -p /etc/systemd/system/user-.slice.d && printf "[Slice]\nDelegate=yes\n" > /etc/systemd/system/user-.slice.d/delegate.conf && systemctl daemon-reload'
       - name: Run integration test
@@ -329,7 +325,7 @@ jobs:
           timeout 600 bash -c 'while [ ! -f kubernix-run/kubernix.pid ]; do sleep 1; done'
           echo "Cluster is up, running checks"
           export KUBECONFIG=$PWD/kubernix-run/kubeconfig/admin.kubeconfig
-          SUDO=${{ !matrix.rootless && 'sudo' || '' }} ROOTLESS=${{ matrix.rootless }} contrib/integration-test ${{ matrix.nodes }} ${{ matrix.cri_runtime }} ${{ matrix.oci_runtime }}
+          SUDO=${{ !matrix.rootless && 'sudo' || '' }} contrib/integration-test ${{ matrix.nodes }} ${{ matrix.cri_runtime }} ${{ matrix.oci_runtime }}
           ${{ !matrix.rootless && 'sudo' || '' }} kill $KUBERNIX_PID
           wait $KUBERNIX_PID || true
         timeout-minutes: 15

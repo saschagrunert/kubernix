@@ -8,8 +8,16 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt,
     fs::{self, canonicalize, create_dir_all, read_to_string},
+    net::Ipv4Addr,
     path::{Path, PathBuf},
 };
+
+/// Network of slirp4netns, which rootlesskit uses in rootless mode.
+pub(crate) const SLIRP4NETNS_CIDR: Ipv4Network =
+    match Ipv4Network::new_checked(Ipv4Addr::new(10, 0, 2, 0), 24) {
+        Some(n) => n,
+        None => panic!("invalid slirp4netns network"),
+    };
 
 /// Output format for log messages.
 ///
@@ -423,11 +431,12 @@ impl Config {
 
     /// Validate option combinations which are not supported.
     pub fn validate(&self) -> Result<()> {
-        if self.is_rootless() && self.oci_runtime() == OciRuntime::Runc {
+        if self.is_rootless() && self.cidr().overlaps(SLIRP4NETNS_CIDR) {
             bail!(
-                "The OCI runtime 'runc' is not supported in rootless mode, \
-                 because it cannot mount sysfs without owning the network \
-                 namespace. Use '--oci-runtime crun' or run as root."
+                "The CIDR '{}' overlaps with the slirp4netns network '{}', \
+                 which provides the network connectivity in rootless mode",
+                self.cidr(),
+                SLIRP4NETNS_CIDR,
             )
         }
         Ok(())
@@ -669,12 +678,10 @@ root = "root"
     }
 
     #[test]
-    fn validate_runc_rootless_failure() -> Result<()> {
+    fn validate_runc_rootless_success() -> Result<()> {
         let mut c = test_config_rootless()?;
         c.oci_runtime = OciRuntime::Runc;
-        let err = c.validate().unwrap_err().to_string();
-        assert!(err.contains("not supported in rootless mode"));
-        Ok(())
+        c.validate()
     }
 
     #[test]
@@ -707,6 +714,22 @@ root = "root"
         let c = test_config_rootless()?;
         assert!(c.is_rootless());
         Ok(())
+    }
+
+    #[test]
+    fn validate_cidr_rootless_slirp4netns_overlap_failure() -> Result<()> {
+        let mut c = test_config_rootless()?;
+        c.cidr = "10.0.0.0/16".parse()?;
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("overlaps with the slirp4netns network '10.0.2.0/24'"));
+        Ok(())
+    }
+
+    #[test]
+    fn validate_cidr_root_slirp4netns_overlap_success() -> Result<()> {
+        let mut c = test_config()?;
+        c.cidr = "10.0.0.0/16".parse()?;
+        c.validate()
     }
 
     #[test]

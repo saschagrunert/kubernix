@@ -24,7 +24,8 @@ impl System {
     /// Host paths recreated inside the rootlesskit mount namespace, because
     /// the copy-up keeps them owned by the host root and not writable.
     /// `/var/lib/cni` holds the CNI result cache of CRI-O and containerd,
-    /// which is not configurable.
+    /// which is not configurable, and `/run/netns` the pod network
+    /// namespaces of containerd.
     const ROOTLESS_DIRS: &'static [&'static str] = &[
         "/var/lib/kubelet",
         "/var/lib/crio",
@@ -36,6 +37,7 @@ impl System {
         "/var/log/crio",
         "/run/lock",
         "/run/containers",
+        "/run/netns",
     ];
 
     /// Create a new system
@@ -78,22 +80,16 @@ impl System {
                     fs::write(&hosts_path, content).context("Unable to write hosts file")?;
                 }
             }
-        }
 
-        if !config.is_rootless() && !Self::in_container()? {
+            // Kernel modules cannot be loaded from the user namespace.
+            Self::enable_network_sysctls(true)?;
+        } else if !Self::in_container()? {
             for module in &["overlay", "br_netfilter", "ip_conntrack"] {
                 Self::modprobe(module)?;
             }
-            for sysctl in &[
-                "net.bridge.bridge-nf-call-ip6tables",
-                "net.bridge.bridge-nf-call-iptables",
-                "net.ipv4.conf.all.route_localnet",
-                "net.ipv4.ip_forward",
-            ] {
-                Self::sysctl_enable(sysctl)?;
-            }
+            Self::enable_network_sysctls(false)?;
         } else {
-            info!("Skipping modprobe and sysctl (containerized or rootless)");
+            info!("Skipping modprobe and sysctl (containerized)");
         }
 
         let hosts = if config.multi_node() {
@@ -241,6 +237,31 @@ impl System {
         read_to_string(&path)
             .map(|v| v.trim() == "1")
             .unwrap_or(false)
+    }
+
+    /// Enable the network sysctls. In rootless mode, they belong to the
+    /// network namespace of rootlesskit, which the user namespace owns.
+    /// Failures are not fatal there, for example outside of the user
+    /// namespace or with a read-only `/proc/sys`.
+    fn enable_network_sysctls(rootless: bool) -> Result<()> {
+        let mut sysctls = vec!["net.ipv4.conf.all.route_localnet", "net.ipv4.ip_forward"];
+        // The bridge sysctls only exist with br_netfilter loaded, see
+        // Proxy::render for rootless mode without it.
+        if Path::new("/proc/sys/net/bridge").exists() {
+            sysctls.extend([
+                "net.bridge.bridge-nf-call-ip6tables",
+                "net.bridge.bridge-nf-call-iptables",
+            ]);
+        } else {
+            debug!("Skipping bridge sysctls, br_netfilter is not loaded");
+        }
+        for sysctl in sysctls {
+            match Self::sysctl_enable(sysctl) {
+                Err(e) if rootless => warn!("{:#}", e),
+                result => result?,
+            }
+        }
+        Ok(())
     }
 
     /// Enable a single sysctl by setting it to '1', skipping if already set
