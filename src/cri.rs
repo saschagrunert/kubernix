@@ -46,13 +46,9 @@ impl RuntimePaths {
                 plugin_dir: "/tmp/cni-plugins".to_string(),
             })
         } else {
-            let mut runtimes = Self::available_runtimes(config.oci_runtime(), |r| {
+            let runtimes = Self::available_runtimes(config.oci_runtime(), |r| {
                 Ok(System::find_executable(r.name())?.display().to_string())
             })?;
-            if config.is_rootless() {
-                // runc cannot mount sysfs in rootless mode, see Config::validate
-                runtimes.retain(|(r, _)| *r != OciRuntime::Runc);
-            }
             let loopback = System::find_executable("loopback")?;
             let plugin_dir = loopback
                 .parent()
@@ -128,22 +124,6 @@ pub fn cri_socket(config: &Config, network: &Network, node: u8) -> Result<CriSoc
     }
 }
 
-/// Write CNI network configuration for a node, selecting the appropriate
-/// plugin based on whether rootless mode is active.
-pub fn write_pod_network_config(
-    config: &Config,
-    cni_conf_dir: &Path,
-    node_name: &str,
-    node: u8,
-    network: &Network,
-) -> Result<()> {
-    if config.is_rootless() {
-        write_rootless_cni_config(cni_conf_dir, node_name, node, network)
-    } else {
-        write_cni_config(cni_conf_dir, node_name, node, network)
-    }
-}
-
 /// Directory used by the host-local IPAM plugin to store the allocated IPs,
 /// instead of the default `/var/lib/cni/networks`, which is not writable in
 /// rootless mode. CNI skips directories when loading the network configs.
@@ -151,8 +131,8 @@ fn ipam_data_dir(cni_conf_dir: &Path) -> PathBuf {
     cni_conf_dir.join("networks")
 }
 
-/// Write the CNI bridge network configuration for a node (root mode).
-fn write_cni_config(
+/// Write the CNI bridge network configuration for a node.
+pub fn write_cni_config(
     cni_conf_dir: &Path,
     node_name: &str,
     node: u8,
@@ -162,50 +142,29 @@ fn write_cni_config(
         .pod_cidrs()
         .get(node as usize)
         .with_context(|| format!("Unable to find CIDR for {}", node_name))?;
+    // The firewall plugin accepts the pod traffic in the FORWARD chain,
+    // which may have a DROP policy, for example when Docker is running.
     fs::write(
-        cni_conf_dir.join("10-bridge.json"),
+        cni_conf_dir.join("10-bridge.conflist"),
         to_string_pretty(&json!({
             "cniVersion": "1.0.0",
             "name": format!("kubernix-{}", node_name),
-            "type": "bridge",
-            "bridge": format!("{}.{}", Network::INTERFACE_PREFIX, node),
-            "isGateway": true,
-            "ipMasq": true,
-            "hairpinMode": true,
-            "ipam": {
-                "type": "host-local",
-                "dataDir": ipam_data_dir(cni_conf_dir),
-                "routes": [{ "dst": "0.0.0.0/0" }],
-                "ranges": [[{ "subnet": cidr }]]
-            }
-        }))?,
-    )?;
-    Ok(())
-}
-
-/// Write a rootless-compatible CNI config using the ptp plugin.
-fn write_rootless_cni_config(
-    cni_conf_dir: &Path,
-    node_name: &str,
-    node: u8,
-    network: &Network,
-) -> Result<()> {
-    let cidr = network
-        .pod_cidrs()
-        .get(node as usize)
-        .with_context(|| format!("Unable to find CIDR for {}", node_name))?;
-    fs::write(
-        cni_conf_dir.join("10-ptp.json"),
-        to_string_pretty(&json!({
-            "cniVersion": "1.0.0",
-            "name": format!("kubernix-{}", node_name),
-            "type": "ptp",
-            "ipam": {
-                "type": "host-local",
-                "dataDir": ipam_data_dir(cni_conf_dir),
-                "routes": [{ "dst": "0.0.0.0/0" }],
-                "ranges": [[{ "subnet": cidr }]]
-            }
+            "plugins": [
+                {
+                    "type": "bridge",
+                    "bridge": format!("{}.{}", Network::INTERFACE_PREFIX, node),
+                    "isGateway": true,
+                    "ipMasq": true,
+                    "hairpinMode": true,
+                    "ipam": {
+                        "type": "host-local",
+                        "dataDir": ipam_data_dir(cni_conf_dir),
+                        "routes": [{ "dst": "0.0.0.0/0" }],
+                        "ranges": [[{ "subnet": cidr }]]
+                    }
+                },
+                { "type": "firewall" }
+            ]
         }))?,
     )?;
     Ok(())
@@ -312,32 +271,18 @@ mod tests {
     }
 
     #[test]
-    fn rootless_cni_config_uses_ptp() -> Result<()> {
-        let dir = tempfile::tempdir()?;
-        let network = crate::network::Network::new(&crate::config::tests::test_config()?)?;
-        write_rootless_cni_config(dir.path(), "node-0", 0, &network)?;
-        let content = std::fs::read_to_string(dir.path().join("10-ptp.json"))?;
-        let v: serde_json::Value = serde_json::from_str(&content)?;
-        assert_eq!(v["type"], "ptp");
-        assert_eq!(v["ipam"]["type"], "host-local");
-        assert_eq!(
-            v["ipam"]["dataDir"].as_str(),
-            Some(dir.path().join("networks").to_str().unwrap())
-        );
-        Ok(())
-    }
-
-    #[test]
     fn bridge_cni_config_uses_bridge() -> Result<()> {
         let dir = tempfile::tempdir()?;
         let network = crate::network::Network::new(&crate::config::tests::test_config()?)?;
         write_cni_config(dir.path(), "node-0", 0, &network)?;
-        let content = std::fs::read_to_string(dir.path().join("10-bridge.json"))?;
+        let content = std::fs::read_to_string(dir.path().join("10-bridge.conflist"))?;
         let v: serde_json::Value = serde_json::from_str(&content)?;
-        assert_eq!(v["type"], "bridge");
-        assert_eq!(v["isGateway"], true);
+        let bridge = &v["plugins"][0];
+        assert_eq!(bridge["type"], "bridge");
+        assert_eq!(bridge["isGateway"], true);
+        assert_eq!(v["plugins"][1]["type"], "firewall");
         assert_eq!(
-            v["ipam"]["dataDir"].as_str(),
+            bridge["ipam"]["dataDir"].as_str(),
             Some(dir.path().join("networks").to_str().unwrap())
         );
         Ok(())

@@ -105,7 +105,7 @@ impl Containerd {
             )
             .context("Unable to write containerd config")?;
 
-            cri::write_pod_network_config(config, &cni_conf_dir, &node_name, node, network)?;
+            cri::write_cni_config(&cni_conf_dir, &node_name, node, network)?;
         }
 
         // containerd-shim-runc-v2 hardcodes its socket path to /run/containerd/s/.

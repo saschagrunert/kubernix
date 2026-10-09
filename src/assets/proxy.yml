@@ -5,3 +5,4 @@ clientConnection:
   kubeconfig: "{kubeconfig}"
 mode: "iptables"
 clusterCIDR: "{cluster_cidr}"
+{rootless}

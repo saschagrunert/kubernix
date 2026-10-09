@@ -95,7 +95,7 @@ impl Crio {
             )
             .context("Unable to write CRI-O config")?;
 
-            cri::write_pod_network_config(config, &network_dir, &node_name, node, network)?;
+            cri::write_cni_config(&network_dir, &node_name, node, network)?;
         }
         let config_dir_arg = format!("--config-dir={}", config_dir.display());
         let args: &[&str] = &[&config_dir_arg];
@@ -172,7 +172,6 @@ impl Crio {
             storage_driver = "overlay",
             storage_option = "",
             version_file = dir.join("version").display(),
-            disable_hostport_mapping = config.is_rootless(),
             enable_nri = !config.is_rootless(),
         )
     }

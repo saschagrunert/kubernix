@@ -20,6 +20,7 @@ with pkgs;
   podman
   rootlesskit
   runc
+  slirp4netns
   socat
   sysctl
   util-linux

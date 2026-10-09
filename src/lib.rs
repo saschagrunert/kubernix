@@ -69,7 +69,7 @@ use ::nix::{
     unistd::getuid,
 };
 use anyhow::{Context, Result, bail};
-use log::{debug, error, info, set_boxed_logger, warn};
+use log::{debug, error, info, set_boxed_logger};
 use signal_hook::{
     consts::signal::{SIGHUP, SIGINT, SIGTERM},
     flag,
@@ -106,6 +106,8 @@ impl Kubernix {
         // Bootstrap if we're not inside a nix shell
         if Nix::is_active() {
             if config.is_rootless() && std::env::var(ROOTLESS_ENV).as_deref() != Ok("1") {
+                Network::warn_overlapping_route(config.cidr(), "cluster CIDR")?;
+                Network::warn_overlapping_route(config::SLIRP4NETNS_CIDR, "slirp4netns network")?;
                 return Self::reexec_rootless();
             }
             Self::bootstrap_cluster(config)
@@ -230,6 +232,10 @@ impl Kubernix {
         // so we can enable controllers in subtree_control (cgroup v2's
         // "no internal processes" rule forbids it otherwise). This must
         // happen outside rootlesskit's cgroup namespace.
+        //
+        // The user namespace needs to own its network namespace to set up
+        // the pod network, so slirp4netns provides the connectivity and
+        // only the API server port gets published to the host.
         let outer_cmd = format!(
             concat!(
                 "CGRP=/sys/fs/cgroup$(cat /proc/self/cgroup | cut -d: -f3); ",
@@ -240,12 +246,16 @@ impl Kubernix {
                 "echo \"+$c\" >\"$CGRP/cgroup.subtree_control\" 2>/dev/null; done; ",
                 "grep -q memory \"$CGRP/cgroup.subtree_control\" 2>/dev/null ",
                 "|| echo 'WARNING: cgroup memory controller not delegated, pods may fail' >&2; ",
-                "exec rootlesskit --net=host --cgroupns ",
+                "exec rootlesskit --net=slirp4netns --mtu=65520 --cidr={cidr} ",
+                "--disable-host-loopback --cgroupns ",
+                "--port-driver=builtin --publish=127.0.0.1:{port}:{port}/tcp ",
                 "--copy-up=/etc --copy-up=/run --copy-up=/var/cache ",
                 "--copy-up=/var/lib --copy-up=/var/log --copy-up=/var/run ",
-                "bash -c {}",
+                "bash -c {cmd}",
             ),
-            Self::shell_escape(&rootlesskit_cmd),
+            cidr = config::SLIRP4NETNS_CIDR,
+            port = API_SERVER_PORT,
+            cmd = Self::shell_escape(&rootlesskit_cmd),
         );
 
         let mut cmd = Command::new("systemd-run");
@@ -283,8 +293,7 @@ impl Kubernix {
 
     /// The amount of processes to be run
     fn processes(config: &Config) -> u64 {
-        let base = 4 + 2 * u64::from(config.nodes());
-        if config.is_rootless() { base } else { base + 1 }
+        5 + 2 * u64::from(config.nodes())
     }
 
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
@@ -378,11 +387,7 @@ impl Kubernix {
             }
             registry.register(Box::new(kubelet::KubeletComponent::new(node)));
         }
-        if config.is_rootless() {
-            warn!("Skipping kube-proxy in rootless mode, Service ClusterIP routing will not work");
-        } else {
-            registry.register(Box::new(proxy::ProxyComponent));
-        }
+        registry.register(Box::new(proxy::ProxyComponent));
         registry
     }
 

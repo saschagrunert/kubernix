@@ -60,6 +60,7 @@ The following technology stack is currently being used:
 | podman          | v5.8.8   |
 | rootlesskit     | v2.3.6   |
 | runc            | v1.5.2   |
+| slirp4netns     | v1.3.5   |
 | socat           | v1.8.1.3 |
 | sysctl          | v4.0.7   |
 | util-linux      | v2.42.3  |
@@ -81,7 +82,7 @@ graph TD
 
     A --- etcd
     B --- apiserver
-    C --- scheduler & controller-manager & cri["cri-o or containerd (x N)"] & proxy["proxy (root only)"]
+    C --- scheduler & controller-manager & cri["cri-o or containerd (x N)"] & proxy
     D --- kubelet["kubelet (x N)"]
 ```
 
@@ -109,7 +110,6 @@ To bootstrap your first cluster, download one of the latest [release binaries][1
 build the application via:
 
 [18]: https://github.com/saschagrunert/kubernix/releases/latest
-[19]: https://github.com/saschagrunert/kubernix/issues/1413
 
 ```shell
 $ make build-release
@@ -133,20 +133,20 @@ When running as a non-root user, KuberNix uses `rootlesskit` to provide a user
 namespace where all components run as fake root. This requires unprivileged user
 namespaces (`kernel.unprivileged_userns_clone=1`) and cgroup v2 with user
 delegation. On Ubuntu 23.10+, you may also need to set
-`kernel.apparmor_restrict_unprivileged_userns=0`. Kube-proxy is skipped without
-root (it needs iptables access), so ClusterIP-based Service routing is not
-available. Pod egress to external networks also requires masquerading, which
-is not possible without iptables. Only pods using `hostNetwork: true` are
-supported, pods which need their own network namespace fail to get a sandbox,
-because the user namespace does not own the host network namespace
-([#1413][19]). Only crun is
-supported as OCI runtime in rootless mode, because runc cannot mount sysfs into
-containers there (see [OCI Runtimes](#oci-runtimes)).
+`kernel.apparmor_restrict_unprivileged_userns=0`. The cluster runs in its own
+network namespace, which `slirp4netns` connects to the outside world. Only the
+API server port (6443) is published to `127.0.0.1` on the host, so NodePort
+Services and host ports are not reachable from the host, and the cluster
+cannot reach services listening on the loopback interface of the host. The
+`--cidr` must not overlap with the slirp4netns network `10.0.2.0/24`. Kernel
+modules cannot be loaded explicitly from the user namespace. The kernel loads
+the netfilter modules for the pod network and kube-proxy on demand, otherwise
+they have to be loaded on the host (for example `iptable_nat` and
+`nf_conntrack`).
 
 In multi-node rootless mode, all nodes run as direct processes (no container
 isolation) with `--hostname-override` for node identity. Running with `sudo`
-gives full functionality including kube-proxy and container-based multi-node
-isolation.
+gives container-based multi-node isolation.
 
 #### Shell Environment
 
@@ -292,7 +292,7 @@ KuberNix has some configuration possibilities, which are currently:
 | `-d, --dockerfile`        | Custom Dockerfile for multi-node container image builds                             |                | `KUBERNIX_DOCKERFILE`        |
 | `-p, --packages`          | Additional Nix dependencies to be added to the environment                          |                | `KUBERNIX_PACKAGES`          |
 | `--cri-runtime`           | CRI runtime to use (`crio` or `containerd`)                                         | `crio`         | `KUBERNIX_CRI_RUNTIME`       |
-| `--oci-runtime`           | Default OCI runtime (`crun` or `runc`, only `crun` in rootless mode)                | `crun`         | `KUBERNIX_OCI_RUNTIME`       |
+| `--oci-runtime`           | Default OCI runtime (`crun` or `runc`)                                              | `crun`         | `KUBERNIX_OCI_RUNTIME`       |
 | `-a, --addons`            | Cluster addons to deploy (available: coredns)                                       | `coredns`      | `KUBERNIX_ADDONS`            |
 
 Please ensure that the CIDR is not overlapping with existing local networks and
@@ -317,11 +317,9 @@ handler: runc
 
 If the other runtime cannot be found, then KuberNix warns and does not register
 its handler, while a missing default runtime is an error. This works in single
-node and multinode mode. In rootless mode only crun is supported: the `runc`
-handler is not registered and KuberNix refuses to start with `--oci-runtime
-runc`, because runc cannot mount sysfs into containers without owning the
-network namespace. The container runtime used for the node containers in
-multinode mode (`--container-runtime`) is not affected by this option.
+node, multinode and rootless mode. The container runtime used for the node
+containers in multinode mode (`--container-runtime`) is not affected by this
+option.
 
 [31]: https://github.com/containers/crun
 [32]: https://github.com/opencontainers/runc

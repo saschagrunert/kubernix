@@ -10,10 +10,6 @@ OCI_RUNTIME="${3:-crun}"
 # are only accessible by root when not running in rootless mode.
 SUDO="${SUDO:-}"
 
-# In rootless mode, runc is not supported, which skips the RuntimeClass
-# check, and only hostNetwork pods are supported.
-ROOTLESS="${ROOTLESS:-false}"
-
 # Prefix of the pod IPs, matching the default cluster CIDR.
 POD_IP_PREFIX="${POD_IP_PREFIX:-10.10.}"
 
@@ -119,10 +115,10 @@ echo "Asserting CoreDNS uses the default OCI runtime $OCI_RUNTIME..."
 assert_runtime CoreDNS "$(container_id -n kube-system -l k8s-app=coredns)" \
   "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME"
 
-# Run a test pod and wait until it is ready. The optional arguments are the
-# runtime class name and whether the pod uses the host network.
+# Run a test pod and wait until it is ready. The optional argument is the
+# runtime class name.
 run_pod() {
-  local name=$1 runtime_class=${2:-} host_network=${3:-false}
+  local name=$1 runtime_class=${2:-}
   kubectl apply -f - <<EOF
 apiVersion: v1
 kind: Pod
@@ -131,7 +127,6 @@ metadata:
   labels:
     app: $name
 spec:
-  hostNetwork: $host_network
   ${runtime_class:+runtimeClassName: $runtime_class}
   containers:
     - name: pause
@@ -143,39 +138,62 @@ EOF
   fi
 }
 
-if [ "$ROOTLESS" = true ]; then
-  # Pods with their own network namespace are not supported in rootless mode.
-  echo "Asserting a hostNetwork pod runs on $OCI_RUNTIME..."
-  run_pod default-runtime-test "" true
-else
-  echo "Asserting a pod with its own network namespace runs on $OCI_RUNTIME..."
-  run_pod default-runtime-test
-  POD_IP=$(kubectl get pod default-runtime-test -o jsonpath='{.status.podIP}')
-  if [[ "$POD_IP" != "$POD_IP_PREFIX"* ]]; then
-    echo "FAIL: pod IP '$POD_IP' is not in the cluster CIDR (${POD_IP_PREFIX}*)"
-    exit 1
-  fi
-  echo "Pod got IP $POD_IP"
+echo "Asserting a pod with its own network namespace runs on $OCI_RUNTIME..."
+run_pod default-runtime-test
+POD_IP=$(kubectl get pod default-runtime-test -o jsonpath='{.status.podIP}')
+if [[ "$POD_IP" != "$POD_IP_PREFIX"* ]]; then
+  echo "FAIL: pod IP '$POD_IP' is not in the cluster CIDR (${POD_IP_PREFIX}*)"
+  exit 1
 fi
+echo "Pod got IP $POD_IP"
 assert_runtime "Default runtime test pod" "$(container_id -l app=default-runtime-test)" \
   "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME"
 kubectl delete pod default-runtime-test --wait=false
 
-if [ "$ROOTLESS" = true ]; then
-  echo "Skipping RuntimeClass check, $OTHER_OCI_RUNTIME is not supported in rootless mode"
-else
-  echo "Asserting a pod with RuntimeClass $OTHER_OCI_RUNTIME uses it..."
-  kubectl apply -f - <<EOF
+echo "Asserting a pod can reach a ClusterIP Service and external networks by DNS name..."
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: service-test
+spec:
+  restartPolicy: Never
+  containers:
+    - name: busybox
+      image: registry.k8s.io/e2e-test-images/busybox:1.36.1-1
+      command:
+        - sh
+        - -c
+        - nc -z -w 5 kubernetes.default.svc.cluster.local 443 && nc -z -w 5 registry.k8s.io 443
+EOF
+# Stop waiting as soon as the pod fails, instead of running into the
+# timeout, which leaves time for the image pull.
+PHASE=""
+for _ in $(seq 150); do
+  PHASE=$(kubectl get pod service-test -o jsonpath='{.status.phase}' || true)
+  [[ "$PHASE" = Succeeded || "$PHASE" = Failed ]] && break
+  sleep 2
+done
+if [ "$PHASE" != Succeeded ]; then
+  echo "FAIL: service test pod is in phase '$PHASE'"
+  kubectl describe pod service-test || true
+  kubectl logs service-test || true
+  exit 1
+fi
+echo "Service and external networks are reachable"
+kubectl delete pod service-test --wait=false
+
+echo "Asserting a pod with RuntimeClass $OTHER_OCI_RUNTIME uses it..."
+kubectl apply -f - <<EOF
 apiVersion: node.k8s.io/v1
 kind: RuntimeClass
 metadata:
   name: $OTHER_OCI_RUNTIME
 handler: $OTHER_OCI_RUNTIME
 EOF
-  run_pod runtime-class-test "$OTHER_OCI_RUNTIME"
-  assert_runtime "RuntimeClass $OTHER_OCI_RUNTIME pod" \
-    "$(container_id -l app=runtime-class-test)" "$OTHER_OCI_RUNTIME" "$OCI_RUNTIME"
-  kubectl delete pod runtime-class-test --wait=false
-fi
+run_pod runtime-class-test "$OTHER_OCI_RUNTIME"
+assert_runtime "RuntimeClass $OTHER_OCI_RUNTIME pod" \
+  "$(container_id -l app=runtime-class-test)" "$OTHER_OCI_RUNTIME" "$OCI_RUNTIME"
+kubectl delete pod runtime-class-test --wait=false
 
 echo "All assertions passed"
