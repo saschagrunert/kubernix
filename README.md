@@ -57,7 +57,7 @@ The following technology stack is currently being used:
 | kubectl         | v1.37.1  |
 | kubernetes      | v1.37.1  |
 | nss-cacert      | v3.126   |
-| podman          | v5.8.8   |
+| podman          | v5.8.9   |
 | rootlesskit     | v2.3.6   |
 | runc            | v1.5.2   |
 | slirp4netns     | v1.3.5   |
@@ -253,7 +253,7 @@ components. For example, etcd gets started via:
 
 ```json
 {
-  "command": "/nix/store/…-etcd-3.6.13-bin/bin/etcd",
+  "command": "/nix/store/…-etcd-3.6.15-bin/bin/etcd",
   "args": [
     "--advertise-client-urls=https://127.0.0.1:2379",
     "--client-cert-auth",
@@ -356,8 +356,8 @@ $ kubernix --overlay overlay.nix
 [INFO ] Nix environment not found, bootstrapping one
 [INFO ] Using custom overlay 'overlay.nix'
 these derivations will be built:
-  /nix/store/…-cri-o-1.36.2.drv
-  building '/nix/store/…-cri-o-1.36.2.drv'...
+  /nix/store/…-cri-o-1.37.2.drv
+  building '/nix/store/…-cri-o-1.37.2.drv'...
 ```
 
 Using this technique makes it easy for daily development of Kubernetes
@@ -376,7 +376,7 @@ $ kubernix -p kubernetes-helm
 [INFO ] Bootstrapping cluster inside nix environment
 …
 > helm version
-version.BuildInfo{Version:"v4.2.0", ...}
+version.BuildInfo{Version:"v4.3.1", ...}
 ```
 
 All available packages are listed on the [official Nix index][21].
