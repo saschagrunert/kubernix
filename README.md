@@ -50,8 +50,8 @@ The following technology stack is currently being used:
 | cri-o-wrapper   | v1.37.2  |
 | cri-tools       | v1.37.0  |
 | crun            | v1.30.1  |
-| etcd            | v3.6.15  |
-| iproute2        | v7.1.0   |
+| etcd            | v3.7.2   |
+| iproute2        | v7.2.0   |
 | iptables        | v1.8.13  |
 | kmod            | v31      |
 | kubectl         | v1.37.1  |
@@ -63,7 +63,7 @@ The following technology stack is currently being used:
 | slirp4netns     | v1.3.5   |
 | socat           | v1.8.1.3 |
 | sysctl          | v4.0.7   |
-| util-linux      | v2.42.3  |
+| util-linux      | v2.42.4  |
 
 Some other tools are not explicitly mentioned here, because they are no
 first-level dependencies.
