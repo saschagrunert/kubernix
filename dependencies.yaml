@@ -11,3 +11,35 @@ dependencies:
     refPaths:
       - path: Makefile
         match: ZEITGEIST_VERSION \?= v
+
+  - name: pause
+    version: 3.10.2
+    refPaths:
+      - path: src/assets/crio.conf
+        match: "registry.k8s.io/pause:"
+      - path: src/assets/containerd.toml
+        match: "registry.k8s.io/pause:"
+      - path: src/crio.rs
+        match: "registry.k8s.io/pause:"
+      - path: src/containerd.rs
+        match: "registry.k8s.io/pause:"
+      - path: contrib/integration-test
+        match: "registry.k8s.io/pause:"
+
+  - name: coredns
+    version: 1.14.6
+    refPaths:
+      - path: src/assets/coredns.yml
+        match: "registry.k8s.io/coredns/coredns:v"
+
+  - name: busybox
+    version: 1.36.1-1
+    refPaths:
+      - path: contrib/integration-test
+        match: "registry.k8s.io/e2e-test-images/busybox:"
+
+  - name: rust
+    version: "1.88"
+    refPaths:
+      - path: Cargo.toml
+        match: "rust-version ="

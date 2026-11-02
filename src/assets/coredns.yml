@@ -60,11 +60,12 @@ metadata:
 data:
   Corefile: |
     .:53 {{
+        bind {{$POD_IP}}
         errors
-        health {{
+        health :{health_port} {{
             lameduck 5s
         }}
-        ready
+        ready :{ready_port}
         kubernetes cluster.local in-addr.arpa ip6.arpa {{
           pods insecure
           fallthrough in-addr.arpa ip6.arpa
@@ -74,7 +75,10 @@ data:
           max_concurrent 1000
         }}
         prometheus :9153
-        cache 30
+        cache 30 {{
+          disable success cluster.local
+          disable denial cluster.local
+        }}
         reload
         loadbalance
     }}
@@ -124,7 +128,7 @@ spec:
         kubernetes.io/os: linux
       containers:
       - name: coredns
-        image: registry.k8s.io/coredns/coredns:v1.12.0
+        image: registry.k8s.io/coredns/coredns:v1.14.6
         imagePullPolicy: IfNotPresent
 {resources}        args: [ "-conf", "/etc/coredns/Corefile" ]
 {env}        volumeMounts:
@@ -141,10 +145,16 @@ spec:
         - containerPort: 9153
           name: metrics
           protocol: TCP
+        - containerPort: {health_port}
+          name: liveness-probe
+          protocol: TCP
+        - containerPort: {ready_port}
+          name: readiness-probe
+          protocol: TCP
         livenessProbe:
           httpGet:
             path: /health
-            port: 8080
+            port: liveness-probe
             scheme: HTTP
           initialDelaySeconds: 60
           timeoutSeconds: 5
@@ -153,7 +163,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /ready
-            port: 8181
+            port: readiness-probe
             scheme: HTTP
         securityContext:
           allowPrivilegeEscalation: false
@@ -161,7 +171,7 @@ spec:
             add:
             - NET_BIND_SERVICE
             drop:
-            - all
+            - ALL
           readOnlyRootFilesystem: true
       dnsPolicy: Default
       volumes:

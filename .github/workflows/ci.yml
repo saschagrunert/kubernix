@@ -401,11 +401,6 @@ jobs:
         run: |
           echo "127.0.0.1 test" | sudo tee -a /etc/hosts
           sudo hostnamectl set-hostname test
-      - name: Free port 53 for CoreDNS
-        if: ${{ !matrix.rootless }}
-        run: |
-          echo 'nameserver 8.8.8.8' | sudo tee /etc/resolv.conf
-          sudo systemctl stop systemd-resolved || true
       - name: Prepare the system
         if: ${{ !matrix.rootless }}
         run: sudo contrib/prepare-system
@@ -459,6 +454,13 @@ jobs:
           done
           echo "::group::kubectl get pods"
           timeout 30 kubectl get pods -A -o wide || true
+          echo "::endgroup::"
+          echo "::group::kubectl logs coredns"
+          timeout 30 kubectl logs -n kube-system -l k8s-app=coredns --all-containers --previous || true
+          timeout 30 kubectl logs -n kube-system -l k8s-app=coredns --all-containers || true
+          echo "::endgroup::"
+          echo "::group::sockets of the CoreDNS ports"
+          sudo ss -tulpn | grep -E ':(53|9153|10054|10055)\s' || true
           echo "::endgroup::"
           echo "::group::kubectl describe pods -n kube-system"
           timeout 30 kubectl describe pods -n kube-system || true

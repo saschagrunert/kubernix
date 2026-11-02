@@ -57,6 +57,9 @@ impl ApiServer {
         let dir = config.root().join("apiserver");
         create_dir_all(&dir).context("Unable to create API server directory")?;
 
+        let audit_policy = dir.join("audit-policy.yml");
+        write_if_changed(&audit_policy, include_str!("assets/audit-policy.yml"))?;
+
         let mut process = Process::start(
             &dir,
             "API Server",
@@ -68,6 +71,7 @@ impl ApiServer {
                 "--audit-log-maxbackup=3",
                 "--audit-log-maxsize=100",
                 &format!("--audit-log-path={}", dir.join("audit.log").display()),
+                &format!("--audit-policy-file={}", audit_policy.display()),
                 "--authorization-mode=Node,RBAC",
                 "--bind-address=0.0.0.0",
                 &format!("--client-ca-file={}", pki.ca().cert().display()),
@@ -89,7 +93,26 @@ impl ApiServer {
                     pki.apiserver().cert().display()
                 ),
                 &format!("--kubelet-client-key={}", pki.apiserver().key().display()),
-                "--runtime-config=api/all=true",
+                // Request header authentication for aggregated API servers
+                &format!(
+                    "--proxy-client-cert-file={}",
+                    pki.front_proxy_client().cert().display()
+                ),
+                &format!(
+                    "--proxy-client-key-file={}",
+                    pki.front_proxy_client().key().display()
+                ),
+                &format!(
+                    "--requestheader-allowed-names={}",
+                    pki.front_proxy_client().user()
+                ),
+                &format!(
+                    "--requestheader-client-ca-file={}",
+                    pki.front_proxy_ca().cert().display()
+                ),
+                "--requestheader-extra-headers-prefix=X-Remote-Extra-",
+                "--requestheader-group-headers=X-Remote-Group",
+                "--requestheader-username-headers=X-Remote-User",
                 "--service-account-issuer=https://kubernetes.default.svc.cluster.local",
                 &format!(
                     "--service-account-key-file={}",
@@ -144,6 +167,15 @@ mod tests {
         assert!(rbac.contains("system:kube-apiserver-to-kubelet"));
         assert!(rbac.contains("nodes/proxy"));
         assert!(rbac.contains("nodes/stats"));
+    }
+
+    #[test]
+    fn audit_policy_asset_logs_metadata() {
+        let policy = include_str!("assets/audit-policy.yml");
+        assert!(policy.contains("apiVersion: audit.k8s.io/v1"));
+        assert!(policy.contains("kind: Policy"));
+        // The catch-all rule has to be the last one
+        assert!(policy.trim_end().ends_with("- level: Metadata"));
     }
 
     #[test]

@@ -323,7 +323,8 @@ impl Config {
         self.log_format
     }
 
-    /// Parent CIDR from which cluster, service, and pod subnets are carved.
+    /// Parent CIDR, split into the cluster CIDR, which contains the pod
+    /// CIDRs of all nodes, and the service CIDR.
     pub(crate) fn cidr(&self) -> Ipv4Network {
         self.cidr
     }
@@ -493,15 +494,17 @@ impl Config {
     ///
     /// - 0: Run directories created before the versioning
     /// - 1: Adds the version, otherwise identical to 0
+    /// - 2: New CIDR layout and PKI (front proxy CA, `kubelet-<node>` files),
+    ///   not migratable
     ///
     /// Bump it if an existing run directory or configuration file cannot be
     /// used as is anymore, and either migrate the older versions in
     /// `migrate` or refuse them by raising `OLDEST_VERSION`.
-    pub(crate) const VERSION: u32 = 1;
+    pub(crate) const VERSION: u32 = 2;
 
     /// Oldest version which gets migrated in place to `VERSION`. Older
     /// run directories are refused and have to be removed.
-    const OLDEST_VERSION: u32 = 0;
+    const OLDEST_VERSION: u32 = 2;
 
     /// Check the version of a stored configuration file. Returns true if
     /// the run directory has to be migrated.
@@ -530,7 +533,7 @@ impl Config {
     /// Migrate the stored configuration of an older run directory to the
     /// current version.
     fn migrate(mut stored: Config) -> Config {
-        // Version 0 to 1 only adds the version
+        // No version is migratable at the moment
         stored.version = Self::VERSION;
         stored
     }
@@ -765,6 +768,7 @@ pub mod tests {
         fs::write(
             c.root.join(Config::FILENAME),
             r#"
+version = 2
 addons = ["coredns"]
 cidr = "1.1.1.1/16"
 container-runtime = "podman"
@@ -798,6 +802,7 @@ root = "root"
         fs::write(
             c.root.join(Config::FILENAME),
             r#"
+version = 2
 addons = ["coredns"]
 cidr = "1.1.1.1/16"
 container-runtime = "podman"
@@ -829,6 +834,7 @@ root = "root"
         fs::write(
             c.root.join(Config::FILENAME),
             r#"
+version = 2
 addons = ["coredns"]
 cidr = "1.1.1.1/16"
 container-runtime = "podman"
@@ -1002,25 +1008,26 @@ root = "root"
     }
 
     #[test]
-    fn version_missing_migrated() -> Result<()> {
-        // Configuration files of older versions do not contain the version
-        let mut stored = test_config()?;
-        stored.cidr = "10.20.0.0/16".parse()?;
+    fn version_outdated_refused() -> Result<()> {
+        // Version 0 (without the version) and 1 have the old CIDR layout and
+        // PKI, which cannot be migrated
+        let stored = test_config()?;
         stored.to_file()?;
         let file = stored.root.join(Config::FILENAME);
         let content = read_to_string(&file)?;
-        let old = content.replace(&format!("version = {}\n", Config::VERSION), "");
-        assert_ne!(old, content);
-        fs::write(&file, &old)?;
+        let current = format!("version = {}\n", Config::VERSION);
+        for version in ["", "version = 1\n"] {
+            let old = content.replace(&current, version);
+            assert_ne!(old, content);
+            fs::write(&file, &old)?;
 
-        let mut c = test_config()?;
-        c.root = stored.root.clone();
-        c.try_load_file()?;
-        assert_eq!(c.version, Config::VERSION);
-        assert_eq!(&c.cidr().to_string(), "10.20.0.0/16");
-
-        // The stored configuration got only the version added
-        assert_eq!(read_to_string(&file)?, content);
+            let mut c = test_config()?;
+            c.root = stored.root.clone();
+            let err = c.try_load_file().unwrap_err().to_string();
+            assert!(err.contains("cannot be migrated"), "{}", err);
+            assert!(err.contains("remove the run directory"), "{}", err);
+            assert_eq!(read_to_string(&file)?, old);
+        }
         Ok(())
     }
 

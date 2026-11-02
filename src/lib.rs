@@ -39,7 +39,9 @@
 //! In root mode, they run inside containers (podman by default), which
 //! mount the Nix store of the host read-only, while in rootless mode they
 //! run as processes inside the rootlesskit namespaces, every kubelet in its
-//! own mount namespace.
+//! own mount namespace. All nodes share one network namespace with a bridge
+//! per node, and one iptables rule exempts the traffic between pods from the
+//! masquerading of the bridges.
 //!
 //! `Kubernix::new_shell` spawns an additional shell for a running cluster,
 //! which enters the namespaces of the cluster via `nsenter` in rootless
@@ -118,7 +120,7 @@ use encryptionconfig::EncryptionConfig;
 use kubeconfig::KubeConfig;
 use kubectl::Kubectl;
 use kubelet::Kubelet;
-use network::Network;
+use network::{NatExemption, Network};
 use pki::Pki;
 use process::Stoppables;
 use progress::Progress;
@@ -168,6 +170,8 @@ pub struct Kubernix {
     network: Network,
     kubectl: Kubectl,
     processes: Vec<Stoppables>,
+    // Removes the rule on drop, after the processes are stopped
+    _nat_exemption: Option<NatExemption>,
     // Dropped after the cleanup: restores the system state and releases
     // the run directory.
     _system: System,
@@ -559,6 +563,8 @@ impl Kubernix {
             kubectl: &kubectl,
         };
 
+        // Removed again on drop, also if anything below fails
+        let nat_exemption = network.setup_nat_exemption(config.root())?;
         let (processes, failures) = Self::register_components(&config).run(&ctx);
 
         let spawn_shell = !config.no_shell();
@@ -570,6 +576,7 @@ impl Kubernix {
             network,
             kubectl,
             processes,
+            _nat_exemption: nat_exemption,
             _system: system,
             _lock: lock,
         };

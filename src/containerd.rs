@@ -309,6 +309,29 @@ mod tests {
     }
 
     #[test]
+    fn render_config_current_version() -> Result<()> {
+        let v = render(&Config::parse_from(["kubernix"]))?;
+        assert_eq!(v["version"].as_integer(), Some(4));
+        let plugins = &v["plugins"];
+        assert_eq!(
+            plugins["io.containerd.server.v1.grpc"]["address"].as_str(),
+            Some("/kubernix/containerd/node/containerd.sock")
+        );
+        // Defaults to /run/containerd otherwise
+        assert_eq!(
+            plugins["io.containerd.server.v1.ttrpc"]["address"].as_str(),
+            Some("/kubernix/containerd/node/containerd.sock.ttrpc")
+        );
+        let images = &plugins["io.containerd.cri.v1.images"];
+        assert!(images.get("sandbox_image").is_none());
+        assert_eq!(
+            images["pinned_images"]["sandbox"].as_str(),
+            Some("registry.k8s.io/pause:3.10.2")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn render_config_default_runc() -> Result<()> {
         let v = render(&Config::parse_from(["kubernix", "--oci-runtime=runc"]))?;
         let containerd = cri_runtime(&v);

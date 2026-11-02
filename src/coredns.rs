@@ -7,6 +7,12 @@ use anyhow::{Context, Result};
 use log::debug;
 use std::{fs::create_dir_all, net::Ipv4Addr, sync::atomic::AtomicBool};
 
+// CoreDNS runs in the host network, so its health and readiness ports
+// replace the defaults 8080 and 8181, which other services on the host
+// often use.
+const HEALTH_PORT: u16 = 10054;
+const READY_PORT: u16 = 10055;
+
 /// Deploys the CoreDNS addon to the cluster.
 pub struct CoreDns;
 
@@ -38,6 +44,10 @@ impl CoreDns {
         // CoreDNS uses hostNetwork, so it can always reach the API server
         // at 127.0.0.1. Setting these env vars explicitly avoids depending
         // on kube-proxy ClusterIP routing being ready when CoreDNS starts.
+        // The DNS server binds only the pod IP, which is the node IP with
+        // hostNetwork and the endpoint of the Service, so it does not
+        // collide with local resolvers on loopback addresses, like
+        // systemd-resolved on 127.0.0.53.
         let env = format!(
             concat!(
                 "        env:\n",
@@ -45,6 +55,10 @@ impl CoreDns {
                 "          value: \"127.0.0.1\"\n",
                 "        - name: KUBERNETES_SERVICE_PORT\n",
                 "          value: \"{}\"\n",
+                "        - name: POD_IP\n",
+                "          valueFrom:\n",
+                "            fieldRef:\n",
+                "              fieldPath: status.podIP\n",
             ),
             API_SERVER_PORT,
         );
@@ -64,6 +78,8 @@ impl CoreDns {
             include_str!("assets/coredns.yml"),
             dns = dns,
             env = env,
+            health_port = HEALTH_PORT,
+            ready_port = READY_PORT,
             resources = resources,
         )
     }
@@ -101,6 +117,31 @@ mod tests {
             assert!(yml.contains("KUBERNETES_SERVICE_PORT"));
             assert!(yml.contains(&format!("value: \"{}\"", crate::API_SERVER_PORT)));
         }
+    }
+
+    #[test]
+    fn render_binds_pod_ip() {
+        for rootless in [true, false] {
+            let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), rootless);
+            assert!(yml.contains("    .:53 {\n        bind {$POD_IP}\n"));
+            assert!(yml.contains(concat!(
+                "        - name: POD_IP\n",
+                "          valueFrom:\n",
+                "            fieldRef:\n",
+                "              fieldPath: status.podIP\n",
+            )));
+        }
+    }
+
+    #[test]
+    fn render_uses_uncommon_probe_ports() {
+        let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), false);
+        assert!(yml.contains(&format!("health :{} {{\n", HEALTH_PORT)));
+        assert!(yml.contains(&format!("ready :{}\n", READY_PORT)));
+        assert!(yml.contains(&format!("containerPort: {}\n", HEALTH_PORT)));
+        assert!(yml.contains(&format!("containerPort: {}\n", READY_PORT)));
+        assert!(!yml.contains("8080"));
+        assert!(!yml.contains("8181"));
     }
 
     #[test]

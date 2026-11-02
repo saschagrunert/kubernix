@@ -274,7 +274,8 @@ mod tests {
             healthzPort = HEALTHZ_PORT_BASE,
         );
         assert!(yml.contains("kind: KubeletConfiguration"));
-        assert!(yml.contains("cgroupDriver: \"none\""));
+        // The kubelet takes the cgroup driver from the CRI runtime
+        assert!(!yml.contains("cgroupDriver"));
         assert!(yml.contains("podLogsDir: \"/tmp/kubelet/node-0/pods\""));
         assert!(yml.contains("containerRuntimeEndpoint: \"unix:///run/crio/crio.sock\""));
         assert!(yml.contains("KubeletInUserNamespace: true"));
