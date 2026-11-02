@@ -7,8 +7,8 @@ enabled is the only real host dependency.</p>
 <p>The library target only exists to share the implementation with the
 binary and is not a public API: its items are hidden and may change in
 any release. Semantic versioning covers the command line interface and
-the other interfaces listed in the “Stability” section of the
-<a href="https://github.com/saschagrunert/kubernix#stability">README</a>.</p>
+the other interfaces listed in the
+<a href="https://github.com/saschagrunert/kubernix/blob/main/docs/stability.md">stability documentation</a>.</p>
 <p>Internally, <code>Config</code> holds the command line options, <code>Logger</code> is the log
 implementation and <code>Kubernix</code> runs the cluster based on the
 configuration. <code>Kubernix::start</code> works in these steps:</p>
@@ -51,6 +51,6 @@ runs a command in it (<code>kubernix shell -- &lt;cmd&gt;</code>), entering the
 namespaces of the cluster via <code>nsenter</code> in rootless mode.
 <code>Kubernix::stop_cluster</code> stops the running instance (<code>kubernix stop</code>)
 and <code>Kubernix::status</code> prints its state (<code>kubernix status</code>).</p>
-<p>See the <a href="https://github.com/saschagrunert/kubernix">README</a> for usage
-details.</p>
+<p>See the <a href="https://github.com/saschagrunert/kubernix/blob/main/docs/usage.md">usage documentation</a>
+for details.</p>
 </div></details></section></div></main></body></html>
