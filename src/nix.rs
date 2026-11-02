@@ -7,7 +7,7 @@
 //! Nix profile, which avoids evaluating the flake on every start and keeps
 //! its store paths from being garbage collected.
 
-use crate::{Config, config::Addon, content_hash, system::System};
+use crate::{Config, config::Addon, content_hash, runlock::RunLock, system::System};
 use ::nix::fcntl::{Flock, FlockArg};
 use anyhow::{Context, Result, bail};
 use log::{debug, info};
@@ -41,8 +41,9 @@ impl Nix {
     /// The `.dockerignore` content of older versions.
     const DOCKERIGNORE: &'static str = "nix/.git\n";
 
-    /// Bootstrap the nix environment
-    pub fn bootstrap(config: Config) -> Result<()> {
+    /// Bootstrap the nix environment and replace the current process by
+    /// kubernix inside it, which inherits the lock of the run directory.
+    pub fn bootstrap(config: Config, lock: &RunLock) -> Result<()> {
         // Prepare the nix dir
         debug!("Nix environment not found, bootstrapping one");
         let dir = config.root().join(Self::DIR);
@@ -116,7 +117,9 @@ impl Nix {
             args.push(&shell_val);
         }
 
-        Self::exec(&config, &args)
+        let mut cmd = Self::command(&config, &args)?;
+        lock.inherit(&mut cmd)?;
+        Err(cmd.exec()).context("Unable to run nix develop")
     }
 
     /// The `--addons` value for the addons, `none` explicitly disables the
@@ -139,6 +142,12 @@ impl Nix {
     /// Each element in `args` is passed as a separate OS argument to
     /// `nix develop --command`, avoiding shell interpretation.
     pub fn exec(config: &Config, args: &[&str]) -> Result<()> {
+        Err(Self::command(config, args)?.exec()).context("Unable to run nix develop")
+    }
+
+    /// The command which runs `args` inside the nix develop shell, which
+    /// creates the cached environment if needed.
+    pub fn command(config: &Config, args: &[&str]) -> Result<Command> {
         let nix = System::find_executable("nix")?;
         let profile = Self::profile(config, &nix)?;
 
@@ -149,10 +158,8 @@ impl Nix {
             .arg("--log-format")
             .arg("raw")
             .arg("--command");
-        for arg in args {
-            cmd.arg(arg);
-        }
-        Err(cmd.exec()).context("Unable to run nix develop")
+        cmd.args(args);
+        Ok(cmd)
     }
 
     /// The cached environment of the Nix directory, which gets created if it

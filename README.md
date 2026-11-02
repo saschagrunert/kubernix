@@ -259,6 +259,38 @@ If you don't see a command prompt, try pressing enter.
 
 This means that you can spawn as many shells as you want to.
 
+To run a single command in the same environment instead of an interactive
+shell, for example in scripts or CI, pass it after `--`. KuberNix exits with
+the exit code of the command:
+
+```
+$ kubernix shell -- kubectl get nodes
+NAME     STATUS   ROLES    AGE   VERSION
+node-0   Ready    <none>   2m    v1.37.0
+```
+
+#### Status
+
+`kubernix status` shows whether a cluster is running in the run directory, as
+well as its mode (`root` or `rootless`), the number of nodes, the CRI and OCI
+runtimes, the API server endpoint and the readiness of the nodes:
+
+```
+$ kubernix status
+Root:        /home/user/kubernix-run
+State:       running (PID 12345)
+Mode:        rootless
+Nodes:       1
+CRI runtime: crio
+OCI runtime: crun
+API server:  https://127.0.0.1:6443
+Node:        node-0 Ready
+```
+
+The state is `starting` while KuberNix prepares the Nix environment and
+bootstraps the cluster, and `stopped` if no KuberNix instance uses the run
+directory. Use `kubernix status --output json` for a machine-readable output.
+
 #### Cleanup
 
 The whole cluster gets automatically destroyed if you exit the shell session
@@ -274,6 +306,30 @@ during the bootstrap or with `--no-shell`. KuberNix writes its PID to
 `kubernix.pid` in the run directory once the cluster is ready and removes it
 after the cleanup. With `--no-shell`, it also shuts the cluster down if one of
 its components dies.
+
+`kubernix stop` stops the cluster of the run directory from another terminal
+or script. It sends `SIGTERM` to the KuberNix instance and waits until the
+cleanup is done and the instance exited, up to `--timeout` seconds (default
+`180`). A cluster which is still starting aborts its bootstrap instead.
+
+Another termination signal during the cleanup, for example pressing Ctrl+C
+again or running `kubernix stop` again, force quits KuberNix. If the cleanup
+did not start because of a signal, for example after exiting the shell, it
+takes two signals. A force quit kills all component processes immediately,
+restores `/etc/hosts` and removes the PID file, but skips the remaining cleanup
+steps, so pods, node containers, mounts, network interfaces or firewall rules
+may be left behind.
+
+A cluster started as root can only be accessed as root. `kubernix status`
+works for other users as well, but `kubernix shell` and `kubernix stop` (if the
+cluster runs) fail for them and print the matching `sudo` command, for example:
+
+```
+$ sudo -E env "PATH=$PATH" kubernix stop
+```
+
+`kubernix stop` and `kubernix status` exit with `3` if no cluster is running in
+the run directory, see [Exit Codes](#exit-codes).
 
 Please note that the directory where all the data is stored is not being
 removed after the exit of KuberNix. This means that you’re still able to
@@ -580,15 +636,19 @@ are not part of the stable interface and get updated in any release.
 
 #### Exit Codes
 
-| Code | Meaning                                                                                              |
-| ---- | ---------------------------------------------------------------------------------------------------- |
-| `0`  | Success, for example after the interactive shell exited or on `SIGTERM` with `--no-shell`            |
-| `1`  | Any error, including a failed bootstrap, a dying component with `--no-shell` or an aborted bootstrap |
-| `2`  | Command line arguments or environment variables which cannot be parsed                               |
+| Code | Meaning                                                                                                     |
+| ---- | ----------------------------------------------------------------------------------------------------------- |
+| `0`  | Success, for example after the interactive shell exited, on `SIGTERM` with `--no-shell` or after a stop     |
+| `1`  | Any error, including a failed bootstrap, a dying component with `--no-shell` or an aborted bootstrap        |
+| `2`  | Command line arguments or environment variables which cannot be parsed                                      |
+| `3`  | `kubernix stop` and `kubernix status` only: no cluster is running in the run directory                      |
 
-`kubernix shell` replaces itself with the spawned shell, so it returns the exit
-code of the shell once the shell started. Subcommands may define further exit
-codes, which are documented together with them.
+`kubernix status` exits with `0` while a cluster is running or starting, and
+`kubernix stop` with `0` once the cluster stopped, also if it aborted its
+bootstrap. The aborted instance itself exits with a non-zero code.
+`kubernix shell` replaces itself with the spawned shell or the command passed
+after `--`, so it returns their exit code once they started. Subcommands may
+define further exit codes, which are documented together with them.
 
 #### Environment File
 

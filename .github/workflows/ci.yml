@@ -437,12 +437,146 @@ jobs:
           export KUBECONFIG=$PWD/kubernix-run/kubeconfig/admin.kubeconfig
           contrib/integration-test ${{ matrix.nodes }} ${{ matrix.cri_runtime }} ${{ matrix.oci_runtime }}
           # $KUBERNIX_PID is the outermost process (sudo or the rootless
-          # wrapper chain), so signal the kubernix process itself.
-          $SUDO kill "$($SUDO cat kubernix-run/kubernix.pid)"
-          wait "$KUBERNIX_PID" || true
+          # wrapper chain), kubernix stop signals the kubernix process itself.
+          rc=0
+          $SUDO ./kubernix stop || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::kubernix stop exited with $rc"
+            exit 1
+          fi
+          rc=0
+          wait "$KUBERNIX_PID" || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::kubernix exited with $rc after kubernix stop"
+            exit 1
+          fi
+        timeout-minutes: 15
+      - name: Check for leftovers
+        env:
+          ROOTLESS: ${{ matrix.rootless }}
+          CHECK_CONTAINERS: ${{ !matrix.rootless && matrix.mode == 'multi' }}
+        run: |
+          if [ "$ROOTLESS" = true ]; then AS_ROOT=(); else AS_ROOT=(sudo); fi
+          failed=0
+          for cmd in status stop; do
+            rc=0
+            "${AS_ROOT[@]}" ./kubernix "$cmd" || rc=$?
+            if [ "$rc" -ne 3 ]; then
+              echo "::error::kubernix $cmd exited with $rc instead of 3 without a running cluster"
+              failed=1
+            fi
+          done
+          # Other users can read the state of a root cluster
+          rc=0
+          ./kubernix status || rc=$?
+          if [ "$rc" -ne 3 ]; then
+            echo "::error::unprivileged kubernix status exited with $rc instead of 3 without a running cluster"
+            failed=1
+          fi
+          # Give the kernel a moment to reap the last processes
+          for _ in $(seq 10); do
+            procs=$(sudo find /proc/[0-9]*/exe -maxdepth 0 -printf '%p %l\n' 2>/dev/null |
+              grep -E ' /nix/store/[^/]+/bin/\.?(etcd|kube-apiserver|kubelet|crio|containerd)(-wrapped)?( \(deleted\))?$' || true)
+            [ -z "$procs" ] && break
+            sleep 1
+          done
+          if [ -n "$procs" ]; then
+            echo "::error::Leftover kubernix processes"
+            echo "$procs"
+            failed=1
+          fi
+          mounts=$(grep -F "$PWD/kubernix-run" /proc/mounts || true)
+          if [ -n "$mounts" ]; then
+            echo "::error::Leftover mounts below kubernix-run"
+            echo "$mounts"
+            failed=1
+          fi
+          if [ "$CHECK_CONTAINERS" = true ]; then
+            containers=$(sudo podman ps -a --filter 'name=^kubernix-node-' --format '{{.Names}}')
+            if [ -n "$containers" ]; then
+              echo "::error::Leftover node containers"
+              echo "$containers"
+              failed=1
+            fi
+          fi
+          # The CNI bridge rules are tagged with the network name kubernix-<node>,
+          # the NAT exemption with "kubernix <run root>"
+          rules=$({ sudo iptables-save || true; sudo nft list ruleset || true; } 2>/dev/null | grep -F kubernix || true)
+          if [ -n "$rules" ]; then
+            echo "::error::Leftover kubernix firewall rules"
+            echo "$rules"
+            failed=1
+          fi
+          links=$(ip -o link show | grep -F kubernix || true)
+          if [ -n "$links" ]; then
+            echo "::error::Leftover kubernix network interfaces"
+            echo "$links"
+            failed=1
+          fi
+          hosts=$(grep -E '^127\.0\.0\.1 node-[0-9]+$' /etc/hosts || true)
+          if [ -n "$hosts" ]; then
+            echo "::error::Leftover node entries in /etc/hosts"
+            echo "$hosts"
+            failed=1
+          fi
+          exit "$failed"
+      - name: Restart the cluster
+        id: restart
+        env:
+          ROOTLESS: ${{ matrix.rootless }}
+          NODES: ${{ matrix.nodes }}
+        run: |
+          if [ "$ROOTLESS" = true ]; then AS_ROOT=(); else AS_ROOT=(sudo -E env "PATH=$PATH"); fi
+          # Reuse the stored configuration of the run directory
+          "${AS_ROOT[@]}" ./kubernix --log-level=debug --no-shell &
+          KUBERNIX_PID=$!
+          until [ -f kubernix-run/kubernix.pid ]; do
+            if [ ! -d "/proc/$KUBERNIX_PID" ]; then
+              rc=0
+              wait "$KUBERNIX_PID" || rc=$?
+              echo "::error::kubernix exited with $rc before the cluster came up again"
+              exit 1
+            fi
+            if [ "$SECONDS" -ge 600 ]; then
+              echo "::error::Timed out waiting for the cluster to come up again"
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Cluster is up again, running checks"
+          # The status check below fails on a timeout or a wrong number of nodes
+          "${AS_ROOT[@]}" ./kubernix shell -- kubectl wait --for=condition=Ready nodes --all --timeout=120s || true
+          "${AS_ROOT[@]}" ./kubernix status
+          status=$("${AS_ROOT[@]}" ./kubernix status --output json)
+          echo "$status"
+          if ! jq -e --argjson nodes "$NODES" \
+            '.state == "running" and .nodes == $nodes and (.node_status | length) == $nodes and all(.node_status[]; .ready)' \
+            <<<"$status" >/dev/null; then
+            echo "::error::Unexpected kubernix status"
+            exit 1
+          fi
+          "${AS_ROOT[@]}" ./kubernix shell -- kubectl get nodes
+          rc=0
+          "${AS_ROOT[@]}" ./kubernix shell -- sh -c 'exit 42' || rc=$?
+          if [ "$rc" -ne 42 ]; then
+            echo "::error::kubernix shell exited with $rc instead of the exit code 42 of the command"
+            exit 1
+          fi
+          rc=0
+          "${AS_ROOT[@]}" ./kubernix stop || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::kubernix stop exited with $rc"
+            exit 1
+          fi
+          rc=0
+          wait "$KUBERNIX_PID" || rc=$?
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::kubernix exited with $rc after kubernix stop"
+            exit 1
+          fi
         timeout-minutes: 15
       - name: Dump logs on failure
-        if: ${{ always() && steps.integration.outcome != 'success' }}
+        if: ${{ always() && (steps.integration.outcome != 'success' || steps.restart.outcome == 'failure') }}
         continue-on-error: true
         timeout-minutes: 5
         run: |

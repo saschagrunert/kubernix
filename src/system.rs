@@ -189,6 +189,23 @@ impl System {
             }))
     }
 
+    /// The restore of the hosts file, which can run in another thread
+    /// while the regular cleanup still runs, for example to force quit.
+    pub(crate) fn hosts_restore(&self) -> impl FnOnce() + Send + 'static {
+        let hosts = self.hosts.clone();
+        let tag = self.hosts_tag.clone();
+        move || {
+            if let Some(hosts) = hosts
+                && let Err(e) = Self::remove_hosts_entries(&hosts, &tag)
+            {
+                warn!(
+                    "Unable to restore hosts file, may need manual cleanup: {:#}",
+                    e
+                );
+            }
+        }
+    }
+
     /// Restore the initial system state
     fn cleanup(&mut self) {
         if let Some(hosts) = self.hosts.take()
