@@ -1,2 +1,2 @@
-createSrcSidebar('[["kubernix",["",[],["apiserver.rs","component.rs","config.rs","container.rs","containerd.rs","controllermanager.rs","coredns.rs","cri.rs","crio.rs","encryptionconfig.rs","etcd.rs","kubeconfig.rs","kubectl.rs","kubelet.rs","lib.rs","logger.rs","network.rs","nix.rs","node.rs","pki.rs","podman.rs","process.rs","progress.rs","proxy.rs","runlock.rs","scheduler.rs","signals.rs","system.rs"]]]]');
-//{"start":19,"fragment_lengths":[389]}
+createSrcSidebar('[["kubernix",["",[],["apiserver.rs","component.rs","config.rs","container.rs","containerd.rs","controllermanager.rs","coredns.rs","cri.rs","crio.rs","encryptionconfig.rs","etcd.rs","files.rs","hoststate.rs","kubeconfig.rs","kubectl.rs","kubelet.rs","lib.rs","logger.rs","network.rs","nix.rs","node.rs","pki.rs","podman.rs","process.rs","progress.rs","proxy.rs","rootless.rs","runlock.rs","scheduler.rs","shell.rs","signals.rs","system.rs"]]]]');
+//{"start":19,"fragment_lengths":[440]}
