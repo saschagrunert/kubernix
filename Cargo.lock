@@ -331,7 +331,7 @@ dependencies = [
 
 [[package]]
 name = "kubernix"
-version = "0.4.3"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "base64",

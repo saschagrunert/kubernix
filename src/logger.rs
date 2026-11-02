@@ -17,14 +17,7 @@ pub struct Logger {
 
 impl Logger {
     /// Create a new logger.
-    ///
-    /// ```
-    /// use kubernix::{LogFormat, Logger};
-    /// use log::LevelFilter;
-    ///
-    /// let logger = Logger::new(LevelFilter::Info, LogFormat::Text);
-    /// ```
-    pub fn new(level: LevelFilter, format: LogFormat) -> Box<Self> {
+    pub(crate) fn new(level: LevelFilter, format: LogFormat) -> Box<Self> {
         set_max_level(level);
         Self { level, format }.into()
     }
@@ -33,12 +26,6 @@ impl Logger {
     ///
     /// This is used for fatal errors before the global logger is
     /// configured, so it writes plain text regardless of format settings.
-    ///
-    /// ```
-    /// use kubernix::Logger;
-    ///
-    /// Logger::error("something went wrong");
-    /// ```
     pub fn error(msg: &str) {
         writeln!(stderr(), "[ERROR] {}", msg).ok();
     }

@@ -6,12 +6,15 @@
 //! plugins, etc.) come from a pinned Nix environment, so Nix with flakes
 //! enabled is the only real host dependency.
 //!
-//! The library mainly exists for the binary: [`Config`] holds the command
-//! line options (with the [`SubCommand`], [`LogFormat`], [`CriRuntime`] and
-//! [`OciRuntime`] option types), [`Logger`] is the log implementation and
-//! [`Kubernix`] runs the cluster based on the configuration.
+//! The library target only exists to share the implementation with the
+//! binary and is not a public API: its items are hidden and may change in
+//! any release. Semantic versioning covers the command line interface and
+//! the other interfaces listed in the "Stability" section of the
+//! [README](https://github.com/saschagrunert/kubernix#stability).
 //!
-//! [`Kubernix::start`] works in these steps:
+//! Internally, `Config` holds the command line options, `Logger` is the log
+//! implementation and `Kubernix` runs the cluster based on the
+//! configuration. `Kubernix::start` works in these steps:
 //!
 //! 1. Write the configuration into the run root (`kubernix-run` by
 //!    default) and lock it, so that only one instance uses it. Then write
@@ -36,7 +39,7 @@
 //! rootless mode they run as processes inside the rootlesskit namespaces,
 //! every kubelet in its own mount namespace.
 //!
-//! [`Kubernix::new_shell`] spawns an additional shell for a running cluster,
+//! `Kubernix::new_shell` spawns an additional shell for a running cluster,
 //! which enters the namespaces of the cluster via `nsenter` in rootless
 //! mode.
 //! See the [README](https://github.com/saschagrunert/kubernix) for usage
@@ -70,7 +73,10 @@ mod scheduler;
 mod signals;
 mod system;
 
-pub use config::{Config, CriRuntime, LogFormat, OciRuntime, SubCommand};
+// Only used by the binary, not a public API.
+#[doc(hidden)]
+pub use config::{Config, SubCommand};
+#[doc(hidden)]
 pub use logger::Logger;
 
 /// Write `content` to `path` only if the file does not exist or its
@@ -139,6 +145,7 @@ use std::{
 };
 
 /// The main entry point for the application
+#[doc(hidden)]
 pub struct Kubernix {
     addon_shutdown: Arc<AtomicBool>,
     addon_thread: Option<thread::JoinHandle<()>>,
@@ -492,7 +499,11 @@ impl Kubernix {
 
         // Setup the progress bar
         const BASE_STEPS: u64 = 15;
-        let addon_steps = config.addons().iter().filter(|a| *a == "coredns").count() as u64;
+        let addon_steps = config
+            .addons()
+            .iter()
+            .filter(|a| **a == config::Addon::Coredns)
+            .count() as u64;
         let steps = if config.multi_node() {
             u64::from(config.nodes()) * 2 + BASE_STEPS
         } else {
@@ -600,7 +611,7 @@ impl Kubernix {
         let addon_kubeconfig = self.kubectl.kubeconfig().to_path_buf();
         // Log before spawning, the interactive shell may own the terminal
         // while the addons get deployed
-        if addon_config.addons().iter().any(|a| a == "coredns") {
+        if addon_config.addons().contains(&config::Addon::Coredns) {
             info!("Deploying CoreDNS in the background");
         }
         self.addon_thread = Some(thread::spawn(move || {
@@ -608,7 +619,7 @@ impl Kubernix {
             if addon_shutdown.load(Ordering::Relaxed) {
                 return;
             }
-            if addon_config.addons().iter().any(|a| a == "coredns")
+            if addon_config.addons().contains(&config::Addon::Coredns)
                 && let Err(e) =
                     CoreDns::apply(&addon_config, &addon_network, &kubectl, &addon_shutdown)
                 && !addon_shutdown.load(Ordering::Relaxed)
@@ -786,7 +797,7 @@ impl Kubernix {
             for storage in Self::ROOTLESS_STORAGE_DIRS
                 .iter()
                 .copied()
-                .chain(OciRuntime::ALL.iter().map(|x| x.name()))
+                .chain(config::OciRuntime::ALL.iter().map(|x| x.name()))
             {
                 let path = node.join(storage);
                 if path.exists()
