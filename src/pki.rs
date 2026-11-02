@@ -1,28 +1,36 @@
 //! Public key infrastructure (PKI) for cluster TLS.
 //!
-//! Generates a self-signed CA and per-component certificates using
-//! `cfssl`/`cfssljson`. Certificates cover the admin user, API server,
-//! etcd, kubelet nodes, controller-manager, scheduler, proxy, and service
-//! accounts. A separate front proxy CA signs the client certificate the API
-//! server uses to authenticate against aggregated API servers.
+//! Generates a self-signed CA and per-component certificates in process.
+//! Certificates cover the admin user, API server, etcd, kubelet nodes,
+//! controller-manager, scheduler, proxy, and service accounts. A separate
+//! front proxy CA signs the client certificate the API server uses to
+//! authenticate against aggregated API servers. All keys are ECDSA P-256
+//! keys, which every component accepts, including for signing
+//! ServiceAccount tokens.
 
-use crate::{Config, kubeconfig::KubeConfig, network::Network, node::Node};
-use anyhow::{Context, Result, bail};
+use crate::{Config, kubeconfig::KubeConfig, network::Network, node::Node, write_private};
+use anyhow::{Context, Result};
 use log::{debug, info, warn};
 use rayon::prelude::*;
-use serde_json::{Value, json, to_string_pretty};
+use rcgen::{
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
+    Issuer, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256,
+};
 use std::{
     fs::{self, create_dir_all},
     net::Ipv4Addr,
-    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
 };
+use time::{Duration, OffsetDateTime};
 
-const ECDSA_KEY_SIZE: u32 = 256;
-const CERT_EXPIRY: &str = "87600h";
-/// The CAs outlive the certificates they sign, cfssl defaults to 5 years.
-const CA_EXPIRY: &str = "175200h";
+/// The validity of the leaf certificates, 10 years.
+const CERT_VALIDITY: Duration = Duration::hours(87_600);
+/// The CAs outlive the certificates they sign, 20 years.
+const CA_VALIDITY: Duration = Duration::hours(175_200);
+/// Backdate the certificates to tolerate clock skew.
+const CERT_BACKDATE: Duration = Duration::minutes(5);
+/// The organizational unit of all certificates.
+const ORGANIZATIONAL_UNIT: &str = "kubernetes";
 
 #[must_use]
 pub struct Pki {
@@ -163,26 +171,28 @@ impl Identity {
     }
 }
 
+/// A certificate authority, which keeps its key in memory to sign the
+/// leaf certificates.
+struct Ca {
+    identity: Identity,
+    issuer: Issuer<'static, KeyPair>,
+}
+
 struct PkiConfig<'a> {
-    ca: &'a Identity,
-    front_proxy_ca: &'a Identity,
-    ca_config: PathBuf,
+    ca: &'a Ca,
+    front_proxy_ca: &'a Ca,
     dir: &'a Path,
     apiserver_hosts: Vec<String>,
     node_ips: Vec<String>,
 }
 
 impl<'a> PkiConfig<'a> {
-    fn ca(&self) -> &Identity {
+    fn ca(&self) -> &Ca {
         self.ca
     }
 
-    fn front_proxy_ca(&self) -> &Identity {
+    fn front_proxy_ca(&self) -> &Ca {
         self.front_proxy_ca
-    }
-
-    fn ca_config(&self) -> &PathBuf {
-        &self.ca_config
     }
 
     fn dir(&self) -> &Path {
@@ -218,7 +228,7 @@ impl Pki {
     ///
     /// If the PKI directory already exists, identities are loaded from
     /// the existing files. Otherwise, new CAs and all component
-    /// certificates are generated via cfssl.
+    /// certificates are generated.
     pub fn new(config: &Config, network: &Network) -> Result<Pki> {
         let dir = &config.root().join("pki");
         // The node name is the hostname in single node mode
@@ -271,7 +281,6 @@ impl Pki {
         } else {
             info!("Generating certificates");
             create_dir_all(dir).context("Unable to create PKI directory")?;
-            let ca_config = Self::write_ca_config(dir)?;
             let (ca, front_proxy_ca) = rayon::join(
                 || Self::setup_ca(dir, CA_NAME, APISERVER_NAME),
                 || Self::setup_ca(dir, FRONT_PROXY_CA_NAME, FRONT_PROXY_CA_NAME),
@@ -282,7 +291,6 @@ impl Pki {
                 dir,
                 ca: &ca,
                 front_proxy_ca: &front_proxy_ca,
-                ca_config,
                 apiserver_hosts: Self::apiserver_hosts(network)?,
                 node_ips: Network::host_ips()?
                     .iter()
@@ -344,8 +352,8 @@ impl Pki {
                 scheduler,
                 service_account,
                 kubelets: kubelets?,
-                ca,
-                front_proxy_ca,
+                ca: ca.identity,
+                front_proxy_ca: front_proxy_ca.identity,
             })
         }
     }
@@ -370,25 +378,23 @@ impl Pki {
         Identity::new(dir, &format!("kubelet-{}", node), &Self::node_user(node))
     }
 
-    fn setup_ca(dir: &Path, name: &str, cn: &str) -> Result<Identity> {
+    fn setup_ca(dir: &Path, name: &str, cn: &str) -> Result<Ca> {
         debug!("Creating CA certificates for {}", name);
-        let csr = dir.join(format!("{}-csr.json", name));
-        let mut content = Self::csr(cn, cn);
-        content["ca"] = json!({ "expiry": CA_EXPIRY });
-        Self::write_csr(&content, &csr)?;
+        let key = Self::key_pair(name)?;
+        let mut params = Self::params(cn, cn, &[], CA_VALIDITY)?;
+        params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+        let cert = params
+            .self_signed(&key)
+            .with_context(|| format!("Unable to self sign CA '{}'", name))?;
 
-        let cfssl = Command::new("cfssl")
-            .arg("gencert")
-            .arg("-initca")
-            .arg(csr)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .with_context(|| format!("Unable to spawn cfssl for CA '{}'", name))?;
-
-        Self::pipe_cfssl_to_cfssljson(cfssl, &dir.join(name), name)?;
+        let identity = Identity::new(dir, name, name);
+        Self::write(&identity, &cert.pem(), &key)?;
         debug!("CA certificates created for {}", name);
-        Ok(Identity::new(dir, name, name))
+        Ok(Ca {
+            identity,
+            issuer: Issuer::new(params, key),
+        })
     }
 
     /// The kubelet certificate is used as client and serving certificate.
@@ -398,20 +404,9 @@ impl Pki {
     /// so its addresses are the candidates for the InternalIP.
     fn setup_kubelet(pki_config: &PkiConfig, node: &str) -> Result<Identity> {
         let identity = Self::kubelet_identity(pki_config.dir(), node);
-        let csr_file = pki_config
-            .dir()
-            .join(format!("{}-csr.json", identity.name()));
-        Self::write_csr(&Self::csr(identity.user(), "system:nodes"), &csr_file)?;
         let mut hosts = vec![node.into(), Ipv4Addr::LOCALHOST.to_string()];
         hosts.extend_from_slice(pki_config.node_ips());
-        Self::generate(
-            pki_config,
-            pki_config.ca(),
-            identity.name(),
-            &csr_file,
-            identity.user(),
-            &hosts,
-        )
+        Self::generate(pki_config.ca(), identity, "system:nodes", &hosts)
     }
 
     fn setup_admin(pki_config: &PkiConfig) -> Result<Identity> {
@@ -428,29 +423,22 @@ impl Pki {
     }
 
     fn setup_etcd(pki_config: &PkiConfig) -> Result<Identity> {
-        let csr_file = pki_config.dir().join("etcd-csr.json");
-        Self::write_csr(&Self::csr(ETCD_NAME, ETCD_NAME), &csr_file)?;
         Self::generate(
-            pki_config,
             pki_config.ca(),
-            ETCD_NAME,
-            &csr_file,
+            Identity::new(pki_config.dir(), ETCD_NAME, ETCD_NAME),
             ETCD_NAME,
             &[Ipv4Addr::LOCALHOST.to_string(), "localhost".into()],
         )
     }
 
     fn setup_front_proxy_client(pki_config: &PkiConfig) -> Result<Identity> {
-        let csr_file = pki_config.dir().join("front-proxy-client-csr.json");
-        Self::write_csr(
-            &Self::csr(FRONT_PROXY_CLIENT_NAME, FRONT_PROXY_CLIENT_NAME),
-            &csr_file,
-        )?;
         Self::generate(
-            pki_config,
             pki_config.front_proxy_ca(),
-            FRONT_PROXY_CLIENT_NAME,
-            &csr_file,
+            Identity::new(
+                pki_config.dir(),
+                FRONT_PROXY_CLIENT_NAME,
+                FRONT_PROXY_CLIENT_NAME,
+            ),
             FRONT_PROXY_CLIENT_NAME,
             &[],
         )
@@ -465,13 +453,9 @@ impl Pki {
     }
 
     fn setup_apiserver(pki_config: &PkiConfig) -> Result<Identity> {
-        let csr_file = pki_config.dir().join("kubernetes-csr.json");
-        Self::write_csr(&Self::csr(APISERVER_NAME, APISERVER_NAME), &csr_file)?;
         Self::generate(
-            pki_config,
             pki_config.ca(),
-            APISERVER_NAME,
-            &csr_file,
+            Identity::new(pki_config.dir(), APISERVER_NAME, APISERVER_NAME),
             APISERVER_NAME,
             pki_config.apiserver_hosts(),
         )
@@ -489,119 +473,74 @@ impl Pki {
     /// Generate a client certificate signed by the cluster CA, which needs
     /// no subject alternative names.
     fn setup_client(pki_config: &PkiConfig, name: &str, cn: &str, o: &str) -> Result<Identity> {
-        let csr_file = pki_config.dir().join(format!("{}-csr.json", name));
-        Self::write_csr(&Self::csr(cn, o), &csr_file)?;
-        Self::generate(pki_config, pki_config.ca(), name, &csr_file, cn, &[])
+        Self::generate(
+            pki_config.ca(),
+            Identity::new(pki_config.dir(), name, cn),
+            o,
+            &[],
+        )
     }
 
-    fn generate(
-        pki_config: &PkiConfig,
-        ca: &Identity,
-        name: &str,
-        csr: &Path,
-        user: &str,
-        hosts: &[String],
-    ) -> Result<Identity> {
+    /// Generate the certificate of the identity, whose common name is the
+    /// user, signed by the CA. The certificates are used for server and
+    /// client authentication.
+    fn generate(ca: &Ca, identity: Identity, o: &str, hosts: &[String]) -> Result<Identity> {
+        let name = identity.name();
         debug!("Creating certificate for {}", name);
+        let key = Self::key_pair(name)?;
+        let mut params = Self::params(identity.user(), o, hosts, CERT_VALIDITY)?;
+        params.is_ca = IsCa::ExplicitNoCa;
+        params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+        params.extended_key_usages = vec![
+            ExtendedKeyUsagePurpose::ServerAuth,
+            ExtendedKeyUsagePurpose::ClientAuth,
+        ];
+        params.use_authority_key_identifier_extension = true;
+        let cert = params
+            .signed_by(&key, &ca.issuer)
+            .with_context(|| format!("Unable to sign certificate for '{}'", name))?;
 
-        let mut cmd = Command::new("cfssl");
-        cmd.arg("gencert")
-            .arg(format!("-ca={}", ca.cert().display()))
-            .arg(format!("-ca-key={}", ca.key().display()))
-            .arg(format!("-config={}", pki_config.ca_config().display()))
-            .arg("-profile=kubernetes");
-        if !hosts.is_empty() {
-            cmd.arg(format!("-hostname={}", hosts.join(",")));
-        }
-        let cfssl = cmd
-            .arg(csr)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .with_context(|| format!("Unable to spawn cfssl for '{}'", name))?;
-
-        Self::pipe_cfssl_to_cfssljson(cfssl, &pki_config.dir().join(name), name)?;
+        Self::write(&identity, &cert.pem(), &key)?;
         debug!("Certificate created for {}", name);
-
-        Ok(Identity::new(pki_config.dir(), name, user))
+        Ok(identity)
     }
 
-    /// Pipe cfssl output to cfssljson for certificate generation.
-    fn pipe_cfssl_to_cfssljson(
-        mut cfssl: std::process::Child,
-        output_prefix: &Path,
-        name: &str,
-    ) -> Result<()> {
-        let pipe = cfssl.stdout.take().context("Unable to get cfssl stdout")?;
-        let output = Command::new("cfssljson")
-            .arg("-bare")
-            .arg(output_prefix)
-            .stdin(pipe)
-            .output()
-            .with_context(|| format!("Unable to run cfssljson for '{}'", name))?;
-
-        let cfssl_output = cfssl
-            .wait_with_output()
-            .with_context(|| format!("Unable to wait for cfssl output for '{}'", name))?;
-        if !output.status.success() {
-            debug!(
-                "cfssl stderr: {}",
-                String::from_utf8_lossy(&cfssl_output.stderr)
-            );
-            debug!("cfssljson output: {:?}", output);
-            bail!("Unable to generate certificate for {}", name);
-        }
-
-        let key_file = output_prefix.with_file_name(format!("{}-key.pem", name));
-        if key_file.exists() {
-            fs::set_permissions(&key_file, fs::Permissions::from_mode(0o600)).with_context(
-                || format!("Unable to restrict permissions on '{}'", key_file.display()),
-            )?;
-        }
-        Ok(())
+    fn key_pair(name: &str) -> Result<KeyPair> {
+        KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256)
+            .with_context(|| format!("Unable to generate key for '{}'", name))
     }
 
-    fn csr(cn: &str, o: &str) -> Value {
-        json!({
-            "CN": cn,
-            "key": {
-                "algo": "ecdsa",
-                "size": ECDSA_KEY_SIZE
-            },
-            "names": [{
-                "O": o,
-                "OU": "kubernetes",
-            }]
-        })
+    /// The certificate parameters with the subject and validity. Hosts
+    /// which are IP addresses become IP subject alternative names, all
+    /// others DNS names.
+    fn params(
+        cn: &str,
+        o: &str,
+        hosts: &[String],
+        validity: Duration,
+    ) -> Result<CertificateParams> {
+        let mut params = CertificateParams::new(hosts)
+            .with_context(|| format!("Invalid subject alternative names for '{}'", cn))?;
+        let mut dn = DistinguishedName::new();
+        dn.push(DnType::OrganizationName, o);
+        dn.push(DnType::OrganizationalUnitName, ORGANIZATIONAL_UNIT);
+        dn.push(DnType::CommonName, cn);
+        params.distinguished_name = dn;
+        params.not_before = OffsetDateTime::now_utc() - CERT_BACKDATE;
+        params.not_after = params.not_before + validity;
+        Ok(params)
     }
 
-    fn write_csr(csr: &Value, dest: &Path) -> Result<()> {
-        fs::write(dest, to_string_pretty(csr)?)
-            .with_context(|| format!("Unable to write CSR to '{}'", dest.display()))?;
-        Ok(())
-    }
-
-    fn write_ca_config(dir: &Path) -> Result<PathBuf> {
-        let cfg = json!({
-            "signing": {
-                "default": {
-                    "expiry": CERT_EXPIRY
-                },
-                "profiles": {
-                    "kubernetes": {
-                        "usages": [
-                            "signing",
-                            "server auth",
-                            "client auth"
-                        ],
-                        "expiry": CERT_EXPIRY
-                    }
-                }
-            }
-        });
-        let dest = dir.join("ca-config.json");
-        fs::write(&dest, to_string_pretty(&cfg)?).context("Unable to write CA config")?;
-        Ok(dest)
+    /// Write the PEM encoded certificate and key of the identity. Only the
+    /// owner can read the key.
+    fn write(identity: &Identity, cert: &str, key: &KeyPair) -> Result<()> {
+        fs::write(identity.cert(), cert).with_context(|| {
+            format!(
+                "Unable to write certificate '{}'",
+                identity.cert().display()
+            )
+        })?;
+        write_private(identity.key(), key.serialize_pem().as_bytes())
     }
 
     /// Retrieve the node user
@@ -617,6 +556,14 @@ mod tests {
         config::tests::{test_config, test_config_wrong_root},
         network::tests::test_network,
     };
+    use anyhow::bail;
+    use rcgen::PublicKeyData;
+    use std::{net::IpAddr, os::unix::fs::PermissionsExt};
+    use x509_parser::{
+        certificate::X509Certificate,
+        extensions::{GeneralName, ParsedExtension},
+        pem::{Pem, parse_x509_pem},
+    };
 
     #[test]
     fn new_success() -> Result<()> {
@@ -626,24 +573,67 @@ mod tests {
         Ok(())
     }
 
-    fn certinfo(identity: &Identity) -> Result<Value> {
-        let output = Command::new("cfssl")
-            .args(["certinfo", "-cert"])
-            .arg(identity.cert())
-            .output()?;
-        assert!(output.status.success(), "{:?}", output);
-        Ok(serde_json::from_slice(&output.stdout)?)
+    fn pem(path: &Path) -> Result<Pem> {
+        let data = fs::read(path)?;
+        let (rest, pem) = parse_x509_pem(&data)?;
+        assert!(rest.is_empty(), "{}", path.display());
+        Ok(pem)
+    }
+
+    /// Run the check against the parsed certificate of the identity.
+    fn with_cert<T>(identity: &Identity, check: impl FnOnce(&X509Certificate) -> T) -> Result<T> {
+        let pem = pem(identity.cert())?;
+        assert_eq!(pem.label, "CERTIFICATE");
+        Ok(check(&pem.parse_x509()?))
+    }
+
+    /// The authority and subject key identifiers of the certificate.
+    fn key_ids<'a>(cert: &'a X509Certificate<'a>) -> (Option<&'a [u8]>, Option<&'a [u8]>) {
+        let (mut aki, mut ski) = (None, None);
+        for ext in cert.extensions() {
+            match ext.parsed_extension() {
+                ParsedExtension::AuthorityKeyIdentifier(a) => {
+                    aki = a.key_identifier.as_ref().map(|k| k.0)
+                }
+                ParsedExtension::SubjectKeyIdentifier(k) => ski = Some(k.0),
+                _ => {}
+            }
+        }
+        (aki, ski)
     }
 
     fn sans(identity: &Identity) -> Result<Vec<String>> {
-        Ok(certinfo(identity)?["sans"]
-            .as_array()
-            .map(|a| {
-                a.iter()
-                    .filter_map(|s| s.as_str().map(Into::into))
-                    .collect()
-            })
-            .unwrap_or_default())
+        with_cert(identity, |cert| -> Result<Vec<String>> {
+            let mut sans = Vec::new();
+            if let Some(ext) = cert.subject_alternative_name()? {
+                for name in &ext.value.general_names {
+                    sans.push(match name {
+                        GeneralName::DNSName(dns) => dns.to_string(),
+                        GeneralName::IPAddress(ip) => {
+                            IpAddr::from(<[u8; 4]>::try_from(*ip)?).to_string()
+                        }
+                        other => bail!("unexpected SAN {:?}", other),
+                    });
+                }
+            }
+            sans.sort();
+            Ok(sans)
+        })?
+    }
+
+    fn leaves(pki: &Pki) -> Vec<&Identity> {
+        let mut leaves = vec![
+            pki.admin(),
+            pki.apiserver(),
+            pki.controller_manager(),
+            pki.etcd(),
+            pki.front_proxy_client(),
+            pki.proxy(),
+            pki.scheduler(),
+            pki.service_account(),
+        ];
+        leaves.extend(pki.kubelets());
+        leaves
     }
 
     #[test]
@@ -652,36 +642,25 @@ mod tests {
         let n = test_network()?;
         let pki = Pki::new(&c, &n)?;
 
-        let apiserver = sans(pki.apiserver())?;
-        for host in [
-            &n.api()?.to_string(),
-            "127.0.0.1",
-            n.hostname(),
-            "kubernetes",
-            "kubernetes.default",
-            "kubernetes.default.svc",
-            "kubernetes.default.svc.cluster.local",
-        ] {
-            assert!(apiserver.iter().any(|s| s == host), "{} missing", host);
-        }
-        assert!(
-            !apiserver
-                .iter()
-                .any(|s| s == "kubernetes.svc.cluster.local")
-        );
+        let mut apiserver = vec![
+            n.api()?.to_string(),
+            "127.0.0.1".into(),
+            n.hostname().into(),
+            "kubernetes".into(),
+            "kubernetes.default".into(),
+            "kubernetes.default.svc".into(),
+            "kubernetes.default.svc.cluster.local".into(),
+        ];
+        apiserver.sort();
+        assert_eq!(sans(pki.apiserver())?, apiserver);
 
-        let mut etcd = sans(pki.etcd())?;
-        etcd.sort();
-        assert_eq!(etcd, ["127.0.0.1", "localhost"]);
+        assert_eq!(sans(pki.etcd())?, ["127.0.0.1", "localhost"]);
 
         let kubelet = &pki.kubelets()[0];
-        let mut kubelet_sans = sans(kubelet)?;
-        kubelet_sans.sort();
         let mut expected = vec!["127.0.0.1".to_string(), n.hostname().into()];
         expected.extend(Network::host_ips()?.iter().map(ToString::to_string));
         expected.sort();
-        expected.dedup();
-        assert_eq!(kubelet_sans, expected);
+        assert_eq!(sans(kubelet)?, expected);
 
         for client in [
             pki.admin(),
@@ -689,8 +668,170 @@ mod tests {
             pki.front_proxy_client(),
             pki.proxy(),
             pki.scheduler(),
+            pki.service_account(),
         ] {
             assert!(sans(client)?.is_empty(), "{} has SANs", client.name());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn certificates_have_subjects() -> Result<()> {
+        let c = test_config()?;
+        let n = test_network()?;
+        let pki = Pki::new(&c, &n)?;
+        let node = format!("system:node:{}", n.hostname());
+        for (identity, common_name, organization) in [
+            (pki.ca(), "kubernetes", "kubernetes"),
+            (pki.front_proxy_ca(), "front-proxy-ca", "front-proxy-ca"),
+            (pki.admin(), "admin", "system:masters"),
+            (pki.apiserver(), "kubernetes", "kubernetes"),
+            (
+                pki.controller_manager(),
+                "system:kube-controller-manager",
+                "system:kube-controller-manager",
+            ),
+            (pki.etcd(), "etcd", "etcd"),
+            (
+                pki.front_proxy_client(),
+                "front-proxy-client",
+                "front-proxy-client",
+            ),
+            (&pki.kubelets()[0], &node, "system:nodes"),
+            (pki.proxy(), "system:kube-proxy", "system:node-proxier"),
+            (
+                pki.scheduler(),
+                "system:kube-scheduler",
+                "system:kube-scheduler",
+            ),
+            (pki.service_account(), "service-accounts", "kubernetes"),
+        ] {
+            assert_eq!(
+                with_cert(identity, |cert| cert.subject().to_string())?,
+                format!("O={}, OU=kubernetes, CN={}", organization, common_name),
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn certificates_have_usages() -> Result<()> {
+        let c = test_config()?;
+        let n = test_network()?;
+        let pki = Pki::new(&c, &n)?;
+
+        for ca in [pki.ca(), pki.front_proxy_ca()] {
+            with_cert(ca, |cert| -> Result<()> {
+                let bc = cert.basic_constraints()?.context("no basic constraints")?;
+                assert!(bc.critical && bc.value.ca && bc.value.path_len_constraint.is_none());
+                let ku = cert.key_usage()?.context("no key usage")?;
+                assert!(ku.critical);
+                assert!(ku.value.key_cert_sign() && ku.value.crl_sign());
+                assert!(!ku.value.digital_signature());
+                assert!(cert.extended_key_usage()?.is_none());
+                Ok(())
+            })??;
+        }
+
+        for leaf in leaves(&pki) {
+            with_cert(leaf, |cert| -> Result<()> {
+                let bc = cert.basic_constraints()?.context("no basic constraints")?;
+                assert!(bc.critical && !bc.value.ca, "{}", leaf.name());
+                let ku = cert.key_usage()?.context("no key usage")?;
+                assert!(ku.critical);
+                assert!(ku.value.digital_signature());
+                assert_eq!(ku.value.flags, 1, "{} usages", leaf.name());
+                let eku = cert
+                    .extended_key_usage()?
+                    .context("no extended key usage")?;
+                assert!(!eku.critical);
+                let eku = eku.value;
+                assert!(eku.server_auth && eku.client_auth, "{}", leaf.name());
+                assert!(eku.other.is_empty() && !eku.any && !eku.code_signing);
+                Ok(())
+            })??;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn certificates_signed_by_ca() -> Result<()> {
+        let c = test_config()?;
+        let n = test_network()?;
+        let pki = Pki::new(&c, &n)?;
+        let ca_pem = pem(pki.ca().cert())?;
+        let ca = ca_pem.parse_x509()?;
+        let front_proxy_ca_pem = pem(pki.front_proxy_ca().cert())?;
+        let front_proxy_ca = front_proxy_ca_pem.parse_x509()?;
+
+        for cert in [&ca, &front_proxy_ca] {
+            assert_eq!(cert.issuer(), cert.subject());
+            cert.verify_signature(None)?;
+            let (aki, ski) = key_ids(cert);
+            assert!(aki.is_none() && ski.is_some());
+        }
+
+        for leaf in leaves(&pki) {
+            let issuer = if leaf.name() == FRONT_PROXY_CLIENT_NAME {
+                &front_proxy_ca
+            } else {
+                &ca
+            };
+            with_cert(leaf, |cert| -> Result<()> {
+                assert_eq!(cert.issuer(), issuer.subject(), "{}", leaf.name());
+                cert.verify_signature(Some(issuer.public_key()))?;
+                let (aki, ski) = key_ids(cert);
+                assert!(aki.is_some() && ski.is_some(), "{}", leaf.name());
+                assert_eq!(aki, key_ids(issuer).1, "{}", leaf.name());
+                Ok(())
+            })??;
+        }
+
+        // The cluster CA must not trust the front proxy client
+        with_cert(pki.front_proxy_client(), |cert| {
+            assert!(cert.verify_signature(Some(ca.public_key())).is_err());
+        })?;
+        Ok(())
+    }
+
+    #[test]
+    fn certificates_validity() -> Result<()> {
+        let c = test_config()?;
+        let n = test_network()?;
+        let pki = Pki::new(&c, &n)?;
+        let now = OffsetDateTime::now_utc().unix_timestamp();
+
+        assert_eq!(CA_VALIDITY.whole_days(), 7300);
+        assert_eq!(CERT_VALIDITY.whole_days(), 3650);
+        let mut identities = vec![(pki.ca(), CA_VALIDITY), (pki.front_proxy_ca(), CA_VALIDITY)];
+        identities.extend(leaves(&pki).into_iter().map(|i| (i, CERT_VALIDITY)));
+        for (identity, expected) in identities {
+            let (not_before, not_after) = with_cert(identity, |cert| {
+                let v = cert.validity();
+                (v.not_before.timestamp(), v.not_after.timestamp())
+            })?;
+            assert!(not_before < now, "{}", identity.name());
+            assert!(now - not_before < 3600, "{}", identity.name());
+            assert_eq!(not_after - not_before, expected.whole_seconds());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn keys_are_private() -> Result<()> {
+        let c = test_config()?;
+        let n = test_network()?;
+        let pki = Pki::new(&c, &n)?;
+        let mut identities = leaves(&pki);
+        identities.extend([pki.ca(), pki.front_proxy_ca()]);
+        for identity in identities {
+            let mode = fs::metadata(identity.key())?.permissions().mode();
+            assert_eq!(mode & 0o777, 0o600, "{}", identity.key().display());
+            let key = KeyPair::from_pem(&fs::read_to_string(identity.key())?)?;
+            assert_eq!(key.algorithm(), &PKCS_ECDSA_P256_SHA256);
+            // The key belongs to the certificate
+            let public_key = with_cert(identity, |cert| cert.public_key().raw.to_vec())?;
+            assert_eq!(key.subject_public_key_info(), public_key);
         }
         Ok(())
     }
@@ -703,40 +844,12 @@ mod tests {
         let kubelet = &pki.kubelets()[0];
         assert_eq!(kubelet.name(), format!("kubelet-{}", n.hostname()));
         assert_eq!(
-            certinfo(kubelet)?["subject"]["common_name"],
-            format!("system:node:{}", n.hostname())
+            with_cert(kubelet, |cert| cert.subject().to_string())?,
+            format!(
+                "O=system:nodes, OU=kubernetes, CN=system:node:{}",
+                n.hostname()
+            )
         );
-        Ok(())
-    }
-
-    #[test]
-    fn front_proxy_client_signed_by_front_proxy_ca() -> Result<()> {
-        let c = test_config()?;
-        let n = test_network()?;
-        let pki = Pki::new(&c, &n)?;
-        let client = certinfo(pki.front_proxy_client())?;
-        assert_eq!(client["subject"]["common_name"], FRONT_PROXY_CLIENT_NAME);
-        assert_eq!(client["issuer"]["common_name"], FRONT_PROXY_CA_NAME);
-        assert_eq!(
-            certinfo(pki.apiserver())?["issuer"]["common_name"],
-            APISERVER_NAME
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn ca_outlives_certificates() -> Result<()> {
-        let c = test_config()?;
-        let n = test_network()?;
-        let pki = Pki::new(&c, &n)?;
-        let not_after = |i: &Identity| -> Result<String> {
-            Ok(certinfo(i)?["not_after"]
-                .as_str()
-                .context("missing not_after")?
-                .into())
-        };
-        assert!(not_after(pki.ca())? > not_after(pki.apiserver())?);
-        assert!(not_after(pki.front_proxy_ca())? > not_after(pki.front_proxy_client())?);
         Ok(())
     }
 

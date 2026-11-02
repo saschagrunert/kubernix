@@ -2,7 +2,6 @@
 with pkgs;
 [
   cacert
-  cfssl
   cni-plugins
   conmon
   conntrack-tools

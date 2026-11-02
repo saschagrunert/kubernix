@@ -132,7 +132,6 @@ lint-deny: ## Check licenses and duplicate dependencies via cargo-deny.
 	cargo deny check
 
 SHELL_SCRIPTS := \
-	contrib/install-cfssl \
 	contrib/integration-test \
 	contrib/prepare-system \
 	hack/update-readme-versions.sh \
