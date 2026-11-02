@@ -3,7 +3,7 @@
 //! Handles kernel module loading, sysctl configuration, hosts file
 //! management, executable lookup in `$PATH`, and container detection.
 
-use crate::{Config, node::Node};
+use crate::{Config, crio, node::Node};
 use anyhow::{Context, Result, bail};
 use log::{debug, info, warn};
 use nix::mount::{MsFlags, mount};
@@ -18,7 +18,10 @@ use std::{
 
 /// Manages host-level system preparation and cleanup.
 pub struct System {
-    hosts: Option<String>,
+    /// The hosts file which contains node entries to be removed on cleanup.
+    hosts: Option<PathBuf>,
+    /// Comment which marks the hosts file lines of the run root.
+    hosts_tag: String,
 }
 
 impl System {
@@ -26,7 +29,8 @@ impl System {
     /// the copy-up keeps them owned by the host root and not writable.
     /// `/var/lib/cni` holds the CNI result cache of CRI-O and containerd,
     /// which is not configurable, `/run/netns` the pod network namespaces
-    /// of containerd and `/run/containerd` the shim sockets.
+    /// of containerd, `/run/containerd` the shim sockets and `/run/kubernix`
+    /// the attach sockets of CRI-O.
     const ROOTLESS_DIRS: &'static [&'static str] = &[
         "/var/lib/kubelet",
         "/var/lib/crio",
@@ -39,6 +43,7 @@ impl System {
         "/run/containers",
         "/run/containerd",
         "/run/netns",
+        crio::ATTACH_SOCKET_BASE,
     ];
 
     /// The kubelet device plugin directory, which does not follow `--root-dir`.
@@ -122,37 +127,31 @@ impl System {
             info!("Skipping modprobe and sysctl (containerized)");
         }
 
+        // Remove the entries of a former run of the same root which did not
+        // clean up, other roots may belong to running clusters
+        let hosts_file = Self::hosts();
+        let hosts_tag = Self::hosts_tag(config.root());
+        if let Err(e) = Self::remove_hosts_entries(&hosts_file, &hosts_tag) {
+            debug!("Unable to remove stale hosts entries: {:#}", e);
+        }
+
         let hosts = if config.multi_node() {
             // Try to write the hostnames, which does not work on every system
-            let hosts_file = Self::hosts();
-            let hosts = read_to_string(&hosts_file)?;
-            let local_hosts = (0..config.nodes())
+            let entries = (0..config.nodes())
                 .map(|x| format!("{} {}", Ipv4Addr::LOCALHOST, Node::raw(x)))
                 .collect::<Vec<_>>();
-
-            let mut new_hosts = hosts
-                .lines()
-                .filter(|x| !local_hosts.iter().any(|y| x == y))
-                .map(|x| x.into())
-                .collect::<Vec<_>>();
-            new_hosts.extend(local_hosts);
-
-            match fs::write(&hosts_file, new_hosts.join("\n")) {
+            match Self::add_hosts_entries(&hosts_file, &hosts_tag, &entries) {
                 Err(e) => {
-                    debug!(
-                        "Unable to write hosts file '{}'. The nodes may be not reachable: {}",
-                        hosts_file.display(),
-                        e
-                    );
+                    debug!("{:#}. The nodes may be not reachable", e);
                     None
                 }
-                _ => Some(hosts),
+                _ => Some(hosts_file),
             }
         } else {
             None
         };
 
-        Ok(Self { hosts })
+        Ok(Self { hosts, hosts_tag })
     }
 
     /// Returns true if running inside a user namespace (uid 0 maps to
@@ -193,13 +192,74 @@ impl System {
     /// Restore the initial system state
     fn cleanup(&mut self) {
         if let Some(hosts) = self.hosts.take()
-            && let Err(e) = fs::write(Self::hosts(), hosts)
+            && let Err(e) = Self::remove_hosts_entries(&hosts, &self.hosts_tag)
         {
             warn!(
-                "Unable to restore hosts file, may need manual cleanup: {}",
+                "Unable to restore hosts file, may need manual cleanup: {:#}",
                 e
             );
         }
+    }
+
+    /// Short and stable identifier of the run root (32 bit FNV-1a hash).
+    pub fn root_id(root: &Path) -> String {
+        let hash = root
+            .as_os_str()
+            .as_encoded_bytes()
+            .iter()
+            .fold(0x811c_9dc5_u32, |hash, byte| {
+                (hash ^ u32::from(*byte)).wrapping_mul(0x0100_0193)
+            });
+        format!("{:08x}", hash)
+    }
+
+    /// Comment which marks the hosts file lines added for the run root.
+    fn hosts_tag(root: &Path) -> String {
+        format!("# kubernix {}", Self::root_id(root))
+    }
+
+    /// Append the entries marked with `tag` to the hosts file, replacing
+    /// lines with the same tag and untagged duplicates of the entries,
+    /// which former versions did not tag.
+    fn add_hosts_entries(path: &Path, tag: &str, entries: &[String]) -> Result<()> {
+        let mut content = Self::strip_hosts_entries(&Self::read_hosts(path)?, tag, entries);
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        for entry in entries {
+            content.push_str(&format!("{} {}\n", entry, tag));
+        }
+        fs::write(path, content)
+            .with_context(|| format!("Unable to write hosts file '{}'", path.display()))
+    }
+
+    /// Remove all lines marked with `tag` from the hosts file, the file
+    /// stays untouched if there are none.
+    fn remove_hosts_entries(path: &Path, tag: &str) -> Result<()> {
+        let content = Self::read_hosts(path)?;
+        let stripped = Self::strip_hosts_entries(&content, tag, &[]);
+        if stripped != content {
+            fs::write(path, stripped)
+                .with_context(|| format!("Unable to write hosts file '{}'", path.display()))?;
+        }
+        Ok(())
+    }
+
+    fn read_hosts(path: &Path) -> Result<String> {
+        read_to_string(path)
+            .with_context(|| format!("Unable to read hosts file '{}'", path.display()))
+    }
+
+    /// Remove the lines marked with `tag` and the lines equal to one of
+    /// `untagged`, keep all others including their line endings.
+    fn strip_hosts_entries(content: &str, tag: &str, untagged: &[String]) -> String {
+        content
+            .split_inclusive('\n')
+            .filter(|line| {
+                let line = line.trim_end();
+                !line.ends_with(tag) && !untagged.iter().any(|x| x == line)
+            })
+            .collect()
     }
 
     /// Find an executable inside the current $PATH environment
@@ -347,6 +407,143 @@ mod tests {
     #[test]
     fn rootless_dirs_contain_cni_cache() {
         assert!(System::ROOTLESS_DIRS.contains(&"/var/lib/cni"));
+    }
+
+    #[test]
+    fn rootless_dirs_contain_attach_socket_base() {
+        assert!(System::ROOTLESS_DIRS.contains(&crio::ATTACH_SOCKET_BASE));
+    }
+
+    const HOSTS: &str = "127.0.0.1 localhost\n::1 localhost # comment\n\n# end\n";
+    const TAG_A: &str = "# kubernix 0000000a";
+    const TAG_B: &str = "# kubernix 0000000b";
+
+    fn hosts_file(content: &str) -> Result<tempfile::NamedTempFile> {
+        let file = tempfile::NamedTempFile::new()?;
+        fs::write(file.path(), content)?;
+        Ok(file)
+    }
+
+    fn entries() -> Vec<String> {
+        vec!["127.0.0.1 node-0".into(), "127.0.0.1 node-1".into()]
+    }
+
+    #[test]
+    fn root_id_is_stable() {
+        assert_eq!(System::root_id(Path::new("")), "811c9dc5");
+        assert_eq!(System::root_id(Path::new("a")), "e40c292c");
+        assert_eq!(System::hosts_tag(Path::new("a")), "# kubernix e40c292c");
+    }
+
+    #[test]
+    fn hosts_entries_add_and_remove() -> Result<()> {
+        let file = hosts_file(HOSTS)?;
+        System::add_hosts_entries(file.path(), TAG_A, &entries())?;
+        assert_eq!(
+            read_to_string(file.path())?,
+            format!(
+                "{h}127.0.0.1 node-0 {t}\n127.0.0.1 node-1 {t}\n",
+                h = HOSTS,
+                t = TAG_A
+            )
+        );
+        System::remove_hosts_entries(file.path(), TAG_A)?;
+        assert_eq!(read_to_string(file.path())?, HOSTS);
+        Ok(())
+    }
+
+    #[test]
+    fn hosts_entries_keep_changes_while_running() -> Result<()> {
+        let file = hosts_file(HOSTS)?;
+        System::add_hosts_entries(file.path(), TAG_A, &entries())?;
+        let mut content = read_to_string(file.path())?;
+        content.push_str("10.0.0.1 added\n");
+        fs::write(file.path(), content)?;
+        System::remove_hosts_entries(file.path(), TAG_A)?;
+        assert_eq!(
+            read_to_string(file.path())?,
+            format!("{}10.0.0.1 added\n", HOSTS)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn hosts_entries_replace_stale() -> Result<()> {
+        let file = hosts_file(&format!("{}127.0.0.1 node-5 {}\n", HOSTS, TAG_A))?;
+        System::add_hosts_entries(file.path(), TAG_A, &entries())?;
+        System::add_hosts_entries(file.path(), TAG_A, &entries())?;
+        let content = read_to_string(file.path())?;
+        assert!(!content.contains("node-5"));
+        assert_eq!(content.matches("node-0").count(), 1);
+        System::remove_hosts_entries(file.path(), TAG_A)?;
+        assert_eq!(read_to_string(file.path())?, HOSTS);
+        Ok(())
+    }
+
+    #[test]
+    fn hosts_entries_multiple_roots() -> Result<()> {
+        let file = hosts_file(HOSTS)?;
+        System::add_hosts_entries(file.path(), TAG_A, &entries())?;
+        System::add_hosts_entries(file.path(), TAG_B, &entries()[..1])?;
+        let both = read_to_string(file.path())?;
+        assert_eq!(both.matches(TAG_A).count(), 2);
+        assert_eq!(both.matches(TAG_B).count(), 1);
+
+        // The startup cleanup of another root keeps the entries
+        System::remove_hosts_entries(file.path(), "# kubernix 0000000c")?;
+        assert_eq!(read_to_string(file.path())?, both);
+
+        System::remove_hosts_entries(file.path(), TAG_A)?;
+        assert_eq!(
+            read_to_string(file.path())?,
+            format!("{}127.0.0.1 node-0 {}\n", HOSTS, TAG_B)
+        );
+        System::remove_hosts_entries(file.path(), TAG_B)?;
+        assert_eq!(read_to_string(file.path())?, HOSTS);
+        Ok(())
+    }
+
+    #[test]
+    fn hosts_entries_replace_untagged_duplicates() -> Result<()> {
+        let file = hosts_file(&format!(
+            "{}127.0.0.1 node-0\n127.0.0.1 node-0 custom\n",
+            HOSTS
+        ))?;
+        System::add_hosts_entries(file.path(), TAG_A, &entries())?;
+        assert_eq!(
+            read_to_string(file.path())?,
+            format!(
+                "{h}127.0.0.1 node-0 custom\n127.0.0.1 node-0 {t}\n127.0.0.1 node-1 {t}\n",
+                h = HOSTS,
+                t = TAG_A
+            )
+        );
+        System::remove_hosts_entries(file.path(), TAG_A)?;
+        assert_eq!(
+            read_to_string(file.path())?,
+            format!("{}127.0.0.1 node-0 custom\n", HOSTS)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn hosts_entries_without_trailing_newline() -> Result<()> {
+        let file = hosts_file("127.0.0.1 localhost")?;
+        System::add_hosts_entries(file.path(), TAG_A, &entries()[..1])?;
+        assert_eq!(
+            read_to_string(file.path())?,
+            format!("127.0.0.1 localhost\n127.0.0.1 node-0 {}\n", TAG_A)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn hosts_entries_remove_untouched() -> Result<()> {
+        let file = hosts_file("127.0.0.1 localhost")?;
+        System::remove_hosts_entries(file.path(), TAG_A)?;
+        assert_eq!(read_to_string(file.path())?, "127.0.0.1 localhost");
+        assert!(System::remove_hosts_entries(Path::new("/should/not/exist"), TAG_A).is_err());
+        Ok(())
     }
 
     #[test]

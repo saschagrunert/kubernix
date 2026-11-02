@@ -190,9 +190,10 @@ pub struct Config {
         long = "packages",
         num_args = 1..,
         short = 'p',
+        value_delimiter = ',',
         value_name = "PACKAGE",
     )]
-    /// Additional dependencies to be added to the environment
+    /// Additional dependencies to be added to the environment, comma separated
     packages: Vec<String>,
 
     #[arg(
@@ -282,10 +283,11 @@ pub struct Config {
         long = "addons",
         short = 'a',
         num_args = 0..,
+        value_delimiter = ',',
         value_name = "ADDON",
         value_parser = Config::validate_addon,
     )]
-    /// Cluster addons to deploy (available: coredns)
+    /// Cluster addons to deploy, comma separated (available: coredns)
     addons: Vec<String>,
 }
 
@@ -852,6 +854,46 @@ root = "root"
     }
 
     #[test]
+    fn packages_from_env_comma_separated() {
+        temp_env::with_var("KUBERNIX_PACKAGES", Some("kubernetes-helm,jq"), || {
+            let c = Config::parse_from(["kubernix"]);
+            assert_eq!(c.packages(), ["kubernetes-helm", "jq"]);
+        });
+    }
+
+    #[test]
+    fn packages_from_args() {
+        temp_env::with_var_unset("KUBERNIX_PACKAGES", || {
+            for args in [
+                &["kubernix", "-p", "helm", "jq"][..],
+                &["kubernix", "-p", "helm", "-p", "jq"],
+                &["kubernix", "--packages=helm,jq"],
+            ] {
+                assert_eq!(Config::parse_from(args).packages(), ["helm", "jq"]);
+            }
+        });
+    }
+
+    #[test]
+    fn addons_from_env_comma_separated() {
+        temp_env::with_var("KUBERNIX_ADDONS", Some("coredns,coredns"), || {
+            let c = Config::parse_from(["kubernix"]);
+            assert_eq!(c.addons(), ["coredns", "coredns"]);
+        });
+    }
+
+    #[test]
+    fn addons_from_args() {
+        temp_env::with_var_unset("KUBERNIX_ADDONS", || {
+            let c = Config::parse_from(["kubernix", "-a", "coredns", "-a", "coredns"]);
+            assert_eq!(c.addons(), ["coredns", "coredns"]);
+            assert_eq!(Config::parse_from(["kubernix"]).addons(), ["coredns"]);
+            assert!(Config::parse_from(["kubernix", "-a"]).addons().is_empty());
+            assert!(Config::try_parse_from(["kubernix", "--addons=coredns,invalid"]).is_err());
+        });
+    }
+
+    #[test]
     fn multi_node_threshold() -> Result<()> {
         let mut c = test_config()?;
         assert!(!c.multi_node());
@@ -983,6 +1025,22 @@ root = "root"
         let c = existing(&stored, &["--packages", "hello", "kubernetes-helm"])?;
         assert_eq!(c.packages(), ["hello", "kubernetes-helm"]);
         Ok(())
+    }
+
+    #[test]
+    fn merge_overrides_nix_environment_from_env() -> Result<()> {
+        temp_env::with_vars(
+            [
+                ("KUBERNIX_PACKAGES", Some("kubernetes-helm,jq")),
+                ("KUBERNIX_ADDONS", Some("coredns")),
+            ],
+            || -> Result<()> {
+                let c = existing(&["--packages=hello", "--addons"], &[])?;
+                assert_eq!(c.packages(), ["kubernetes-helm", "jq"]);
+                assert_eq!(c.addons(), ["coredns"]);
+                Ok(())
+            },
+        )
     }
 
     #[test]
