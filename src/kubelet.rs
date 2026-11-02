@@ -9,19 +9,20 @@ use crate::{
     container::Container,
     cri::{self, MAX_SOCKET_PATH_LEN},
     kubeconfig::KubeConfig,
-    network::Network,
+    network::{HEALTHZ_PORT_BASE, KUBELET_PORT_BASE, Network},
     node::Node,
     pki::Pki,
-    process::{Process, ProcessState, stoppable},
+    process::{Process, ProcessState, Stoppable},
     system::System,
     write_if_changed,
 };
 use anyhow::{Context, Result, bail};
-use std::{fs::create_dir_all, path::Path};
+use std::{
+    fs::create_dir_all,
+    path::{Path, PathBuf},
+};
 
 const KUBELET: &str = "kubelet";
-const KUBELET_PORT_BASE: u16 = 11250;
-const HEALTHZ_PORT_BASE: u16 = 12250;
 
 /// Component wrapper for registry-based startup (per-node).
 pub struct KubeletComponent {
@@ -56,6 +57,9 @@ impl Component for KubeletComponent {
 /// Manages the kubelet process lifecycle for a single node.
 pub struct Kubelet {
     process: Process,
+    /// The executable and the config argument of a kubelet inside a node
+    /// container, which identify its process.
+    exec: Option<(PathBuf, String)>,
 }
 
 impl Kubelet {
@@ -92,8 +96,10 @@ impl Kubelet {
 
         create_dir_all(&dir).context("Unable to create kubelet directory")?;
 
+        // The serving certificate, the client certificate is part of the
+        // kubeconfig
         let identity = pki
-            .kubelets()
+            .kubelet_servers()
             .get(node as usize)
             .with_context(|| format!("Unable to retrieve kubelet identity for {}", node_name))?;
 
@@ -108,6 +114,9 @@ impl Kubelet {
         let port = KUBELET_PORT_BASE + u16::from(node);
         let healthz_port = HEALTHZ_PORT_BASE + u16::from(node);
         let cri_socket = cri::cri_socket(config, network, node)?.to_socket_string();
+        // The node containers mount the directory of the file, see
+        // Container::start.
+        let resolv_conf = Network::resolv_conf().display().to_string();
         let yml = if config.is_rootless() {
             format!(
                 include_str!("assets/kubelet-rootless.yml"),
@@ -120,6 +129,7 @@ impl Kubelet {
                 pod_logs_dir = dir.join("pods").display(),
                 port = port,
                 healthzPort = healthz_port,
+                resolv_conf = resolv_conf,
             )
         } else {
             format!(
@@ -132,15 +142,17 @@ impl Kubelet {
                 cri_socket = cri_socket,
                 port = port,
                 healthzPort = healthz_port,
+                resolv_conf = resolv_conf,
             )
         };
         let cfg = dir.join("config.yml");
         write_if_changed(&cfg, &yml)?;
 
-        let args = &[
-            &format!("--config={}", cfg.display()),
-            &format!("--root-dir={}", root_dir.display()),
-            &format!(
+        let arg_config = format!("--config={}", cfg.display());
+        let mut args = vec![
+            arg_config.clone(),
+            format!("--root-dir={}", root_dir.display()),
+            format!(
                 "--kubeconfig={}",
                 kubeconfig
                     .kubelets()
@@ -151,14 +163,21 @@ impl Kubelet {
                     ))?
                     .display()
             ),
-            "--v=2",
+            "--v=2".into(),
         ];
+        // The node IP is not part of the configuration file
+        if let Some(ip) = network.node_ip(node)? {
+            args.push(format!("--node-ip={}", ip));
+        }
+        let args = args.iter().map(String::as_str).collect::<Vec<_>>();
 
-        let mut process = if config.multi_node() && !config.is_rootless() {
+        let mut exec = None;
+        let process = if config.multi_node() && !config.is_rootless() {
             // Run inside a container
             let arg_hostname = &format!("--hostname-override={}", node_name);
             let mut modargs: Vec<&str> = vec![arg_hostname];
-            modargs.extend(args);
+            modargs.extend(&args);
+            exec = Some((System::find_executable(KUBELET)?, arg_config.clone()));
             Container::exec(
                 config,
                 &dir,
@@ -172,7 +191,7 @@ impl Kubelet {
             // its own device plugin directory
             let arg_hostname = format!("--hostname-override={}", node_name);
             let mut modargs: Vec<&str> = vec![&arg_hostname];
-            modargs.extend(args);
+            modargs.extend(&args);
             let device_plugins = dir.join("device-plugins");
             create_dir_all(&device_plugins)
                 .context("Unable to create kubelet device plugin directory")?;
@@ -186,20 +205,39 @@ impl Kubelet {
             )?
         } else {
             // Single-node: run as usual process
-            Process::start(&dir, "Kubelet", KUBELET, args)?
+            Process::start(&dir, "Kubelet", KUBELET, &args)?
         };
-        process.wait_ready("Successfully registered node")?;
-        Ok(Box::new(Self { process }))
+        let mut kubelet = Self { process, exec };
+        if let Err(e) = kubelet.process.wait_ready("Successfully registered node") {
+            let _ = kubelet.stop();
+            return Err(e);
+        }
+        Ok(Box::new(kubelet))
     }
 }
 
-stoppable!(Kubelet);
+impl Stoppable for Kubelet {
+    fn stop(&mut self) -> Result<()> {
+        // The exec of the container runtime does not forward signals, so
+        // the kubelet would keep running inside the node container and
+        // race with the pod removal of the CRI runtime. It runs from the
+        // Nix store of the host, so its process is found by the same
+        // executable path.
+        if let Some((executable, arg_config)) = &self.exec {
+            self.process.stop_exec(executable, arg_config);
+        }
+        self.process.stop()
+    }
+
+    fn died(&mut self) -> bool {
+        self.process.died()
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::cri::MAX_SOCKET_PATH_LEN;
-    use clap::Parser;
 
     #[test]
     fn config_template_renders() {
@@ -213,6 +251,7 @@ mod tests {
             cri_socket = "unix:///run/crio/crio.sock",
             port = KUBELET_PORT_BASE,
             healthzPort = HEALTHZ_PORT_BASE,
+            resolv_conf = "/run/systemd/resolve/resolv.conf",
         );
         assert!(yml.contains("kind: KubeletConfiguration"));
         assert!(yml.contains("clientCAFile: \"/tmp/ca.pem\""));
@@ -222,11 +261,13 @@ mod tests {
         assert!(yml.contains("containerRuntimeEndpoint: \"unix:///run/crio/crio.sock\""));
         assert!(yml.contains(&format!("port: {}", KUBELET_PORT_BASE)));
         assert!(yml.contains(&format!("healthzPort: {}", HEALTHZ_PORT_BASE)));
+        assert!(yml.contains("resolvConf: \"/run/systemd/resolve/resolv.conf\""));
     }
 
     #[test]
     fn validate_paths_short_root() -> Result<()> {
-        let config = crate::config::tests::test_config()?;
+        // A fixed root, since the one of test_config depends on TMPDIR
+        let config = crate::config::tests::parse(&["--root", "/kx"])?;
         let network = Network::new(&config)?;
         Kubelet::validate_paths(&config, &network, 0)
     }
@@ -234,23 +275,16 @@ mod tests {
     #[test]
     fn validate_paths_long_kubelet_root() -> Result<()> {
         // The CRI socket path fits, but the kubelet pod resources socket not
-        let node = Network::new(&crate::config::tests::test_config()?)?
+        let node = Network::new(&*crate::config::tests::test_config()?)?
             .hostname()
             .to_string();
         let root = format!("/{}", "a".repeat(MAX_SOCKET_PATH_LEN - node.len() - 20));
-        let config = Config::parse_from(["kubernix", "--root", &root]);
+        let config = crate::config::tests::parse(&["--root", &root])?;
         let network = Network::new(&config)?;
         cri::cri_socket(&config, &network, 0)?;
         let err = Kubelet::validate_paths(&config, &network, 0).unwrap_err();
         assert!(err.to_string().contains("Kubelet run path"));
         Ok(())
-    }
-
-    #[test]
-    fn component_metadata() {
-        let c = KubeletComponent::new(0);
-        assert_eq!(c.name(), "Kubelet (node 0)");
-        assert_eq!(c.phase(), Phase::NodeAgent);
     }
 
     #[test]
@@ -272,6 +306,7 @@ mod tests {
             pod_logs_dir = "/tmp/kubelet/node-0/pods",
             port = KUBELET_PORT_BASE,
             healthzPort = HEALTHZ_PORT_BASE,
+            resolv_conf = "/run/systemd/resolve/resolv.conf",
         );
         assert!(yml.contains("kind: KubeletConfiguration"));
         // The kubelet takes the cgroup driver from the CRI runtime

@@ -11,12 +11,18 @@ use crate::{
     kubectl::Kubectl,
     network::Network,
     pki::Pki,
-    process::{ProcessState, Stoppables},
+    process::{self, Canceled, ProcessState, Stoppables},
     signals,
 };
 use anyhow::anyhow;
 use log::{debug, error, info};
-use std::thread;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+};
 
 /// Boot phases control the startup order of cluster components.
 /// Components in the same phase start concurrently; phases run sequentially.
@@ -75,12 +81,6 @@ pub struct ComponentRegistry {
     components: Vec<Box<dyn Component>>,
 }
 
-impl Default for ComponentRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ComponentRegistry {
     /// Create an empty registry
     pub fn new() -> Self {
@@ -117,7 +117,9 @@ impl ComponentRegistry {
     /// Execute all registered components phase by phase.
     ///
     /// Within each phase, components start in parallel, each on its own
-    /// thread since a start blocks until the component is ready.
+    /// thread since a start blocks until the component is ready. Once a
+    /// component fails, the others of the phase stop waiting for their
+    /// readiness.
     /// If any component in a phase fails or a termination signal has been
     /// received, subsequent phases are skipped (later phases depend on
     /// earlier ones).
@@ -143,34 +145,9 @@ impl ComponentRegistry {
                 phase,
                 components.len()
             );
-            let results: Vec<ProcessState> = thread::scope(|s| {
-                let handles: Vec<_> = components
-                    .iter()
-                    .map(|c| {
-                        s.spawn(move || {
-                            debug!("Starting {}", c.name());
-                            c.start(ctx)
-                        })
-                    })
-                    .collect();
-                handles
-                    .into_iter()
-                    .zip(components)
-                    .map(|(h, c)| {
-                        h.join()
-                            .unwrap_or_else(|_| Err(anyhow!("Starting {} panicked", c.name())))
-                    })
-                    .collect()
-            });
-
-            let mut group = Stoppables::new();
-            for result in results {
-                match result {
-                    Ok(p) => group.push(p),
-                    Err(e) => failures.push(format!("{:#}", e)),
-                }
-            }
+            let (group, errors) = Self::start_phase(components, |c| c.start(ctx));
             groups.push(group);
+            failures.extend(errors);
 
             if !failures.is_empty() {
                 error!(
@@ -186,12 +163,61 @@ impl ComponentRegistry {
         groups.reverse();
         (groups, failures)
     }
+
+    /// Start the components of a phase in parallel via `start`. Returns the
+    /// started ones and the failures, without the cancellations which a
+    /// failure caused.
+    fn start_phase<F>(components: &[&dyn Component], start: F) -> (Stoppables, Vec<String>)
+    where
+        F: Fn(&dyn Component) -> ProcessState + Sync,
+    {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let results: Vec<ProcessState> = thread::scope(|s| {
+            let handles: Vec<_> = components
+                .iter()
+                .map(|c| {
+                    let cancel = Arc::clone(&cancel);
+                    let start = &start;
+                    s.spawn(move || {
+                        debug!("Starting {}", c.name());
+                        process::set_cancel(Arc::clone(&cancel));
+                        let result = start(*c);
+                        if result.is_err() {
+                            cancel.store(true, Ordering::SeqCst);
+                        }
+                        result
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .zip(components)
+                .map(|(h, c)| {
+                    h.join()
+                        .unwrap_or_else(|_| Err(anyhow!("Starting {} panicked", c.name())))
+                })
+                .collect()
+        });
+
+        let mut group = Stoppables::new();
+        let mut failures = Vec::new();
+        for result in results {
+            match result {
+                Ok(p) => group.push(p),
+                Err(e) if e.downcast_ref::<Canceled>().is_some() => debug!("{:#}", e),
+                Err(e) => failures.push(format!("{:#}", e)),
+            }
+        }
+        (group, failures)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::bail;
+    use crate::process::{Stoppable, canceled};
+    use anyhow::{Context, Result, bail};
+    use std::time::{Duration, Instant};
 
     struct FakeComponent {
         name: String,
@@ -240,6 +266,56 @@ mod tests {
         assert_eq!(phases[1].1.len(), 1);
         assert_eq!(phases[2].0, Phase::Controller);
         assert_eq!(phases[2].1.len(), 2);
+    }
+
+    struct FakeStarted;
+
+    impl Stoppable for FakeStarted {
+        fn stop(&mut self) -> Result<()> {
+            Ok(())
+        }
+
+        fn died(&mut self) -> bool {
+            false
+        }
+    }
+
+    /// Start the fake components: "fail" fails, "wait" waits until it gets
+    /// canceled and the others succeed.
+    fn start_fake(c: &dyn Component) -> ProcessState {
+        match c.name() {
+            "fail" => bail!("failed"),
+            "wait" => {
+                let deadline = Instant::now() + Duration::from_secs(10);
+                while !canceled() {
+                    if Instant::now() >= deadline {
+                        bail!("not canceled")
+                    }
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(Canceled).context("stopped waiting")
+            }
+            _ => Ok(Box::new(FakeStarted)),
+        }
+    }
+
+    fn fake(name: &str) -> FakeComponent {
+        FakeComponent {
+            name: name.into(),
+            phase: Phase::Controller,
+        }
+    }
+
+    #[test]
+    fn start_phase_cancels_siblings() {
+        let (a, b, c) = (fake("ok"), fake("wait"), fake("fail"));
+        let (group, failures) = ComponentRegistry::start_phase(&[&a, &b, &c], start_fake);
+        assert_eq!(group.len(), 1);
+        assert_eq!(failures, ["failed"]);
+
+        let (group, failures) = ComponentRegistry::start_phase(&[&a, &a], start_fake);
+        assert_eq!(group.len(), 2);
+        assert!(failures.is_empty());
     }
 
     #[test]

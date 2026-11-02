@@ -18,6 +18,7 @@ wildcards = "allow"
 skip = [
     { crate = "getrandom@0.2", reason = "ring 0.17 depends on getrandom 0.2" },
     { crate = "windows-sys@0.52", reason = "ring 0.17 depends on windows-sys 0.52" },
+    { crate = "syn@2", reason = "the asn1-rs proc macros of x509-parser depend on syn 2 at build time" },
 ]
 
 [sources]

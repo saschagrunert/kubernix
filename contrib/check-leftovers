@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# Verify that no kubernix cluster runs in the run root and that the last one
+# left nothing behind: processes, mounts, node containers, firewall rules,
+# network interfaces, addresses and /etc/hosts entries.
+#
+# Only one cluster may have run on the machine, the checks match all
+# kubernix leftovers, not only the ones of the run root. kubernix stop removes
+# stale node containers and mounts of a stopped cluster, so it only runs after
+# the checks.
+set -euo pipefail
+
+KUBERNIX="${KUBERNIX:-./kubernix}"
+KUBERNIX_ROOT="${KUBERNIX_ROOT:-$PWD/kubernix-run}"
+# The --cidr of the cluster
+CIDR="${CIDR:-10.10.0.0/16}"
+ROOTLESS="${ROOTLESS:-false}"
+# Check for node containers, which only root multi-node clusters create
+CHECK_CONTAINERS="${CHECK_CONTAINERS:-false}"
+# The --container-runtime of the cluster
+CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-podman}"
+
+if [ "$ROOTLESS" = true ]; then AS_ROOT=(); else AS_ROOT=(sudo); fi
+ROOT=$(realpath -m "$KUBERNIX_ROOT")
+
+failed=0
+stderr=$(mktemp)
+trap 'rm -f "$stderr"' EXIT
+# Report a leftover with its details.
+leftover() {
+  echo "::error::$1"
+  echo "$2"
+  failed=1
+}
+
+ip_to_int() {
+  local IFS=. a b c d
+  read -r a b c d <<<"$1"
+  echo $(((a << 24) | (b << 16) | (c << 8) | d))
+}
+
+# Succeed if the IPv4 address is in the CIDR.
+in_cidr() {
+  local ip=$1 net=${2%/*} prefix=${2#*/} mask
+  [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  mask=$(((0xffffffff << (32 - prefix)) & 0xffffffff))
+  [ $(($(ip_to_int "$ip") & mask)) -eq $(($(ip_to_int "$net") & mask)) ]
+}
+
+rc=0
+"${AS_ROOT[@]}" "$KUBERNIX" --root "$ROOT" status || rc=$?
+if [ "$rc" -ne 3 ]; then
+  leftover "kubernix status exited with $rc instead of 3 without a running cluster" ""
+fi
+# Other users can read the state of a root cluster
+rc=0
+"$KUBERNIX" --root "$ROOT" status || rc=$?
+if [ "$rc" -ne 3 ]; then
+  leftover "unprivileged kubernix status exited with $rc instead of 3 without a running cluster" ""
+fi
+if [ -e "$ROOT/kubernix.pid" ]; then
+  leftover "Leftover PID file" "$ROOT/kubernix.pid"
+fi
+
+# The components run from the Nix store, CoreDNS, the pause and the test
+# containers from their images. Give the kernel a moment to reap the last
+# processes.
+components='etcd|kube-apiserver|kube-controller-manager|kube-scheduler|kube-proxy|kubelet'
+runtimes='crio|conmon|conmonrs|containerd|containerd-shim-runc-v2|crun|runc|rootlesskit|slirp4netns'
+pattern=" (/nix/store/[^/]+/bin/\.?($components|$runtimes)(-wrapped)?|.*/(busybox|coredns|kubernix|pause))( \(deleted\))?$"
+for _ in $(seq 10); do
+  procs=$(sudo find /proc/[0-9]*/exe -maxdepth 0 -printf '%p %l\n' 2>/dev/null | grep -E "$pattern" || true)
+  [ -z "$procs" ] && break
+  sleep 1
+done
+if [ -n "$procs" ]; then
+  leftover "Leftover kubernix processes" "$procs"
+fi
+
+# CRI-O keeps its version files and exec PID files below /run/kubernix,
+# nothing may stay mounted there
+mounts=$(awk -v root="$ROOT" \
+  '$2 == root || index($2, root "/") == 1 || $2 == "/run/kubernix" || index($2, "/run/kubernix/") == 1' \
+  /proc/mounts)
+if [ -n "$mounts" ]; then
+  leftover "Leftover mounts below $ROOT or /run/kubernix" "$mounts"
+fi
+
+# The last root mode cluster restores the sysctls of the host and empties
+# the state file
+if [ -s /run/kubernix-host-state ]; then
+  leftover "The host state has not been restored" "$(sudo cat /run/kubernix-host-state)"
+fi
+
+if [ "$CHECK_CONTAINERS" = true ]; then
+  case "$CONTAINER_RUNTIME" in
+  podman | docker) ;;
+  *)
+    echo "::error::Unsupported CONTAINER_RUNTIME '$CONTAINER_RUNTIME', use podman or docker"
+    exit 1
+    ;;
+  esac
+  # The node containers carry the label kubernix.root, former versions
+  # named them kubernix-node-<node> without labels
+  containers=""
+  for filter in label=kubernix.root 'name=^kubernix-node-'; do
+    if ! names=$(sudo "$CONTAINER_RUNTIME" ps -a --filter "$filter" --format '{{.Names}}' 2>"$stderr"); then
+      leftover "Unable to list the containers via $CONTAINER_RUNTIME" "$(cat "$stderr")"
+      continue
+    fi
+    containers+="$names"$'\n'
+  done
+  containers=$(sort -u <<<"$containers" | sed '/^$/d')
+  if [ -n "$containers" ]; then
+    leftover "Leftover node containers" "$containers"
+  fi
+fi
+
+# The CNI networks and their rules are named after kubernix, the NAT
+# exemption has the comment "kubernix <run root>".
+rules=$({
+  sudo iptables-save || true
+  sudo ip6tables-save || true
+  sudo nft list ruleset || true
+} 2>/dev/null | grep -F kubernix || true)
+if [ -n "$rules" ]; then
+  leftover "Leftover kubernix firewall rules" "$rules"
+fi
+
+# The bridges are named kx<run root id>.<node>, former versions used
+# kubernix.<node>
+links=$(ip -o link show | grep -E '^[0-9]+: (kx[0-9a-f]{8}|kubernix)\.' || true)
+if [ -n "$links" ]; then
+  leftover "Leftover kubernix network interfaces" "$links"
+fi
+
+# Bridges and routes of the pod networks, whatever their names are
+addresses=""
+while read -r _ dev _ address _; do
+  if in_cidr "${address%/*}" "$CIDR"; then
+    addresses+="$dev $address"$'\n'
+  fi
+done < <(ip -4 -o addr show)
+if [ -n "$addresses" ]; then
+  leftover "Leftover addresses in $CIDR" "$addresses"
+fi
+routes=""
+while read -r dest rest; do
+  if in_cidr "${dest%/*}" "$CIDR"; then
+    routes+="$dest $rest"$'\n'
+  fi
+done < <(ip -4 route show)
+if [ -n "$routes" ]; then
+  leftover "Leftover routes in $CIDR" "$routes"
+fi
+
+# The entries are tagged with "# kubernix <id of the run root>", former
+# versions added untagged node entries.
+hosts=$(grep -E '# kubernix [0-9a-f]+$|^127\.0\.0\.1 node-[0-9]+$' /etc/hosts || true)
+if [ -n "$hosts" ]; then
+  leftover "Leftover node entries in /etc/hosts" "$hosts"
+fi
+
+# Stopping a stopped cluster exits with 3 and has nothing to remove
+rc=0
+output=$("${AS_ROOT[@]}" "$KUBERNIX" --root "$ROOT" --log-level=debug stop 2>&1) || rc=$?
+echo "$output"
+if [ "$rc" -ne 3 ]; then
+  leftover "kubernix stop exited with $rc instead of 3 without a running cluster" ""
+fi
+removed=$(grep -E 'stale node container|Removing mount:|Detaching mount:' <<<"$output" || true)
+if [ -n "$removed" ]; then
+  leftover "kubernix stop removed leftovers of the stopped cluster" "$removed"
+fi
+
+exit "$failed"

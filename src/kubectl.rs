@@ -3,7 +3,10 @@
 //! Provides a typed interface around the `kubectl` binary for applying
 //! manifests and waiting for pod readiness.
 
-use crate::process::READINESS_TIMEOUT;
+use crate::{
+    process::{self, READINESS_TIMEOUT},
+    signals,
+};
 use anyhow::{Context, Result, bail};
 use log::{debug, trace};
 use std::{
@@ -44,16 +47,26 @@ impl Kubectl {
         Self::check_output(args, output)
     }
 
-    /// Run a kubectl command like `execute`, but kill it as soon as
-    /// `shutdown` is set.
-    fn execute_cancelable(&self, args: &[&str], shutdown: &AtomicBool) -> Result<Output> {
-        let output =
-            run_cancelable(self.command(args), shutdown).context("Unable to run kubectl")?;
+    /// Run a kubectl command like `execute`, but terminate it as soon as
+    /// `cancel` returns true.
+    fn execute_cancelable(
+        &self,
+        args: &[&str],
+        cancel: impl Fn() -> bool + Sync,
+    ) -> Result<Output> {
+        let output = process::run_cancelable(
+            self.command(args)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped()),
+            None,
+            cancel,
+        )
+        .context("Unable to run kubectl")?;
         Self::check_output(args, output)
     }
 
     fn command(&self, args: &[&str]) -> Command {
-        let mut cmd = Command::new("kubectl");
+        let mut cmd = process::command("kubectl");
         cmd.args(args).arg("--kubeconfig").arg(&self.kubeconfig);
         cmd
     }
@@ -94,7 +107,7 @@ impl Kubectl {
                     "--timeout=5s",
                     "--request-timeout=5s",
                 ],
-                shutdown,
+                || shutdown.load(Ordering::Relaxed),
             );
             match output {
                 Ok(_) => {
@@ -120,14 +133,20 @@ impl Kubectl {
     }
 
     /// Wait until the API server reports readiness via `/readyz`, which
-    /// includes the post start hooks like the RBAC bootstrap roles.
+    /// includes the post start hooks like the RBAC bootstrap roles. Stops
+    /// on termination signals and if the startup got canceled.
     pub fn wait_api_ready(&self) -> Result<()> {
         debug!("Waiting for the API server /readyz endpoint");
+        let cancel = startup_canceled();
         poll(
             Duration::from_secs(READINESS_TIMEOUT),
             Duration::from_secs(1),
+            &cancel,
             || {
-                let output = self.execute(&["get", "--raw=/readyz"])?;
+                let output = self.execute_cancelable(
+                    &["get", "--raw=/readyz", "--request-timeout=5s"],
+                    &cancel,
+                )?;
                 Ok(String::from_utf8_lossy(&output.stdout).trim() == "ok")
             },
         )
@@ -137,31 +156,29 @@ impl Kubectl {
     }
 }
 
-/// Run the command and collect its output, kill it if `shutdown` gets set.
-/// The output must fit into the pipe buffers, which is the case for short
-/// running commands like `kubectl wait`.
-fn run_cancelable(mut cmd: Command, shutdown: &AtomicBool) -> Result<Output> {
-    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
-    while child.try_wait()?.is_none() {
-        if shutdown.load(Ordering::Relaxed) {
-            let _ = child.kill();
-            let _ = child.wait();
-            bail!("Shutdown requested")
-        }
-        sleep(SHUTDOWN_POLL_INTERVAL);
-    }
-    Ok(child.wait_with_output()?)
+/// Returns a check whether a termination signal arrived or the startup of
+/// the component on the current thread got canceled. It captures the
+/// cancel flag of the current thread, so it works on other threads too,
+/// like the one of `run_cancelable` which terminates the command.
+fn startup_canceled() -> impl Fn() -> bool + Sync {
+    let flag = process::cancel_flag();
+    move || signals::requested() || flag.as_ref().is_some_and(|f| f.load(Ordering::SeqCst))
 }
 
-/// Run `check` every `interval` until it returns true or `timeout` elapsed.
-/// Errors of `check` are treated as not ready yet, the last one is part of
-/// the timeout error.
-fn poll<F>(timeout: Duration, interval: Duration, mut check: F) -> Result<()>
+/// Run `check` every `interval` until it returns true, `timeout` elapsed or
+/// `cancel` returns true, which fails with `process::Canceled`, so that the
+/// boot phase does not count it as a failure. Errors of `check` are treated
+/// as not ready yet, the last one is part of the timeout error.
+fn poll<C, F>(timeout: Duration, interval: Duration, cancel: C, mut check: F) -> Result<()>
 where
+    C: Fn() -> bool,
     F: FnMut() -> Result<bool>,
 {
     let start = Instant::now();
     loop {
+        if cancel() {
+            return Err(process::Canceled.into());
+        }
         let last_error = match check() {
             Ok(true) => return Ok(()),
             Ok(false) => None,
@@ -177,47 +194,23 @@ where
                 None => anyhow::anyhow!(msg),
             });
         }
-        sleep(interval);
+        let next = Instant::now() + interval;
+        while Instant::now() < next && !cancel() {
+            sleep(SHUTDOWN_POLL_INTERVAL.min(interval));
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{path::PathBuf, sync::Arc, thread};
+    use std::{path::PathBuf, sync::Arc};
 
     #[test]
     fn execute_success() -> Result<()> {
         let k = Kubectl::new(&PathBuf::from(""));
         k.execute(&[])?;
         Ok(())
-    }
-
-    #[test]
-    fn run_cancelable_output() -> Result<()> {
-        let mut cmd = Command::new("echo");
-        cmd.arg("hello");
-        let output = run_cancelable(cmd, &AtomicBool::new(false))?;
-        assert!(output.status.success());
-        assert_eq!(String::from_utf8_lossy(&output.stdout), "hello\n");
-        Ok(())
-    }
-
-    #[test]
-    fn run_cancelable_stops_on_shutdown() {
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let flag = Arc::clone(&shutdown);
-        let setter = thread::spawn(move || {
-            sleep(Duration::from_millis(200));
-            flag.store(true, Ordering::Relaxed);
-        });
-        let start = Instant::now();
-        let mut cmd = Command::new("sleep");
-        cmd.arg("30");
-        let err = run_cancelable(cmd, &shutdown).unwrap_err();
-        assert_eq!(err.to_string(), "Shutdown requested");
-        assert!(start.elapsed() < Duration::from_secs(5));
-        setter.join().unwrap();
     }
 
     #[test]
@@ -232,21 +225,32 @@ mod tests {
     #[test]
     fn poll_success_after_retries() -> Result<()> {
         let mut calls = 0;
-        poll(Duration::from_secs(5), Duration::ZERO, || {
-            calls += 1;
-            match calls {
-                1 => bail!("connection refused"),
-                2 => Ok(false),
-                _ => Ok(true),
-            }
-        })?;
+        poll(
+            Duration::from_secs(5),
+            Duration::ZERO,
+            || false,
+            || {
+                calls += 1;
+                match calls {
+                    1 => bail!("connection refused"),
+                    2 => Ok(false),
+                    _ => Ok(true),
+                }
+            },
+        )?;
         assert_eq!(calls, 3);
         Ok(())
     }
 
     #[test]
     fn poll_timeout_contains_last_error() {
-        let err = poll(Duration::ZERO, Duration::ZERO, || bail!("not healthy")).unwrap_err();
+        let err = poll(
+            Duration::ZERO,
+            Duration::ZERO,
+            || false,
+            || bail!("not healthy"),
+        )
+        .unwrap_err();
         let msg = format!("{:#}", err);
         assert!(msg.contains("Timed out after 0s"));
         assert!(msg.contains("not healthy"));
@@ -254,8 +258,35 @@ mod tests {
 
     #[test]
     fn poll_timeout_without_error() {
-        let err = poll(Duration::ZERO, Duration::ZERO, || Ok(false)).unwrap_err();
+        let err = poll(Duration::ZERO, Duration::ZERO, || false, || Ok(false)).unwrap_err();
         assert_eq!(err.to_string(), "Timed out after 0s");
+    }
+
+    #[test]
+    fn poll_stops_on_cancel() {
+        let start = Instant::now();
+        let err = poll(
+            Duration::from_secs(30),
+            Duration::from_secs(10),
+            || start.elapsed() > Duration::from_millis(200),
+            || Ok(false),
+        )
+        .unwrap_err();
+        assert!(err.downcast_ref::<process::Canceled>().is_some(), "{err:#}");
+        assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[test]
+    fn startup_canceled_on_other_threads() {
+        let flag = Arc::new(AtomicBool::new(false));
+        process::set_cancel(Arc::clone(&flag));
+        let cancel = startup_canceled();
+        std::thread::scope(|s| {
+            assert!(!s.spawn(&cancel).join().unwrap());
+            flag.store(true, Ordering::SeqCst);
+            assert!(s.spawn(&cancel).join().unwrap());
+        });
+        flag.store(false, Ordering::SeqCst);
     }
 
     #[test]

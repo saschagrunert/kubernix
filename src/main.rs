@@ -6,11 +6,7 @@ pub fn main() {
     match run() {
         Ok(code) => exit(code),
         Err(e) => {
-            let chain: Vec<String> = e.chain().map(|x| x.to_string()).collect();
-            Logger::error(&chain[0]);
-            for (i, cause) in chain.iter().enumerate().skip(1) {
-                Logger::error(&format!("  {}: {}", i, cause));
-            }
+            Logger::fatal(&e);
             exit(1);
         }
     }
@@ -25,7 +21,7 @@ fn run() -> Result<i32> {
         // Bootstrap the cluster
         None => Kubernix::start(config).map(|()| true)?,
         // Spawn only a new shell or run a command in it
-        Some(SubCommand::Shell { .. }) => Kubernix::new_shell(config).map(|()| true)?,
+        Some(SubCommand::Shell { .. }) => Kubernix::new_shell(config)?,
         Some(SubCommand::Stop { .. }) => Kubernix::stop_cluster(config)?,
         Some(SubCommand::Status { .. }) => Kubernix::status(config)?,
     };

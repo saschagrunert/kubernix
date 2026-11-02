@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Verify a running kubernix cluster: node and pod health, CoreDNS, privileged
-# pod admission, pod and Service networking, and the OCI runtime handlers.
+# pod admission, pod and Service networking, the OCI runtime handlers and
+# the streaming APIs (exec, attach, logs and port-forward).
+#
+# TEST_PHASE=start (default) runs all checks and leaves a Deployment with a
+# Service behind, TEST_PHASE=restart verifies them after a restart of the
+# cluster and removes them.
 set -euo pipefail
 
 USAGE="Usage: $0 <expected-nodes> [<cri-runtime> <oci-runtime>]"
@@ -8,15 +13,34 @@ EXPECTED_NODES="${1:?$USAGE}"
 CRI_RUNTIME="${2:-crio}"
 OCI_RUNTIME="${3:-crun}"
 
+TEST_PHASE="${TEST_PHASE:-start}"
+
 # Command prefix used to inspect the OCI runtime state directories, which
 # are only accessible by root when not running in rootless mode.
 SUDO="${SUDO:-}"
 
-# Prefix of the pod IPs, matching the default cluster CIDR.
-POD_IP_PREFIX="${POD_IP_PREFIX:-10.10.}"
+# The --cidr and --addons of the cluster, and whether it runs rootless.
+CIDR="${CIDR:-10.10.0.0/16}"
+ADDONS="${ADDONS:-coredns}"
+ROOTLESS="${ROOTLESS:-false}"
+
+# The time in seconds all waits of a phase may take together, so that the
+# diagnostics of a failed wait run before CI kills the job.
+TEST_TIMEOUT="${TEST_TIMEOUT:-900}"
 
 KUBERNIX_ROOT="${KUBERNIX_ROOT:-$PWD/kubernix-run}"
 export KUBECONFIG="${KUBECONFIG:-$KUBERNIX_ROOT/kubeconfig/admin.kubeconfig}"
+# Do not load the kuberc preferences of the user, kubectl warns on stderr
+# without a trailing newline if it cannot read them
+export KUBECTL_KUBERC=false
+
+BUSYBOX=registry.k8s.io/e2e-test-images/busybox:1.36.1-1
+PAUSE=registry.k8s.io/pause:3.10.2
+
+# Label of the resources removed when the script exits, and of the
+# resources which outlive the start phase for the restart checks.
+TEST_LABEL=kubernix-test
+RESTART_LABEL=kubernix-restart-test
 
 case "$OCI_RUNTIME" in
   crun) OTHER_OCI_RUNTIME=runc ;;
@@ -26,13 +50,253 @@ case "$OCI_RUNTIME" in
     exit 1
     ;;
 esac
+case "$TEST_PHASE" in
+  start | restart) ;;
+  *)
+    echo "TEST_PHASE must be start or restart"
+    exit 1
+    ;;
+esac
 
-# Print the ID of the first container of the first matching pod, without
-# the CRI prefix (for example cri-o:// or containerd://).
-container_id() {
-  local id
-  id=$(kubectl get pods "$@" -o jsonpath='{.items[0].status.containerStatuses[0].containerID}')
-  echo "${id#*://}"
+DNS=true
+if [ "$ADDONS" = none ]; then
+  DNS=false
+fi
+
+DEADLINE=$((SECONDS + TEST_TIMEOUT))
+TMP=$(mktemp -d)
+BACKGROUND_PIDS=()
+
+# Remove the test resources and wait until they are gone, which fails the
+# test if pods cannot be torn down.
+cleanup() {
+  local rc=$? pid label labels=("$TEST_LABEL")
+  trap - EXIT
+  set +e
+  for pid in "${BACKGROUND_PIDS[@]}"; do
+    kill "$pid" 2>/dev/null
+  done
+  if [ "$TEST_PHASE" = restart ]; then
+    labels+=("$RESTART_LABEL")
+  fi
+  echo "Deleting the test resources..."
+  for label in "${labels[@]}"; do
+    if ! kubectl delete deployments,services,pods,runtimeclasses -l "$label" \
+      --cascade=foreground --ignore-not-found --wait --timeout=120s; then
+      echo "FAIL: unable to delete the test resources labeled $label"
+      kubectl get pods -A -o wide
+      [ "$rc" -ne 0 ] || rc=1
+    fi
+  done
+  rm -rf "$TMP"
+  exit "$rc"
+}
+trap cleanup EXIT
+
+# Print the remaining seconds of the time budget, at most the argument and
+# at least 1.
+budget() {
+  local left=$((DEADLINE - SECONDS))
+  if [ "$left" -gt "$1" ]; then
+    left=$1
+  fi
+  if [ "$left" -lt 1 ]; then
+    left=1
+  fi
+  echo "$left"
+}
+
+# Run the command until it succeeds or the timeout in seconds expires.
+retry() {
+  local deadline=$((SECONDS + $(budget "$1")))
+  shift
+  until "$@"; do
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      return 1
+    fi
+    sleep 2
+  done
+}
+
+ip_to_int() {
+  local IFS=. a b c d
+  read -r a b c d <<<"$1"
+  echo $(((a << 24) | (b << 16) | (c << 8) | d))
+}
+
+int_to_ip() {
+  echo "$(($1 >> 24 & 255)).$(($1 >> 16 & 255)).$(($1 >> 8 & 255)).$(($1 & 255))"
+}
+
+# Succeed if the IPv4 address is in the CIDR.
+in_cidr() {
+  local ip=$1 net=${2%/*} prefix=${2#*/} mask
+  [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  mask=$(((0xffffffff << (32 - prefix)) & 0xffffffff))
+  [ $(($(ip_to_int "$ip") & mask)) -eq $(($(ip_to_int "$net") & mask)) ]
+}
+
+# kubernix splits the CIDR in halves: the pods get the first one, the
+# Services the second one, at most a /16.
+CIDR_PREFIX=${CIDR#*/}
+CLUSTER_CIDR="${CIDR%/*}/$((CIDR_PREFIX + 1))"
+SERVICE_PREFIX=$((CIDR_PREFIX + 1 > 16 ? CIDR_PREFIX + 1 : 16))
+SERVICE_CIDR="$(int_to_ip $(($(ip_to_int "${CIDR%/*}") + (1 << (31 - CIDR_PREFIX)))))/$SERVICE_PREFIX"
+
+# Print the pods which are not healthy: pods which are neither running nor
+# succeeded, and running pods with containers which are not ready, for
+# example in CrashLoopBackOff, or which restarted more than the argument.
+unhealthy_pods() {
+  kubectl get pods -A -o json | jq -r --argjson max "$1" '
+    .items[]
+    | "\(.metadata.namespace)/\(.metadata.name)" as $pod
+    | if .status.phase == "Succeeded" then empty
+      elif .status.phase != "Running" then "\($pod) is \(.status.phase)"
+      elif (.status.containerStatuses // []) == [] then "\($pod) has no container status"
+      else .status.containerStatuses[]
+        | if .ready != true then
+            "\($pod) container \(.name) is not ready (\(.state | to_entries[0] | "\(.key) \(.value.reason // "")"))"
+          elif .restartCount > $max then
+            "\($pod) container \(.name) restarted \(.restartCount) times"
+          else empty end
+      end'
+}
+
+pods_healthy() {
+  local max=$1 require_pods=$2 unhealthy
+  if [ "$require_pods" = true ] && [ "$(kubectl get pods -A -o name | wc -l)" -eq 0 ]; then
+    return 1
+  fi
+  unhealthy=$(unhealthy_pods "$max") || return 1
+  [ -z "$unhealthy" ]
+}
+
+# Assert that all pods are healthy, CoreDNS pods are only expected with
+# DNS. Containers which restarted more often than the argument fail the
+# check.
+assert_pods_healthy() {
+  local max=$1
+  echo "Asserting all pods are healthy..."
+  if ! retry 90 pods_healthy "$max" "$DNS"; then
+    echo "FAIL: unhealthy pods:"
+    unhealthy_pods "$max" || true
+    kubectl get pods -A -o wide || true
+    kubectl describe pods -A || true
+    exit 1
+  fi
+}
+
+node_count() {
+  [ "$(kubectl get nodes -o name | wc -l)" -eq "$EXPECTED_NODES" ]
+}
+
+ready_node_count() {
+  kubectl get nodes -o json |
+    jq '[.items[] | select(any(.status.conditions[]; .type == "Ready" and .status == "True"))] | length'
+}
+
+# Assert that the expected number of nodes registered and is Ready. The
+# PID file of kubernix gets written before all kubelets registered, so
+# kubectl wait --all would return on too few nodes.
+assert_nodes_ready() {
+  echo "Asserting $EXPECTED_NODES nodes are Ready..."
+  if ! retry 120 node_count; then
+    echo "FAIL: expected $EXPECTED_NODES nodes, got $(kubectl get nodes -o name | wc -l)"
+    kubectl get nodes -o wide || true
+    exit 1
+  fi
+  if ! kubectl wait --for=condition=Ready nodes --all --timeout="$(budget 120)s"; then
+    kubectl describe nodes || true
+  fi
+  local ready
+  ready=$(ready_node_count)
+  if [ "$ready" -ne "$EXPECTED_NODES" ]; then
+    echo "FAIL: expected $EXPECTED_NODES ready nodes, got $ready"
+    kubectl get nodes -o wide || true
+    exit 1
+  fi
+}
+
+assert_coredns_ready() {
+  echo "Asserting CoreDNS is ready..."
+  if ! retry 120 kubectl -n kube-system wait --for=condition=Ready pod -l k8s-app=coredns --timeout=5s 2>/dev/null; then
+    echo "=== CoreDNS pod describe ==="
+    kubectl describe pod -n kube-system -l k8s-app=coredns || true
+    echo "=== CoreDNS logs ==="
+    kubectl logs -n kube-system -l k8s-app=coredns --tail=100 || true
+    echo "=== kubernetes endpoints ==="
+    kubectl get endpoints kubernetes || true
+    exit 1
+  fi
+  echo "CoreDNS is ready"
+}
+
+# Wait until the pod is ready, describe it on failure.
+wait_pod_ready() {
+  local name=$1
+  if ! kubectl wait --for=condition=Ready "pod/$name" --timeout="$(budget 90)s"; then
+    echo "FAIL: pod $name is not ready"
+    kubectl describe pod "$name" || true
+    kubectl logs "$name" --all-containers || true
+    exit 1
+  fi
+}
+
+delete_pods() {
+  kubectl delete pod "$@" --wait --timeout="$(budget 90)s"
+}
+
+# Run a busybox pod with the shell script until it terminates, keep its
+# logs in POD_LOGS and delete it. The optional third argument is the node
+# to run on. Fails if the pod does not succeed.
+run_script_pod() {
+  local name=$1 script=$2 node=${3:-} phase="" deadline
+  kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $name
+  labels:
+    $TEST_LABEL: "true"
+spec:
+  ${node:+nodeName: $node}
+  restartPolicy: Never
+  containers:
+    - name: busybox
+      image: $BUSYBOX
+      env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      command: [sh, -c, $(jq -Rs . <<<"$script")]
+EOF
+  # Stop waiting as soon as the pod fails, instead of running into the
+  # timeout, which leaves time for the image pull.
+  deadline=$((SECONDS + $(budget 180)))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    phase=$(kubectl get pod "$name" -o jsonpath='{.status.phase}' || true)
+    [[ "$phase" = Succeeded || "$phase" = Failed ]] && break
+    sleep 2
+  done
+  POD_LOGS=$(kubectl logs "$name" || true)
+  if [ "$phase" != Succeeded ]; then
+    echo "FAIL: pod $name is in phase '$phase'"
+    kubectl describe pod "$name" || true
+    echo "$POD_LOGS"
+    return 1
+  fi
+  delete_pods "$name"
+}
+
+# Print the IDs of all containers of the matching pods without the CRI
+# prefix (for example cri-o:// or containerd://), an empty line for each
+# container which has none yet.
+container_ids() {
+  kubectl get pods "$@" -o json |
+    jq -r '.items[] | .spec.containers[].name as $name
+      | [(.status.containerStatuses // [])[] | select(.name == $name) | .containerID][0] // ""
+      | sub("^[a-z-]+://"; "")'
 }
 
 # Succeed if the container ID is tracked in the state directory of the
@@ -48,70 +312,142 @@ in_runtime_root() {
   return 1
 }
 
-# Assert that the container of the first pod matching the selector is run by
-# the expected OCI runtime only. The container ID is read again on every
+# Assert that all containers of the pods matching the selector are run by
+# the expected OCI runtime only. The container IDs are read again on every
 # attempt, because a restarted container gets a new one.
 assert_runtime() {
-  local what=$1 expected=$2 other=$3 id="" found=""
+  local what=$1 expected=$2 other=$3 ids=() id missing="no pods"
   shift 3
   for _ in $(seq 30); do
-    id=$(container_id "$@")
-    if [ -n "$id" ]; then
-      # Being tracked by the other runtime is a definitive failure.
-      if in_runtime_root "$other" "$id"; then
-        echo "FAIL: $what container $id found in the $other state directory"
-        exit 1
-      fi
-      if in_runtime_root "$expected" "$id"; then
-        found=1
-        break
-      fi
+    mapfile -t ids < <(container_ids "$@")
+    if [ "${#ids[@]}" -gt 0 ]; then
+      missing=""
+      for id in "${ids[@]}"; do
+        if [ -z "$id" ]; then
+          missing="$missing (no container ID)"
+          continue
+        fi
+        # Being tracked by the other runtime is a definitive failure.
+        if in_runtime_root "$other" "$id"; then
+          echo "FAIL: $what container $id found in the $other state directory"
+          exit 1
+        fi
+        in_runtime_root "$expected" "$id" || missing="$missing $id"
+      done
+      [ -z "$missing" ] && break
     fi
     sleep 1
   done
-  if [ -z "$id" ]; then
-    echo "FAIL: no container ID found for $what"
+  if [ -n "$missing" ]; then
+    echo "FAIL: $what containers not found in the $expected state directory:$missing"
     exit 1
   fi
-  if [ -z "$found" ]; then
-    echo "FAIL: $what container $id not found in the $expected state directory"
-    exit 1
-  fi
-  echo "$what container $id uses $expected"
+  echo "$what containers ${ids[*]} use $expected"
 }
 
-echo "Asserting all nodes are Ready..."
-# Nodes may still be NotReady for a moment after registering. The count
-# below fails on a timeout or a wrong number of nodes.
-kubectl wait --for=condition=Ready nodes --all --timeout=120s || true
-READY_COUNT=$(kubectl get nodes -o go-template='{{range .items}}{{range .status.conditions}}{{if eq .type "Ready"}}{{if eq .status "True"}}x{{end}}{{end}}{{end}}{{end}}' | wc -c)
-if [ "$READY_COUNT" -ne "$EXPECTED_NODES" ]; then
-  echo "FAIL: expected $EXPECTED_NODES ready nodes, got $READY_COUNT"
-  exit 1
+# Run a pause pod and wait until it is ready. The optional argument is the
+# runtime class name.
+run_pod() {
+  local name=$1 runtime_class=${2:-}
+  kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $name
+  labels:
+    app: $name
+    $TEST_LABEL: "true"
+spec:
+  ${runtime_class:+runtimeClassName: $runtime_class}
+  containers:
+    - name: pause
+      image: $PAUSE
+EOF
+  wait_pod_ready "$name"
+}
+
+# Assert that a pod reaches the restart-test Service, by its ClusterIP and
+# with DNS by its name.
+assert_service_answers() {
+  local ip targets
+  ip=$(kubectl get service restart-test -o jsonpath='{.spec.clusterIP}')
+  if ! in_cidr "$ip" "$SERVICE_CIDR"; then
+    echo "FAIL: ClusterIP '$ip' is not in the Service CIDR $SERVICE_CIDR"
+    exit 1
+  fi
+  targets="$ip"
+  if [ "$DNS" = true ]; then
+    targets="$targets restart-test.default.svc.cluster.local"
+  fi
+  # shellcheck disable=SC2016
+  if ! run_script_pod service-client '
+    for target in '"$targets"'; do
+      ok=""
+      for i in 1 2 3 4 5; do
+        if body=$(wget -qO- -T 5 "http://$target/"); then
+          echo "$target: $body"
+          ok=1
+          break
+        fi
+        echo "attempt $i: $target did not answer"
+        sleep $((i * 2))
+      done
+      [ -n "$ok" ] || exit 1
+    done'; then
+    kubectl get endpointslices -l kubernetes.io/service-name=restart-test -o yaml || true
+    exit 1
+  fi
+  echo "$POD_LOGS"
+  if [ "$(grep -c ': restart-test$' <<<"$POD_LOGS")" -ne "$(wc -w <<<"$targets")" ]; then
+    echo "FAIL: unexpected answer of the restart-test Service"
+    exit 1
+  fi
+}
+
+service_has_endpoints() {
+  [ -n "$(kubectl get endpointslices -l kubernetes.io/service-name=restart-test \
+    -o jsonpath='{.items[*].endpoints[?(@.conditions.ready==true)].addresses[*]}')" ]
+}
+
+assert_restart_test_ready() {
+  echo "Asserting the restart-test Deployment is ready and its Service has endpoints..."
+  if ! kubectl rollout status deployment/restart-test --timeout="$(budget 120)s" ||
+    ! retry 60 service_has_endpoints; then
+    echo "FAIL: the restart-test Deployment is not ready or its Service has no endpoints"
+    kubectl describe deployment restart-test || true
+    kubectl describe pods -l app=restart-test || true
+    kubectl get endpointslices -l kubernetes.io/service-name=restart-test -o yaml || true
+    exit 1
+  fi
+  assert_service_answers
+  echo "The restart-test Service answers"
+}
+
+assert_nodes_ready
+
+if [ "$TEST_PHASE" = restart ]; then
+  if [ "$DNS" = true ]; then
+    assert_coredns_ready
+  fi
+  # The pods get recreated after the restart, which may count as restart
+  assert_pods_healthy 1
+  assert_restart_test_ready
+  echo "All restart assertions passed"
+  exit 0
 fi
 
-echo "Asserting all pods are healthy..."
-# shellcheck disable=SC2016
-TMPL_UNHEALTHY='{{range .items}}{{if and (ne .status.phase "Running") (ne .status.phase "Succeeded")}}x{{end}}{{end}}'
-TMPL_COUNT='{{len .items}}'
-timeout 60 bash -c "until [ \"\$(kubectl get pods -A -o go-template='$TMPL_COUNT')\" -gt 0 ] && [ \"\$(kubectl get pods -A -o go-template='$TMPL_UNHEALTHY' | wc -c)\" -eq 0 ]; do sleep 2; done"
-UNHEALTHY=$(kubectl get pods -A -o go-template='{{range .items}}{{if and (ne .status.phase "Running") (ne .status.phase "Succeeded")}}{{.metadata.name}}({{.status.phase}}) {{end}}{{end}}')
-if [ -n "$UNHEALTHY" ]; then
-  echo "FAIL: unhealthy pods: $UNHEALTHY"
-  exit 1
-fi
+assert_pods_healthy 0
 
-echo "Asserting CoreDNS is ready..."
-if ! timeout 110 bash -c 'until kubectl -n kube-system wait --for=condition=Ready pod -l k8s-app=coredns --timeout=5s 2>/dev/null; do sleep 2; done'; then
-  echo "=== CoreDNS pod describe ==="
-  kubectl describe pod -n kube-system -l k8s-app=coredns || true
-  echo "=== CoreDNS logs ==="
-  kubectl logs -n kube-system -l k8s-app=coredns --tail=100 || true
-  echo "=== kubernetes endpoints ==="
-  kubectl get endpoints kubernetes || true
-  exit 1
+if [ "$DNS" = true ]; then
+  assert_coredns_ready
+else
+  echo "Asserting no addons got deployed..."
+  if [ -n "$(kubectl get pods -A -o name)" ]; then
+    echo "FAIL: pods found with --addons none"
+    kubectl get pods -A
+    exit 1
+  fi
 fi
-echo "CoreDNS is ready"
 
 echo "Asserting the API server admits privileged pods..."
 # A server side dry run passes the admission, which is what the API server
@@ -124,83 +460,70 @@ metadata:
 spec:
   containers:
     - name: pause
-      image: registry.k8s.io/pause:3.10.2
+      image: $PAUSE
       securityContext:
         privileged: true
 EOF
 echo "Privileged pods are admitted"
 
-echo "Asserting CoreDNS uses the default OCI runtime $OCI_RUNTIME..."
-assert_runtime CoreDNS "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME" \
-  -n kube-system -l k8s-app=coredns
+if [ "$DNS" = true ]; then
+  echo "Asserting CoreDNS uses the default OCI runtime $OCI_RUNTIME..."
+  assert_runtime CoreDNS "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME" \
+    -n kube-system -l k8s-app=coredns
+fi
 
-# Run a test pod and wait until it is ready. The optional argument is the
-# runtime class name.
-run_pod() {
-  local name=$1 runtime_class=${2:-}
-  kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: $name
-  labels:
-    app: $name
-spec:
-  ${runtime_class:+runtimeClassName: $runtime_class}
-  containers:
-    - name: pause
-      image: registry.k8s.io/pause:3.10.2
-EOF
-  if ! kubectl wait --for=condition=Ready "pod/$name" --timeout=120s; then
-    kubectl describe pod "$name" || true
-    exit 1
-  fi
-}
+echo "Asserting the kubernetes Service has a ClusterIP in $SERVICE_CIDR..."
+API_IP=$(kubectl get service kubernetes -o jsonpath='{.spec.clusterIP}')
+if ! in_cidr "$API_IP" "$SERVICE_CIDR"; then
+  echo "FAIL: ClusterIP '$API_IP' is not in the Service CIDR $SERVICE_CIDR"
+  exit 1
+fi
 
 echo "Asserting a pod with its own network namespace runs on $OCI_RUNTIME..."
 run_pod default-runtime-test
 POD_IP=$(kubectl get pod default-runtime-test -o jsonpath='{.status.podIP}')
-if [[ "$POD_IP" != "$POD_IP_PREFIX"* ]]; then
-  echo "FAIL: pod IP '$POD_IP' is not in the cluster CIDR (${POD_IP_PREFIX}*)"
+if ! in_cidr "$POD_IP" "$CLUSTER_CIDR"; then
+  echo "FAIL: pod IP '$POD_IP' is not in the cluster CIDR $CLUSTER_CIDR"
   exit 1
 fi
 echo "Pod got IP $POD_IP"
 assert_runtime "Default runtime test pod" "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME" \
   -l app=default-runtime-test
-kubectl delete pod default-runtime-test --wait=false
+delete_pods default-runtime-test
 
-echo "Asserting a pod can reach a ClusterIP Service and external networks by DNS name..."
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: service-test
-spec:
-  restartPolicy: Never
-  containers:
-    - name: busybox
-      image: registry.k8s.io/e2e-test-images/busybox:1.36.1-1
-      command:
-        - sh
-        - -c
-        - nc -z -w 5 kubernetes.default.svc.cluster.local 443 && nc -z -w 5 registry.k8s.io 443
-EOF
-# Stop waiting as soon as the pod fails, instead of running into the
-# timeout, which leaves time for the image pull.
-PHASE=""
-for _ in $(seq 150); do
-  PHASE=$(kubectl get pod service-test -o jsonpath='{.status.phase}' || true)
-  [[ "$PHASE" = Succeeded || "$PHASE" = Failed ]] && break
-  sleep 2
-done
-if [ "$PHASE" != Succeeded ]; then
-  echo "FAIL: service test pod is in phase '$PHASE'"
-  kubectl describe pod service-test || true
-  kubectl logs service-test || true
+if [ "$DNS" = true ]; then
+  echo "Asserting a pod can reach a ClusterIP Service and external networks by DNS name..."
+  TARGETS="kubernetes.default.svc.cluster.local:443 registry.k8s.io:443"
+else
+  echo "Asserting a pod can reach a ClusterIP Service..."
+  TARGETS="$API_IP:443"
+fi
+# Every target gets several attempts with a growing delay, external
+# networks may be slow to answer.
+# shellcheck disable=SC2016
+if ! run_script_pod service-test '
+  for target in '"$TARGETS"'; do
+    host=${target%:*} port=${target##*:} ok=""
+    for i in 1 2 3 4 5; do
+      if nc -z -w 5 "$host" "$port"; then
+        echo "reached $target"
+        ok=1
+        break
+      fi
+      echo "attempt $i: $target not reachable"
+      sleep $((i * 2))
+    done
+    if [ -z "$ok" ]; then
+      echo "FAIL: $target not reachable"
+      cat /etc/resolv.conf
+      nslookup "$host" || true
+      exit 1
+    fi
+  done'; then
   exit 1
 fi
-echo "Service and external networks are reachable"
-kubectl delete pod service-test --wait=false
+echo "$POD_LOGS"
+echo "The Service and external networks are reachable"
 
 if [ "$EXPECTED_NODES" -ge 2 ]; then
   echo "Asserting pods on different nodes reach each other without NAT..."
@@ -212,11 +535,15 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: cross-node-server
+  labels:
+    $TEST_LABEL: "true"
 spec:
   nodeName: $SERVER_NODE
+  # busybox ignores SIGTERM as PID 1
+  terminationGracePeriodSeconds: 1
   containers:
     - name: busybox
-      image: registry.k8s.io/e2e-test-images/busybox:1.36.1-1
+      image: $BUSYBOX
       command:
         - sh
         - -c
@@ -230,58 +557,33 @@ spec:
           port: 8080
         periodSeconds: 2
 EOF
-  if ! kubectl wait --for=condition=Ready pod/cross-node-server --timeout=120s; then
-    kubectl describe pod cross-node-server || true
+  wait_pod_ready cross-node-server
+  SERVER_IP=$(kubectl get pod cross-node-server -o jsonpath='{.status.podIP}')
+  # The client prints its own pod IP and the source address the server saw
+  # shellcheck disable=SC2016
+  if ! run_script_pod cross-node-client '
+    for i in 1 2 3 4 5; do
+      if SOURCE=$(wget -qO- -T 5 http://'"$SERVER_IP"':8080/cgi-bin/ip); then
+        echo "$POD_IP $SOURCE"
+        exit 0
+      fi
+      echo "attempt $i failed" >&2
+      sleep $((i * 2))
+    done
+    exit 1' "$CLIENT_NODE"; then
+    kubectl get pods -o wide || true
+    kubectl logs cross-node-server || true
     exit 1
   fi
-  SERVER_IP=$(kubectl get pod cross-node-server -o jsonpath='{.status.podIP}')
-  kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Pod
-metadata:
-  name: cross-node-client
-spec:
-  nodeName: $CLIENT_NODE
-  restartPolicy: Never
-  containers:
-    - name: busybox
-      image: registry.k8s.io/e2e-test-images/busybox:1.36.1-1
-      env:
-        - name: POD_IP
-          valueFrom:
-            fieldRef:
-              fieldPath: status.podIP
-      command:
-        - sh
-        - -c
-        - |
-          for _ in 1 2 3 4 5; do
-            if SOURCE=\$(wget -qO- -T 5 http://$SERVER_IP:8080/cgi-bin/ip); then
-              echo "\$POD_IP \$SOURCE"
-              exit 0
-            fi
-            sleep 2
-          done
-          exit 1
-EOF
-  PHASE=""
-  for _ in $(seq 60); do
-    PHASE=$(kubectl get pod cross-node-client -o jsonpath='{.status.phase}' || true)
-    [[ "$PHASE" = Succeeded || "$PHASE" = Failed ]] && break
-    sleep 2
-  done
-  # The client prints its own pod IP and the source address the server saw
-  read -r CLIENT_IP SOURCE_IP _ <<<"$(kubectl logs cross-node-client || true)"
-  if [ "$PHASE" != Succeeded ] || [ -z "$CLIENT_IP" ] || [ "$SOURCE_IP" != "$CLIENT_IP" ]; then
+  read -r CLIENT_IP SOURCE_IP _ <<<"$POD_LOGS"
+  if [ -z "$CLIENT_IP" ] || [ "$SOURCE_IP" != "$CLIENT_IP" ]; then
     echo "FAIL: client pod $CLIENT_IP on $CLIENT_NODE reached server pod $SERVER_IP on $SERVER_NODE" \
-      "from '$SOURCE_IP' (client phase '$PHASE')"
-    kubectl get pods -o wide || true
-    kubectl describe pod cross-node-client || true
+      "from '$SOURCE_IP'"
     kubectl logs cross-node-server || true
     exit 1
   fi
   echo "Pod $CLIENT_IP on $CLIENT_NODE reached pod $SERVER_IP on $SERVER_NODE without NAT"
-  kubectl delete pod cross-node-server cross-node-client --wait=false
+  delete_pods cross-node-server
 fi
 
 echo "Asserting a pod with RuntimeClass $OTHER_OCI_RUNTIME uses it..."
@@ -290,11 +592,199 @@ apiVersion: node.k8s.io/v1
 kind: RuntimeClass
 metadata:
   name: $OTHER_OCI_RUNTIME
+  labels:
+    $TEST_LABEL: "true"
 handler: $OTHER_OCI_RUNTIME
 EOF
 run_pod runtime-class-test "$OTHER_OCI_RUNTIME"
 assert_runtime "RuntimeClass $OTHER_OCI_RUNTIME pod" "$OTHER_OCI_RUNTIME" "$OCI_RUNTIME" \
   -l app=runtime-class-test
-kubectl delete pod runtime-class-test --wait=false
+delete_pods runtime-class-test
+
+echo "Asserting exec, attach and logs of a running pod..."
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: stream-test
+  labels:
+    $TEST_LABEL: "true"
+spec:
+  # busybox ignores SIGTERM as PID 1
+  terminationGracePeriodSeconds: 1
+  containers:
+    - name: busybox
+      image: $BUSYBOX
+      command:
+        - sh
+        - -c
+        - i=0; while true; do i=\$((i + 1)); echo "tick \$i"; sleep 1; done
+EOF
+wait_pod_ready stream-test
+# shellcheck disable=SC2016
+OUT=$(echo kubernix | kubectl exec -i stream-test -- sh -c 'read -r line; echo "got $line"')
+if [ "$OUT" != "got kubernix" ]; then
+  echo "FAIL: kubectl exec with stdin returned '$OUT'"
+  exit 1
+fi
+rc=0
+kubectl exec stream-test -- sh -c 'exit 7' || rc=$?
+if [ "$rc" -ne 7 ]; then
+  echo "FAIL: kubectl exec exited with $rc instead of the exit code 7 of the command"
+  exit 1
+fi
+echo "kubectl exec passes stdin and the exit code"
+# The attach streams the output from now on until the timeout stops it
+OUT=$(timeout 10 kubectl attach stream-test -c busybox 2>&1 || true)
+if ! grep -q 'tick [0-9]' <<<"$OUT"; then
+  echo "FAIL: kubectl attach got no output: $OUT"
+  kubectl describe pod stream-test || true
+  exit 1
+fi
+echo "kubectl attach streams the output"
+OUT=$(kubectl logs stream-test --tail=3)
+if [ "$(grep -c '^tick [0-9]' <<<"$OUT")" -ne 3 ]; then
+  echo "FAIL: kubectl logs returned '$OUT'"
+  exit 1
+fi
+echo "kubectl logs returns the output"
+delete_pods stream-test
+
+echo "Asserting an emptyDir volume, port-forward and NodePort Services..."
+# The writer fills the emptyDir volume, the server serves its content.
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: volume-test
+  labels:
+    app: volume-test
+    $TEST_LABEL: "true"
+spec:
+  terminationGracePeriodSeconds: 1
+  volumes:
+    - name: www
+      emptyDir: {}
+  containers:
+    - name: writer
+      image: $BUSYBOX
+      command: [sh, -c, "echo kubernix-volume >/www/index.html && exec sleep 3600"]
+      volumeMounts:
+        - name: www
+          mountPath: /www
+    - name: server
+      image: $BUSYBOX
+      command:
+        - sh
+        - -c
+        - until [ -f /www/index.html ]; do sleep 1; done; exec httpd -f -p 8080 -h /www
+      volumeMounts:
+        - name: www
+          mountPath: /www
+          readOnly: true
+      readinessProbe:
+        httpGet:
+          path: /index.html
+          port: 8080
+        periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: volume-test
+  labels:
+    $TEST_LABEL: "true"
+spec:
+  type: NodePort
+  selector:
+    app: volume-test
+  ports:
+    - port: 80
+      targetPort: 8080
+EOF
+wait_pod_ready volume-test
+echo "The emptyDir volume is shared between the containers"
+
+# Only IPv4, some hosts listen on ::1 alone otherwise
+kubectl port-forward --address 127.0.0.1 pod/volume-test :8080 >"$TMP/port-forward.log" 2>&1 &
+BACKGROUND_PIDS+=($!)
+port_forwarded() {
+  local port
+  port=$(sed -n 's/.*Forwarding from 127\.0\.0\.1:\([0-9]*\) .*/\1/p' "$TMP/port-forward.log")
+  [ -n "$port" ] && [ "$(curl -fsS --max-time 5 "http://127.0.0.1:$port/")" = kubernix-volume ]
+}
+if ! retry 30 port_forwarded; then
+  echo "FAIL: no answer through kubectl port-forward"
+  cat "$TMP/port-forward.log"
+  exit 1
+fi
+kill "${BACKGROUND_PIDS[-1]}"
+echo "kubectl port-forward reaches the pod"
+
+if [ "$ROOTLESS" = true ]; then
+  # NodePorts are opened in the network namespace of rootlesskit, which
+  # only publishes the API server port to the host.
+  echo "Skipping the NodePort check, NodePorts are not reachable from the host in rootless mode"
+else
+  NODE_PORT=$(kubectl get service volume-test -o jsonpath='{.spec.ports[0].nodePort}')
+  NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+  node_port_answers() {
+    [ "$(curl -fsS --max-time 5 "http://$NODE_IP:$NODE_PORT/")" = kubernix-volume ]
+  }
+  if ! retry 30 node_port_answers; then
+    echo "FAIL: NodePort $NODE_IP:$NODE_PORT does not answer"
+    kubectl get service volume-test -o yaml || true
+    exit 1
+  fi
+  echo "NodePort $NODE_IP:$NODE_PORT answers from the host"
+fi
+kubectl delete service volume-test --wait --timeout="$(budget 60)s"
+delete_pods volume-test
+
+echo "Creating the restart-test Deployment and Service..."
+kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restart-test
+  labels:
+    $RESTART_LABEL: "true"
+spec:
+  selector:
+    matchLabels:
+      app: restart-test
+  template:
+    metadata:
+      labels:
+        app: restart-test
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: server
+          image: $BUSYBOX
+          command:
+            - sh
+            - -c
+            - mkdir -p /www && echo restart-test >/www/index.html && exec httpd -f -p 8080 -h /www
+          readinessProbe:
+            httpGet:
+              path: /index.html
+              port: 8080
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restart-test
+  labels:
+    $RESTART_LABEL: "true"
+spec:
+  selector:
+    app: restart-test
+  ports:
+    - port: 80
+      targetPort: 8080
+EOF
+assert_restart_test_ready
 
 echo "All assertions passed"

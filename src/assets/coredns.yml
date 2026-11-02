@@ -59,13 +59,13 @@ metadata:
   namespace: kube-system
 data:
   Corefile: |
-    .:53 {{
+    .:{dns_port} {{
         bind {{$POD_IP}}
         errors
-        health :{health_port} {{
+        health {{$POD_IP}}:{health_port} {{
             lameduck 5s
         }}
-        ready :{ready_port}
+        ready {{$POD_IP}}:{ready_port}
         kubernetes cluster.local in-addr.arpa ip6.arpa {{
           pods insecure
           fallthrough in-addr.arpa ip6.arpa
@@ -74,7 +74,7 @@ data:
         forward . /etc/resolv.conf {{
           max_concurrent 1000
         }}
-        prometheus :9153
+        prometheus {{$POD_IP}}:{metrics_port}
         cache 30 {{
           disable success cluster.local
           disable denial cluster.local
@@ -136,13 +136,13 @@ spec:
           mountPath: /etc/coredns
           readOnly: true
         ports:
-        - containerPort: 53
+        - containerPort: {dns_port}
           name: dns
           protocol: UDP
-        - containerPort: 53
+        - containerPort: {dns_port}
           name: dns-tcp
           protocol: TCP
-        - containerPort: 9153
+        - containerPort: {metrics_port}
           name: metrics
           protocol: TCP
         - containerPort: {health_port}
@@ -167,6 +167,9 @@ spec:
             scheme: HTTP
         securityContext:
           allowPrivilegeEscalation: false
+          # The image grants /coredns the NET_BIND_SERVICE file capability,
+          # so exec fails if it is not in the bounding set, even though
+          # CoreDNS only binds unprivileged ports
           capabilities:
             add:
             - NET_BIND_SERVICE
@@ -188,7 +191,7 @@ metadata:
   name: coredns
   namespace: kube-system
   annotations:
-    prometheus.io/port: "9153"
+    prometheus.io/port: "{metrics_port}"
     prometheus.io/scrape: "true"
   labels:
     k8s-app: coredns
@@ -201,10 +204,13 @@ spec:
   ports:
   - name: dns
     port: 53
+    targetPort: dns
     protocol: UDP
   - name: dns-tcp
     port: 53
+    targetPort: dns-tcp
     protocol: TCP
   - name: metrics
-    port: 9153
+    port: {metrics_port}
+    targetPort: metrics
     protocol: TCP

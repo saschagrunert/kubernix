@@ -7,16 +7,24 @@
 //! Nix profile, which avoids evaluating the flake on every start and keeps
 //! its store paths from being garbage collected.
 
-use crate::{Config, config::Addon, content_hash, runlock::RunLock, system::System};
-use ::nix::fcntl::{Flock, FlockArg};
+use crate::{
+    Config, config::Addon, content_hash, runlock::RunLock, signals, system::System, write_file,
+};
+use ::nix::{
+    fcntl::{Flock, FlockArg},
+    sys::signal::{Signal, kill},
+    unistd::Pid,
+};
 use anyhow::{Context, Result, bail};
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::{
     env::{current_exe, var},
     fs::{self, File, OpenOptions, create_dir_all},
-    os::unix::process::CommandExt,
+    os::unix::{fs::OpenOptionsExt, process::CommandExt},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::{Child, Command, ExitStatus, Stdio},
+    thread::sleep,
+    time::{Duration, Instant},
 };
 
 /// Handles Nix shell bootstrapping and command execution.
@@ -28,7 +36,10 @@ impl Nix {
 
     /// Files of the generated Nix environment.
     pub const FILES: [&'static str; 4] = ["flake.nix", "flake.lock", "packages.nix", "overlay.nix"];
-    const NIX_ENV: &'static str = "IN_NIX";
+    /// The internal environment variable which marks the stage running
+    /// inside the Nix environment. Not part of the interface, unlike the
+    /// `KUBERNIX_*` options.
+    const NIX_ENV: &'static str = "_KUBERNIX_IN_NIX";
 
     /// The directory of the cached environment. It cannot be part of the
     /// Nix directory, since the flake consists of all files in there.
@@ -40,6 +51,11 @@ impl Nix {
 
     /// The `.dockerignore` content of older versions.
     const DOCKERIGNORE: &'static str = "nix/.git\n";
+
+    /// The experimental features which every Nix invocation enables, since
+    /// `sudo` drops `NIX_CONFIG` and root may not use the `nix.conf` of the
+    /// user.
+    const FEATURES: [&'static str; 2] = ["--extra-experimental-features", "nix-command flakes"];
 
     /// Bootstrap the nix environment and replace the current process by
     /// kubernix inside it, which inherits the lock of the run directory.
@@ -90,17 +106,25 @@ impl Nix {
             oci_runtime.as_str(),
         ];
 
+        // Empty values override the stored ones in the next stage
         if let Some(ref overlay) = overlay_val {
             args.push("--overlay");
             args.push(overlay.as_str());
+        } else {
+            args.push("--overlay=");
         }
 
         let dockerfile_val = config.dockerfile().map(|d| d.display().to_string());
         if let Some(ref dockerfile) = dockerfile_val {
             args.push("--dockerfile");
             args.push(dockerfile.as_str());
+        } else {
+            args.push("--dockerfile=");
         }
 
+        if config.packages().is_empty() {
+            args.push("--packages=");
+        }
         for pkg in config.packages() {
             args.push("--packages");
             args.push(pkg.as_str());
@@ -118,6 +142,9 @@ impl Nix {
         }
 
         let mut cmd = Self::command(&config, &args)?;
+        Config::remove_option_env(&mut cmd);
+        cmd.env(Self::NIX_ENV, "1");
+        signals::check()?;
         lock.inherit(&mut cmd)?;
         Err(cmd.exec()).context("Unable to run nix develop")
     }
@@ -148,18 +175,49 @@ impl Nix {
     /// The command which runs `args` inside the nix develop shell, which
     /// creates the cached environment if needed.
     pub fn command(config: &Config, args: &[&str]) -> Result<Command> {
-        let nix = System::find_executable("nix")?;
+        let nix = Self::executable()?;
         let profile = Self::profile(config, &nix)?;
 
-        let mut cmd = Command::new(&nix);
-        cmd.env(Nix::NIX_ENV, "true")
-            .arg("develop")
+        let mut cmd = Self::nix(&nix);
+        cmd.arg("develop")
             .arg(&profile)
             .arg("--log-format")
             .arg("raw")
             .arg("--command");
         cmd.args(args);
         Ok(cmd)
+    }
+
+    /// The path of the `nix` executable.
+    fn executable() -> Result<PathBuf> {
+        System::find_executable("nix").context(
+            "Install Nix (https://nixos.org/download); \
+             under sudo keep PATH: sudo env \"PATH=$PATH\" kubernix",
+        )
+    }
+
+    /// A Nix command, which enables the experimental features.
+    fn nix(nix: &Path) -> Command {
+        let mut cmd = Command::new(nix);
+        cmd.args(Self::FEATURES);
+        cmd
+    }
+
+    /// The `PATH` of the cached environment of the run root, if it exists
+    /// and is usable. It only contains the directories of the environment,
+    /// `nix develop` appends the ones of the caller.
+    pub fn cached_path(root: &Path) -> Option<String> {
+        let profile = Self::profile_path(root).ok()?;
+        if !Self::is_usable(&profile) {
+            return None;
+        }
+        Self::env_path(&fs::read(&profile).ok()?)
+    }
+
+    /// The `PATH` of the provided development environment JSON.
+    fn env_path(content: &[u8]) -> Option<String> {
+        let env = serde_json::from_slice::<serde_json::Value>(content).ok()?;
+        env["variables"]["PATH"]["value"].as_str().map(String::from)
     }
 
     /// The cached environment of the Nix directory, which gets created if it
@@ -196,7 +254,7 @@ impl Nix {
 
         info!("Evaluating the Nix environment");
         let nix_dir = config.root().join(Self::DIR);
-        let status = Command::new(nix)
+        let mut child = Self::nix(nix)
             .arg("print-dev-env")
             .arg("--profile")
             .arg(&profile)
@@ -205,8 +263,9 @@ impl Nix {
             .arg("--log-format")
             .arg("raw")
             .stdout(Stdio::null())
-            .status()
+            .spawn()
             .context("Unable to run nix print-dev-env")?;
+        let status = Self::wait_cancelable(&mut child, signals::requested)?;
         if !status.success() {
             bail!("Unable to evaluate the Nix environment (exit: {})", status);
         }
@@ -219,6 +278,41 @@ impl Nix {
         Ok(profile)
     }
 
+    /// Wait for the child to exit, but terminate it once `cancel` returns
+    /// true, for example on a termination signal. The child stays in the
+    /// process group of kubernix, so that an interrupt of the terminal
+    /// reaches it directly, while a signal sent to kubernix only (like the
+    /// one of `kubernix stop`) terminates it via `cancel`.
+    fn wait_cancelable(child: &mut Child, cancel: impl Fn() -> bool) -> Result<ExitStatus> {
+        loop {
+            if let Some(status) = child.try_wait()? {
+                // An interrupt of the terminal reached both
+                if !status.success() && cancel() {
+                    bail!("Received termination signal, aborting")
+                }
+                return Ok(status);
+            }
+            if cancel() {
+                break;
+            }
+            sleep(Duration::from_millis(100));
+        }
+        if let Ok(pid) = i32::try_from(child.id()) {
+            let _ = kill(Pid::from_raw(pid), Signal::SIGTERM);
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            if child.try_wait()?.is_some() {
+                bail!("Received termination signal, aborting")
+            }
+            sleep(Duration::from_millis(100));
+        }
+        warn!("Nix did not exit on SIGTERM, killing it");
+        let _ = child.kill();
+        let _ = child.wait();
+        bail!("Received termination signal, aborting")
+    }
+
     /// Check whether `nix develop` is able to enter the provided profile:
     /// it has to point to the JSON of a development environment, whose
     /// `PATH` entries in the Nix store exist.
@@ -226,26 +320,24 @@ impl Nix {
         let Ok(content) = fs::read(profile) else {
             return false;
         };
-        let Ok(env) = serde_json::from_slice::<serde_json::Value>(&content) else {
-            return false;
-        };
-        env["variables"]["PATH"]["value"]
-            .as_str()
-            .is_some_and(|path| {
-                path.split(':')
-                    .filter(|dir| dir.starts_with("/nix/store/"))
-                    .all(|dir| Path::new(dir).exists())
-            })
+        Self::env_path(&content).is_some_and(|path| {
+            path.split(':')
+                .filter(|dir| dir.starts_with("/nix/store/"))
+                .all(|dir| Path::new(dir).exists())
+        })
     }
 
     /// Take the exclusive lock for creating the cached environment, which
     /// waits for other instances creating it.
     fn lock_profile(root: &Path) -> Result<Flock<File>> {
         let path = root.join(Self::PROFILE_LOCK);
+        // Other users must not be able to take the lock
         let file = OpenOptions::new()
             .create(true)
             .truncate(false)
             .write(true)
+            .mode(0o600)
+            .custom_flags(::nix::libc::O_NOFOLLOW)
             .open(&path)
             .with_context(|| format!("Unable to open lock file '{}'", path.display()))?;
         Flock::lock(file, FlockArg::LockExclusive)
@@ -272,17 +364,7 @@ impl Nix {
 
     /// Render all files of the Nix environment as (file name, content).
     fn render_files(config: &Config) -> Result<Vec<(&'static str, String)>> {
-        for pkg in config.packages() {
-            if !pkg
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.')
-            {
-                bail!(
-                    "Invalid package name '{}': only alphanumeric characters, dashes, underscores, and dots are allowed",
-                    pkg,
-                );
-            }
-        }
+        config.check_packages()?;
         debug!("Adding additional packages: {:?}", config.packages());
 
         let overlay = match config.overlay() {
@@ -331,7 +413,7 @@ impl Nix {
         }
         create_dir_all(dir).context("Unable to create nix directory")?;
         for (name, content) in files {
-            fs::write(dir.join(name), content)
+            write_file(&dir.join(name), content.as_bytes())
                 .with_context(|| format!("Unable to write {}", name))?;
         }
         Ok(true)
@@ -371,6 +453,12 @@ impl Nix {
     pub fn is_active() -> bool {
         var(Nix::NIX_ENV).is_ok()
     }
+
+    /// Remove the variable which marks the Nix environment from the
+    /// command environment.
+    pub(crate) fn remove_internal_env(cmd: &mut Command) {
+        cmd.env_remove(Self::NIX_ENV);
+    }
 }
 
 #[cfg(test)]
@@ -386,7 +474,8 @@ mod tests {
 
     #[test]
     fn write_files_only_on_change() -> Result<()> {
-        let dir = tempdir()?.keep().join("nix");
+        let tmp = tempdir()?;
+        let dir = tmp.path().join("nix");
         let files = vec![("a.nix", "a".to_string()), ("b.nix", "b".to_string())];
         assert!(Nix::write_files(&dir, &files)?);
         assert!(!Nix::write_files(&dir, &files)?);
@@ -498,31 +587,19 @@ mod tests {
     }
 
     #[test]
-    fn runtime_flake_template_contains_placeholder() {
-        let template = include_str!("../nix/runtime-flake.nix");
-        assert!(template.contains("KUBERNIX_SYSTEM"));
-    }
+    fn render_files_replaces_placeholders() -> Result<()> {
+        let config = crate::config::tests::parse(&["--packages=hello,jq"])?;
+        let files = Nix::render_files(&config)?;
+        let file = |name| &files.iter().find(|(n, _)| *n == name).unwrap().1;
 
-    #[test]
-    fn runtime_flake_system_replacement() {
-        let template = include_str!("../nix/runtime-flake.nix");
-        let result = template.replace("KUBERNIX_SYSTEM", "x86_64-linux");
-        assert!(result.contains("x86_64-linux"));
-        assert!(!result.contains("KUBERNIX_SYSTEM"));
-    }
+        let flake = file("flake.nix");
+        assert!(!flake.contains("KUBERNIX_SYSTEM"));
+        assert!(flake.contains(&format!("\"{}\"", Nix::nix_system()?)));
 
-    #[test]
-    fn packages_template_contains_placeholder() {
-        let template = include_str!("../nix/packages.nix");
-        assert!(template.contains("/* PACKAGES */"));
-    }
-
-    #[test]
-    fn packages_replacement() {
-        let template = include_str!("../nix/packages.nix");
-        let result = template.replace("/* PACKAGES */", "hello world");
-        assert!(result.contains("hello world"));
-        assert!(!result.contains("/* PACKAGES */"));
+        let packages = file("packages.nix");
+        assert!(!packages.contains("/* PACKAGES */"));
+        assert!(packages.contains("hello jq"));
+        Ok(())
     }
 
     #[test]
@@ -530,6 +607,66 @@ mod tests {
         let lock = include_str!("../flake.lock");
         let parsed: serde_json::Value = serde_json::from_str(lock).unwrap();
         assert!(parsed["nodes"]["nixpkgs"]["locked"]["rev"].is_string());
+    }
+
+    #[test]
+    fn flake_lock_only_locks_nixpkgs() {
+        // The runtime flake uses the lock of the repository flake without
+        // updating it, so both need the same inputs.
+        let lock: serde_json::Value = serde_json::from_str(include_str!("../flake.lock")).unwrap();
+        let root = lock["root"].as_str().unwrap();
+        let inputs = lock["nodes"][root]["inputs"].as_object().unwrap();
+        assert_eq!(inputs.keys().collect::<Vec<_>>(), ["nixpkgs"]);
+        assert!(include_str!("../nix/runtime-flake.nix").contains("{ self, nixpkgs }:"));
+    }
+
+    #[test]
+    fn nix_enables_flakes() {
+        let cmd = Nix::nix(Path::new("/bin/nix"));
+        assert_eq!(
+            cmd.get_args().collect::<Vec<_>>(),
+            ["--extra-experimental-features", "nix-command flakes"]
+        );
+    }
+
+    #[test]
+    fn cached_path_requires_usable_profile() -> Result<()> {
+        let root = tempdir()?;
+        let files: Vec<(&str, String)> = Nix::FILES.iter().map(|n| (*n, n.to_string())).collect();
+        Nix::write_files(&root.path().join(Nix::DIR), &files)?;
+        assert_eq!(Nix::cached_path(root.path()), None);
+
+        let profile = Nix::profile_path(root.path())?;
+        fs::create_dir_all(root.path().join(Nix::PROFILE_DIR))?;
+        fs::write(
+            &profile,
+            r#"{"variables": {"PATH": {"type": "exported", "value": "/usr/bin:/bin"}}}"#,
+        )?;
+        assert_eq!(
+            Nix::cached_path(root.path()).as_deref(),
+            Some("/usr/bin:/bin")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn wait_cancelable_returns_status() -> Result<()> {
+        let mut child = Command::new("sh").args(["-c", "exit 3"]).spawn()?;
+        let status = Nix::wait_cancelable(&mut child, || false)?;
+        assert_eq!(status.code(), Some(3));
+        Ok(())
+    }
+
+    #[test]
+    fn wait_cancelable_terminates_on_cancel() -> Result<()> {
+        let mut child = Command::new("sleep").arg("30").spawn()?;
+        let start = Instant::now();
+        let err = Nix::wait_cancelable(&mut child, || start.elapsed() > Duration::from_millis(200))
+            .unwrap_err();
+        assert!(err.to_string().contains("termination signal"), "{err}");
+        assert!(child.try_wait()?.is_some());
+        assert!(start.elapsed() < Duration::from_secs(5));
+        Ok(())
     }
 
     #[test]

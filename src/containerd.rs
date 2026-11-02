@@ -61,6 +61,14 @@ pub struct Containerd {
 
 const CONTAINERD: &str = "containerd";
 
+/// The registry host configuration directory (`hosts.toml` and
+/// certificates) of the host. Without `config_path`, containerd 2.4 uses
+/// `/etc/containerd/certs.d:/etc/docker/certs.d`, which its transfer
+/// service treats as a single directory, so no registry configuration of
+/// the host would apply. A single directory works with both the transfer
+/// service and the local image pull.
+const CERTS_DIR: &str = "/etc/containerd/certs.d";
+
 impl Containerd {
     /// Start a containerd instance for the given node index.
     pub fn start(config: &Config, node: u8, network: &Network) -> ProcessState {
@@ -76,6 +84,7 @@ impl Containerd {
         // Always render the configuration, since it references the current
         // Nix store paths.
         create_dir_all(&cni_conf_dir).context("Unable to create containerd CNI directory")?;
+        create_dir_all(dir.join("cdi")).context("Unable to create containerd CDI directory")?;
 
         if config.is_rootless() {
             cri::write_rootless_wrappers(&dir, &paths)?;
@@ -87,10 +96,9 @@ impl Containerd {
         )
         .context("Unable to write containerd config")?;
 
-        cri::write_cni_config(&cni_conf_dir, &node_name, node, network)?;
-        if config.is_rootless() {
-            cri::reset_ipam_data(&cni_conf_dir)?;
-        }
+        // containerd leaves the host ports of the pods to the portmap plugin
+        cri::write_cni_config(&cni_conf_dir, &node_name, node, network, true)?;
+        cri::reset_ipam_data(&cni_conf_dir)?;
 
         // containerd-shim-runc-v2 hardcodes its socket path to /run/containerd/s/.
         // System::setup recreates /run/containerd with the correct ownership
@@ -105,7 +113,7 @@ impl Containerd {
         let mut process = if config.multi_node() && !config.is_rootless() {
             // Run inside a container
             let identifier = format!("Containerd {}", node_name);
-            Container::start(config, &dir, &identifier, CONTAINERD, &node_name, args)?
+            Container::start(config, &dir, &identifier, CONTAINERD, &node_name, args, &[])?
         } else {
             Process::start(&dir, "Containerd", CONTAINERD, args)?
         };
@@ -124,6 +132,15 @@ impl Containerd {
     ///
     /// Both OCI runtimes are registered as runtime handlers with their own
     /// state directory, the configured one is used as default.
+    ///
+    /// NRI is disabled, since its default socket and plugin directories
+    /// belong to the host. The CDI spec directory of the node is empty, so
+    /// that the CDI specs of the host do not apply. The registry host
+    /// configuration of the host (`/etc/containerd/certs.d`) still applies
+    /// on purpose, so that private registries work like on the host. In
+    /// rootless mode, AppArmor is disabled and the OOM scores are restricted
+    /// to the one of containerd, which cannot be lowered in a user
+    /// namespace.
     fn render_config(
         config: &Config,
         dir: &Path,
@@ -133,14 +150,9 @@ impl Containerd {
     ) -> String {
         const RUNTIMES: &str = r#"plugins."io.containerd.cri.v1.runtime".containerd.runtimes"#;
         let runtimes = paths
-            .runtimes
+            .handlers(config, dir)
             .iter()
             .map(|(runtime, path)| {
-                let path = if config.is_rootless() {
-                    cri::rootless_wrapper(dir, *runtime).display().to_string()
-                } else {
-                    path.clone()
-                };
                 format!(
                     "[{RUNTIMES}.{name}]\n\
                      runtime_type = \"io.containerd.runc.v2\"\n\
@@ -155,8 +167,8 @@ impl Containerd {
             })
             .collect::<Vec<_>>()
             .join("\n");
-        // containerd 2.3.3 native snapshotter fails with "no unpack
-        // platforms defined"; overlayfs works in all modes.
+        // The native snapshotter of containerd 2.3.3 failed with "no unpack
+        // platforms defined", overlayfs works in all modes.
         let snapshotter = "overlayfs";
         format!(
             include_str!("assets/containerd.toml"),
@@ -165,11 +177,12 @@ impl Containerd {
             socket = socket,
             plugin_dir = paths.plugin_dir,
             cni_conf_dir = cni_conf_dir.display(),
+            cdi_spec_dir = dir.join("cdi").display(),
+            certs_dir = CERTS_DIR,
             default_runtime = config.oci_runtime(),
             runtimes = runtimes,
             snapshotter = snapshotter,
-            disable_apparmor = config.is_rootless(),
-            disable_nri = config.is_rootless(),
+            rootless = config.is_rootless(),
         )
     }
 
@@ -199,6 +212,7 @@ impl Stoppable for Containerd {
                 )
             });
         let stopped = self.process.stop();
+        cri::kill_leftover_monitors(&self.socket, &self.node_name);
         if let Some(container) = &mut self.container {
             container.remove();
         }
@@ -214,14 +228,6 @@ impl Stoppable for Containerd {
 mod tests {
     use super::*;
     use crate::config::OciRuntime;
-    use clap::Parser;
-
-    #[test]
-    fn component_metadata() {
-        let c = ContainerdComponent::new(0);
-        assert_eq!(c.name(), "Containerd (node 0)");
-        assert_eq!(c.phase(), Phase::Controller);
-    }
 
     #[test]
     fn component_name_per_node() {
@@ -237,7 +243,7 @@ mod tests {
             runtimes: vec![(OciRuntime::Runc, "/nix/bin/runc".into())],
             plugin_dir: "/nix/cni".into(),
         };
-        let config = Config::parse_from(["kubernix", "--oci-runtime=runc"]);
+        let config = crate::config::tests::parse(&["--oci-runtime=runc"])?;
         let content = Containerd::render_config(&config, &dir, &socket, &dir.join("cni"), &paths);
         let v: toml::Value = toml::from_str(&content)?;
         let containerd = cri_runtime(&v);
@@ -267,7 +273,7 @@ mod tests {
 
     #[test]
     fn render_config_registers_both_runtimes() -> Result<()> {
-        let v = render(&Config::parse_from(["kubernix"]))?;
+        let v = render(&crate::config::tests::parse(&[])?)?;
         let containerd = cri_runtime(&v);
         assert_eq!(containerd["default_runtime_name"].as_str(), Some("crun"));
         for (name, path) in [("crun", "/nix/bin/crun"), ("runc", "/nix/bin/runc")] {
@@ -287,7 +293,7 @@ mod tests {
 
     #[test]
     fn render_config_current_version() -> Result<()> {
-        let v = render(&Config::parse_from(["kubernix"]))?;
+        let v = render(&crate::config::tests::parse(&[])?)?;
         assert_eq!(v["version"].as_integer(), Some(4));
         let plugins = &v["plugins"];
         assert_eq!(
@@ -309,8 +315,23 @@ mod tests {
     }
 
     #[test]
+    fn render_config_uses_host_certs_dir() -> Result<()> {
+        let v = render(&crate::config::tests::parse(&[])?)?;
+        let registry = &v["plugins"]["io.containerd.cri.v1.images"]["registry"];
+        // A list of directories would be one directory for the transfer
+        // service
+        assert_eq!(
+            registry["config_path"].as_str(),
+            Some("/etc/containerd/certs.d")
+        );
+        assert!(registry.get("mirrors").is_none());
+        assert!(registry.get("configs").is_none());
+        Ok(())
+    }
+
+    #[test]
     fn render_config_default_runc() -> Result<()> {
-        let v = render(&Config::parse_from(["kubernix", "--oci-runtime=runc"]))?;
+        let v = render(&crate::config::tests::parse(&["--oci-runtime=runc"])?)?;
         let containerd = cri_runtime(&v);
         assert_eq!(containerd["default_runtime_name"].as_str(), Some("runc"));
         assert!(containerd["runtimes"].get("crun").is_some());
@@ -318,8 +339,31 @@ mod tests {
     }
 
     #[test]
+    fn render_config_rootless_options() -> Result<()> {
+        for rootless in [false, true] {
+            let mut c = crate::config::tests::parse(&[])?;
+            c.set_rootless(rootless);
+            let v = render(&c)?;
+            let runtime = &v["plugins"]["io.containerd.cri.v1.runtime"];
+            assert_eq!(runtime["disable_apparmor"].as_bool(), Some(rootless));
+            assert_eq!(runtime["restrict_oom_score_adj"].as_bool(), Some(rootless));
+            assert_eq!(runtime["enable_unprivileged_ports"].as_bool(), Some(true));
+            assert_eq!(runtime["enable_unprivileged_icmp"].as_bool(), Some(true));
+            assert_eq!(
+                runtime["cdi_spec_dirs"],
+                toml::Value::Array(vec!["/kubernix/containerd/node/cdi".into()])
+            );
+            assert_eq!(
+                v["plugins"]["io.containerd.nri.v1.nri"]["disable"].as_bool(),
+                Some(true)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn render_config_rootless_uses_wrappers() -> Result<()> {
-        let mut c = Config::parse_from(["kubernix"]);
+        let mut c = crate::config::tests::parse(&[])?;
         c.set_rootless(true);
         let v = render(&c)?;
         let runtimes = &cri_runtime(&v)["runtimes"];

@@ -16,24 +16,30 @@
 //! implementation and `Kubernix` runs the cluster based on the
 //! configuration. `Kubernix::start` works in these steps:
 //!
-//! 1. Write the configuration into the run root (`kubernix-run` by
-//!    default) and lock it, so that only one instance uses it. Then write
-//!    a Nix flake into it and re-execute the binary inside `nix develop`,
-//!    forwarding all options. The evaluated environment is cached as a Nix
-//!    profile, which is re-entered as long as the flake files are unchanged.
+//! 1. Lock the run directory (`kubernix-run` by default), so that only one
+//!    instance uses it. If not started as root, check the prerequisites of
+//!    rootless mode on the host. Then write the configuration into the run
+//!    directory, write a Nix flake into it and re-execute the binary inside
+//!    `nix develop`, forwarding all options. The evaluated environment is
+//!    cached as a Nix profile, which is re-entered as long as the flake
+//!    files are unchanged.
 //! 2. If not started as root, re-execute again inside `rootlesskit`, which
 //!    provides a user namespace where all components run as fake root
 //!    (rootless mode).
-//! 3. Prepare the system: load the required kernel modules (root mode
-//!    only) and set the network sysctls, which root mode skips inside a
-//!    container. With multiple nodes in root mode, prepare the node
-//!    container image. Then generate the certificates, kubeconfigs and the
-//!    encryption config, and start the components in boot phases: etcd,
-//!    the API server, the controllers together with the CRI runtimes and
-//!    kube-proxy, and finally the kubelets. Deploy the addons (CoreDNS)
-//!    afterwards.
-//! 4. Spawn an interactive shell, or wait for a termination signal with
-//!    `--no-shell`, and stop all components when it exits.
+//! 3. Remove the leftovers of an unclean exit and check that the ports of
+//!    the components are free. Prepare the system: load the required
+//!    kernel modules (root mode only) and set the network sysctls, which
+//!    root mode skips inside a container and restores once the last
+//!    cluster in root mode stops. Create the CNI bridges of the run
+//!    directory, whose gateway addresses are the node IPs in root mode.
+//!    With multiple nodes in root mode, prepare the node container image.
+//!    Then generate the certificates, kubeconfigs and the encryption
+//!    config, and start the components in boot phases: etcd, the API
+//!    server, the controllers together with the CRI runtimes and
+//!    kube-proxy, and finally the kubelets.
+//! 4. Deploy the addons (CoreDNS by default) in the background, and spawn
+//!    an interactive shell or wait for a termination signal with
+//!    `--no-shell`. Stop all components when it exits.
 //!
 //! With more than one node, every node gets its own CRI runtime and kubelet.
 //! In root mode, they run inside containers (podman by default), which
@@ -43,9 +49,13 @@
 //! per node, and one iptables rule exempts the traffic between pods from the
 //! masquerading of the bridges.
 //!
-//! `Kubernix::new_shell` spawns an additional shell for a running cluster,
-//! which enters the namespaces of the cluster via `nsenter` in rootless
-//! mode.
+//! The subcommands work on the cluster of an existing run directory:
+//! `Kubernix::new_shell` spawns an additional shell (`kubernix shell`) or
+//! runs a command in it (`kubernix shell -- <cmd>`), entering the
+//! namespaces of the cluster via `nsenter` in rootless mode.
+//! `Kubernix::stop_cluster` stops the running instance (`kubernix stop`)
+//! and `Kubernix::status` prints its state (`kubernix status`).
+//!
 //! See the [README](https://github.com/saschagrunert/kubernix) for usage
 //! details.
 #![deny(missing_docs)]
@@ -61,6 +71,8 @@ mod cri;
 mod crio;
 mod encryptionconfig;
 mod etcd;
+mod files;
+mod hoststate;
 mod kubeconfig;
 mod kubectl;
 mod kubelet;
@@ -73,8 +85,10 @@ mod podman;
 mod process;
 mod progress;
 mod proxy;
+mod rootless;
 mod runlock;
 mod scheduler;
+mod shell;
 mod signals;
 mod system;
 
@@ -84,20 +98,7 @@ pub use config::{Config, SubCommand};
 #[doc(hidden)]
 pub use logger::Logger;
 
-/// Write `content` to `path` only if the file does not exist or its
-/// current contents differ. Avoids unnecessary filesystem writes and
-/// inode updates on warm restarts.
-pub(crate) fn write_if_changed(path: &std::path::Path, content: &str) -> anyhow::Result<()> {
-    if path.exists()
-        && let Ok(existing) = std::fs::read_to_string(path)
-        && existing == content
-    {
-        return Ok(());
-    }
-    std::fs::write(path, content)
-        .with_context(|| format!("Unable to write '{}'", path.display()))?;
-    Ok(())
-}
+pub(crate) use files::{write_file, write_if_changed, write_private};
 
 /// A hash of the provided inputs, used to detect changed content. FNV-1a,
 /// stable across Rust versions and platforms.
@@ -112,28 +113,6 @@ pub(crate) fn content_hash(inputs: &[&[u8]]) -> u64 {
     hash
 }
 
-/// Write `content` to `path`, which only its owner can read, for example
-/// because it contains a private key.
-pub(crate) fn write_private(path: &std::path::Path, content: &[u8]) -> anyhow::Result<()> {
-    use std::{
-        fs::{OpenOptions, Permissions},
-        io::Write,
-        os::unix::fs::{OpenOptionsExt, PermissionsExt},
-    };
-    OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(path)
-        .and_then(|mut f| {
-            // The mode only applies to newly created files
-            f.set_permissions(Permissions::from_mode(0o600))?;
-            f.write_all(content)
-        })
-        .with_context(|| format!("Unable to write '{}'", path.display()))
-}
-
 use crate::nix::Nix;
 use component::{ClusterContext, ComponentRegistry};
 use config::{CriRuntime, OciRuntime, OutputFormat};
@@ -144,15 +123,28 @@ use encryptionconfig::EncryptionConfig;
 use kubeconfig::KubeConfig;
 use kubectl::Kubectl;
 use kubelet::Kubelet;
-use network::{NatExemption, Network};
+use network::{Bridges, NatExemption, Network};
 use pki::Pki;
 use process::ProcStat;
 use process::Stoppables;
 use progress::Progress;
+use rootless::Rootless;
 use runlock::RunLock;
 use system::System;
 
-const ROOTLESS_ENV: &str = "KUBERNIX_ROOTLESS";
+/// The internal environment variable which marks the stage running inside
+/// rootlesskit. Not part of the interface, unlike the `KUBERNIX_*` options.
+const ROOTLESS_ENV: &str = "_KUBERNIX_ROOTLESS";
+
+/// The internal environment variable which marks the shells of a rootless
+/// cluster, with its run directory as value. Root in a user namespace runs
+/// in rootless mode there, but in root mode otherwise, for example in a
+/// rootless container.
+const CLUSTER_SHELL_ENV: &str = "_KUBERNIX_CLUSTER_SHELL";
+
+/// The environment variable of the `--root` option, which the shells of the
+/// cluster get, so that the subcommands find it from any directory.
+const ROOT_ENV: &str = "KUBERNIX_ROOT";
 
 /// The lock file in the root, held by the instance running the cluster.
 const LOCK_FILE: &str = "kubernix.lock";
@@ -160,13 +152,33 @@ const LOCK_FILE: &str = "kubernix.lock";
 /// The PID file in the root, written once the cluster is up.
 const PID_FILE: &str = "kubernix.pid";
 
+/// The file in the root which lists the process groups of the components,
+/// so that the next start can kill the leftovers of an unclean exit.
+const PROCESS_GROUPS_FILE: &str = "kubernix.pgroups";
+
 /// The port the API server listens on.
 pub(crate) const API_SERVER_PORT: u16 = 6443;
 
-/// The exit code of `kubernix stop` and `kubernix status` if no cluster
-/// is running in the run root.
+/// The exit code of `kubernix stop`, `kubernix status` and `kubernix shell`
+/// if no cluster is running in the run root.
 #[doc(hidden)]
 pub const EXIT_NOT_RUNNING: i32 = 3;
+
+/// The configuration file of a run root, as found by `prepare_env`.
+enum ConfigFile {
+    /// Not existing yet
+    Missing,
+    /// Existing and up to date
+    Current,
+    /// Existing, but has to be replaced by the migrated configuration
+    Migrated(Box<Config>),
+}
+
+impl ConfigFile {
+    fn exists(&self) -> bool {
+        !matches!(self, ConfigFile::Missing)
+    }
+}
 
 /// The state of the cluster in a run root.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -199,7 +211,9 @@ impl State {
 }
 
 /// The status of the cluster in a run root, as shown by `kubernix status`.
+/// The JSON fields use kebab-case like the options and `kubernix.toml`.
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
 struct Status {
     root: PathBuf,
     state: &'static str,
@@ -211,6 +225,7 @@ struct Status {
 
 /// The settings and nodes of an existing cluster.
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
 struct ClusterStatus {
     mode: &'static str,
     nodes: u8,
@@ -223,6 +238,7 @@ struct ClusterStatus {
 
 /// The readiness of a node.
 #[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
 struct NodeStatus {
     name: String,
     ready: bool,
@@ -294,7 +310,7 @@ use ::nix::{
     unistd::{Pid, getuid},
 };
 use anyhow::{Context, Result, bail};
-use log::{debug, error, info, set_boxed_logger, warn};
+use log::{debug, error, info, warn};
 use serde::Serialize;
 use std::{
     ffi::OsString,
@@ -305,8 +321,8 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, Command, id},
     sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU8, Ordering},
     },
     thread::{self, sleep},
     time::{Duration, Instant},
@@ -322,10 +338,12 @@ pub struct Kubernix {
     kubectl: Kubectl,
     processes: Vec<Stoppables>,
     // Removes the rule on drop, after the processes are stopped
-    _nat_exemption: Option<NatExemption>,
-    // Dropped after the cleanup: restores the system state and releases
-    // the run directory.
-    system: System,
+    nat_exemption: Option<NatExemption>,
+    // Removes the CNI bridges on drop, after the processes are stopped
+    bridges: Option<Bridges>,
+    // Restores the system state on drop, after the bridges are removed
+    system: Option<System>,
+    // Dropped after the cleanup, releases the run directory
     _lock: RunLock,
 }
 
@@ -336,35 +354,72 @@ impl Kubernix {
     /// rootlesskit in rootless mode) if necessary, bootstraps the cluster
     /// and blocks until the shell exits or a termination signal arrives.
     pub fn start(mut config: Config) -> Result<()> {
-        Self::prepare_env(&mut config, true)?;
+        let file = Self::prepare_env(&mut config, true)?;
 
         // Fail early if another instance runs on the same root. The next
-        // stages inherit the lock.
+        // stages inherit the lock. Only its holder writes the configuration.
         let lock = Self::lock(&config)?;
+
+        // The rootless prerequisites only need the tools of the host. Check
+        // them before writing the configuration, otherwise a new run
+        // directory would stay a rootless one if they are not met.
+        if config.is_rootless() && !Nix::is_active() {
+            Rootless::preflight(API_SERVER_PORT)?;
+        }
+        let new = Self::write_config(&config, file)?;
 
         // Bootstrap if we're not inside a nix shell
         if Nix::is_active() {
             if config.is_rootless() && std::env::var(ROOTLESS_ENV).as_deref() != Ok("1") {
-                Network::warn_overlapping_route(config.cidr(), "cluster CIDR")?;
-                Network::warn_overlapping_route(config::SLIRP4NETNS_CIDR, "slirp4netns network")?;
+                Network::warn_overlapping_route(config.cidr(), "cluster CIDR", None)?;
+                Network::warn_overlapping_route(
+                    config::SLIRP4NETNS_CIDR,
+                    "slirp4netns network",
+                    None,
+                )?;
                 return Self::reexec_rootless(&lock);
             }
             Self::bootstrap_cluster(config, lock)
         } else {
-            Nix::bootstrap(config, &lock)
+            // Abort the evaluation of the Nix environment on termination
+            // signals, for example of 'kubernix stop', which removes the
+            // configuration of a new run directory below.
+            signals::register()?;
+
+            // A new run directory keeps its configuration only if the Nix
+            // environment works, which fails for example for packages
+            // which do not exist.
+            let file = config.file();
+            let result = Nix::bootstrap(config, &lock);
+            if new
+                && result.is_err()
+                && let Err(e) = fs::remove_file(&file)
+            {
+                warn!("Unable to remove '{}': {}", file.display(), e);
+            }
+            result
         }
     }
 
     /// Spawn a new shell into the provided configuration environment, or
     /// run the command of the `shell` subcommand in it. The process gets
     /// replaced, so the exit code is the one of the shell or command.
-    pub fn new_shell(mut config: Config) -> Result<()> {
+    /// Returns false if no cluster is running.
+    pub fn new_shell(mut config: Config) -> Result<bool> {
         let command = match config.subcommand() {
             Some(SubCommand::Shell { command }) => command.clone(),
             _ => vec![],
         };
-        if !Self::prepare_env(&mut config, false)? {
-            bail!("No kubernix cluster found in '{}'", config.root().display())
+        if !Self::prepare_env(&mut config, false)?.exists() {
+            error!("No kubernix cluster found in '{}'", config.root().display());
+            return Ok(false);
+        }
+        if Self::state(&config)? == State::Stopped {
+            error!(
+                "No running kubernix cluster found in '{}'",
+                config.root().display()
+            );
+            return Ok(false);
         }
         let pid = Self::running_pid(&config)?;
 
@@ -389,44 +444,80 @@ impl Kubernix {
             )
         }
 
-        let args = Self::shell_args(&config, pid, &env_file, &command)?;
+        // nsenter changes into the root directory of the mount namespace,
+        // so keep the current one for relative paths
+        let cwd = std::env::current_dir().ok();
+        let namespaces = Self::shell_namespaces(&config, pid);
+        let args = Self::shell_args(
+            &config,
+            pid,
+            &namespaces,
+            &env_file,
+            cwd.as_deref(),
+            &command,
+        )?;
         Nix::exec(
             &config,
             &args.iter().map(String::as_str).collect::<Vec<_>>(),
         )
+        .map(|()| true)
+    }
+
+    /// The `nsenter` options of the namespaces which the shell has to
+    /// enter: in rootless mode the user, mount and network namespace of
+    /// the rootlesskit session running the cluster (`pid`). The ones which
+    /// are already shared get skipped, for example in the shell of the
+    /// cluster, since entering the own user namespace fails.
+    fn shell_namespaces(config: &Config, pid: i32) -> Vec<&'static str> {
+        if !config.is_rootless() || std::env::var(ROOTLESS_ENV).as_deref() == Ok("1") {
+            return vec![];
+        }
+        let ns = |pid: &str, name: &str| fs::read_link(format!("/proc/{}/ns/{}", pid, name)).ok();
+        [("user", "-U"), ("mnt", "-m"), ("net", "-n")]
+            .into_iter()
+            .filter(|(name, _)| {
+                let own = ns("self", name);
+                own.is_none() || own != ns(&pid.to_string(), name)
+            })
+            .map(|(_, option)| option)
+            .collect()
     }
 
     /// The arguments to run the shell, or the command if not empty, with
-    /// the environment of the cluster. In rootless mode, they enter the
-    /// namespaces of the rootlesskit session running the cluster.
+    /// the environment of the cluster. They enter the `namespaces` (see
+    /// `shell_namespaces`) of `pid` and change into `cwd` afterwards.
     fn shell_args(
         config: &Config,
         pid: i32,
+        namespaces: &[&str],
         env_file: &Path,
+        cwd: Option<&Path>,
         command: &[String],
     ) -> Result<Vec<String>> {
         let mut args: Vec<String> = vec![];
-        if config.is_rootless() && std::env::var(ROOTLESS_ENV).as_deref() != Ok("1") {
-            args.extend(
-                [
-                    "nsenter",
-                    "-t",
-                    &pid.to_string(),
-                    "-U",
-                    "-m",
-                    "-n",
-                    "--preserve-credentials",
-                ]
-                .map(String::from),
-            );
+        if !namespaces.is_empty() {
+            args.extend(["nsenter".into(), "-t".into(), pid.to_string()]);
+            args.extend(namespaces.iter().map(|x| x.to_string()));
+            if namespaces.contains(&"-U") {
+                args.push("--preserve-credentials".into());
+            }
+            // Opened before entering the namespaces, so it works for any
+            // directory of the host
+            if let Some(cwd) = cwd {
+                args.push(format!("--wd={}", cwd.display()));
+            }
         }
-        let source = format!(". {}", Self::shell_escape(&env_file.display().to_string()));
+        let source = format!(
+            ". {} && {}",
+            shell::quote(&env_file.display().to_string()),
+            Self::exports(&Self::shell_env(config)),
+        );
         args.extend(["bash".into(), "-c".into()]);
         if command.is_empty() {
             args.push(format!(
                 "{} && exec {}",
                 source,
-                Self::shell_escape(&config.shell_ok()?)
+                shell::quote(&config.shell_ok()?)
             ));
         } else {
             // Pass the command as positional parameters, which avoids any
@@ -435,6 +526,27 @@ impl Kubernix {
             args.extend(command.iter().cloned());
         }
         Ok(args)
+    }
+
+    /// The variables which the shells of the cluster get in addition to the
+    /// env file: the run directory, so that the subcommands find the cluster
+    /// from any directory, and the marker of the shells of a rootless
+    /// cluster.
+    fn shell_env(config: &Config) -> Vec<(&'static str, String)> {
+        let root = config.root().display().to_string();
+        let mut env = vec![(ROOT_ENV, root.clone())];
+        if config.is_rootless() {
+            env.push((CLUSTER_SHELL_ENV, root));
+        }
+        env
+    }
+
+    /// The shell commands which export the variables.
+    fn exports(vars: &[(&str, String)]) -> String {
+        vars.iter()
+            .map(|(key, value)| format!("export {}={}", key, shell::quote(value)))
+            .collect::<Vec<_>>()
+            .join(" && ")
     }
 
     /// Stop the cluster running in the root of the configuration by
@@ -446,7 +558,13 @@ impl Kubernix {
             Some(SubCommand::Stop { timeout }) => *timeout,
             _ => 180,
         };
-        if !Self::prepare_env(&mut config, false)? {
+        // Run from the shell of the cluster, the cleanup sends SIGHUP to the
+        // shell, which forwards it to its jobs. Keep waiting for the cleanup
+        // to report its result.
+        if let Err(e) = signals::survive_hangup() {
+            debug!("Unable to handle SIGHUP: {:#}", e);
+        }
+        if !Self::prepare_env(&mut config, false)?.exists() {
             info!("No kubernix cluster found in '{}'", config.root().display());
             return Ok(false);
         }
@@ -456,6 +574,7 @@ impl Kubernix {
         let pid = match state {
             State::Stopped => {
                 info!("No running kubernix cluster found in '{}'", root);
+                Self::remove_stale(&config);
                 return Ok(false);
             }
             State::Starting(None) => bail!(
@@ -469,6 +588,14 @@ impl Kubernix {
         // rootlesskit in rootless mode, which keeps the API server port
         // published until it exits.
         let holder = RunLock::holder(&Self::lock_file(&config))?.flatten();
+        // The processes with their start times, which tell apart a PID
+        // which gets reused while waiting, without the exited ones.
+        let started = |pid| ProcStat::read(pid).map(|s| (pid, s.start_time));
+        let processes: Vec<_> = [Some(pid), holder]
+            .into_iter()
+            .flatten()
+            .filter_map(started)
+            .collect();
 
         info!(
             "Stopping {} kubernix (PID {}) in '{}'",
@@ -491,8 +618,9 @@ impl Kubernix {
 
         let deadline = Instant::now() + Duration::from_secs(timeout);
         while RunLock::holder(&Self::lock_file(&config))?.is_some()
-            || ProcStat::alive(pid)
-            || holder.is_some_and(ProcStat::alive)
+            || processes
+                .iter()
+                .any(|(pid, start)| ProcStat::alive_since(*pid, *start))
         {
             if Instant::now() >= deadline {
                 bail!(
@@ -508,6 +636,46 @@ impl Kubernix {
         Ok(true)
     }
 
+    /// Remove the node containers and mounts of a stopped cluster in root
+    /// mode, which a killed kubernix instance leaves behind. It holds the
+    /// lock of the run directory, so that it does not remove the ones of an
+    /// instance which starts in the meantime.
+    fn remove_stale(config: &Config) {
+        if config.is_rootless() || !getuid().is_root() {
+            return;
+        }
+        match RunLock::acquire(&Self::lock_file(config)) {
+            Ok(Some(_lock)) => {
+                Self::remove_stale_containers(config);
+                Self::umount_below(config.root(), Duration::ZERO);
+            }
+            Ok(None) => debug!("Another kubernix instance started, skipping the stale cleanup"),
+            Err(e) => warn!("Unable to lock the run directory: {:#}", e),
+        }
+    }
+
+    /// Remove the node containers of a stopped multi-node cluster. The
+    /// container runtime comes from the cached Nix environment, since
+    /// `kubernix stop` runs outside of it.
+    fn remove_stale_containers(config: &Config) {
+        if !config.multi_node() {
+            return;
+        }
+        let host_path = std::env::var_os("PATH").unwrap_or_default();
+        let path = match Nix::cached_path(config.root()) {
+            Some(nix_path) if !Nix::is_active() => {
+                let mut path = OsString::from(nix_path);
+                path.push(":");
+                path.push(host_path);
+                path
+            }
+            _ => host_path,
+        };
+        if let Err(e) = Container::remove_stale(config, Some(&path)) {
+            debug!("Unable to remove stale node containers: {:#}", e);
+        }
+    }
+
     /// Print the status of the cluster in the root of the configuration.
     /// Returns false if no cluster is running.
     pub fn status(mut config: Config) -> Result<bool> {
@@ -515,7 +683,7 @@ impl Kubernix {
             Some(SubCommand::Status { output }) => *output,
             _ => OutputFormat::Text,
         };
-        let found = Self::prepare_env(&mut config, false)?;
+        let found = Self::prepare_env(&mut config, false)?.exists();
         let state = if found {
             Self::state(&config)?
         } else {
@@ -587,46 +755,116 @@ impl Kubernix {
     }
 
     /// Prepare the environment based on the provided config. A new run
-    /// directory gets only created if `bootstrap` is set, otherwise false
-    /// is returned if the root contains no cluster.
-    fn prepare_env(config: &mut Config, bootstrap: bool) -> Result<bool> {
-        let env_rootless = std::env::var(ROOTLESS_ENV).as_deref() == Ok("1");
-        let rootless = if !getuid().is_root() {
-            true
-        } else if env_rootless {
-            // KUBERNIX_ROOTLESS=1 is set by reexec_rootless() inside rootlesskit.
-            // Only honor it when actually inside a user namespace to prevent
-            // a broken cluster from `sudo KUBERNIX_ROOTLESS=1 kubernix`.
-            System::in_user_namespace()
-        } else {
-            false
-        };
+    /// directory gets only created if `bootstrap` is set, its configuration
+    /// file gets written by `write_config` once the run directory is locked.
+    fn prepare_env(config: &mut Config, bootstrap: bool) -> Result<ConfigFile> {
+        // Use the log settings of the command line and the environment for
+        // the errors before the configuration file got loaded
+        Logger::install(config.log_level(), config.log_format())?;
+
+        let rootless = Self::rootless_mode(
+            getuid().is_root(),
+            System::in_user_namespace(),
+            std::env::var(ROOTLESS_ENV).as_deref() == Ok("1"),
+            std::env::var_os(CLUSTER_SHELL_ENV).is_some(),
+            bootstrap,
+        )?;
 
         // Set rootless before config loading so that it can be compared
         // with the mode of the existing run directory.
         config.set_rootless(rootless);
 
-        // Prepare the configuration
-        let found = config.root().exists() && (bootstrap || config.file_exists());
-        if found {
+        // Prepare the configuration. Only the bootstrap validates it, the
+        // subcommands use the existing cluster as it is.
+        let file = if config.file_exists() {
+            // Root refuses a rootless run directory because of its mode,
+            // before it gets refused because of its ownership.
+            config.check_stored_mode()?;
             config.canonicalize_root()?;
-            config.try_load_file()?;
-            config.validate()?;
-        } else if bootstrap {
-            config.validate()?;
-            config.canonicalize_root()?;
-            config.to_file()?;
-        }
+            let migrated = config.load_file()?;
+            if bootstrap {
+                config.validate()?;
+            }
+            match migrated {
+                Some(migrated) => ConfigFile::Migrated(migrated.into()),
+                None => ConfigFile::Current,
+            }
+        } else {
+            if bootstrap {
+                config.validate()?;
+                config.canonicalize_root()?;
+            }
+            ConfigFile::Missing
+        };
 
-        // Setup the logger
-        set_boxed_logger(Logger::new(config.log_level(), config.log_format()))
-            .context("Unable to set logger")?;
+        // The stored log settings apply unless overridden
+        Logger::install(config.log_level(), config.log_format())?;
 
         if bootstrap && config.is_rootless() && !Nix::is_active() {
             info!("Running in rootless mode");
         }
 
-        Ok(found || bootstrap)
+        Ok(file)
+    }
+
+    /// Decide whether kubernix runs in rootless mode, which it does as a
+    /// regular user. Root in a user namespace (`user_namespace`) runs in
+    /// rootless mode inside rootlesskit (`rootless_stage`) and in the shell
+    /// of a rootless cluster (`cluster_shell`), where a new cluster cannot
+    /// start (`bootstrap`): its system setup would run in the namespaces of
+    /// the running cluster. Root in any other user namespace, like a
+    /// rootless or user namespaced container, runs in root mode.
+    fn rootless_mode(
+        root: bool,
+        user_namespace: bool,
+        rootless_stage: bool,
+        cluster_shell: bool,
+        bootstrap: bool,
+    ) -> Result<bool> {
+        if !root {
+            return Ok(true);
+        }
+        if !user_namespace {
+            return Ok(false);
+        }
+        if rootless_stage {
+            return Ok(true);
+        }
+        if cluster_shell {
+            if bootstrap {
+                bail!(
+                    "kubernix cannot start a cluster from the shell of a rootless cluster, \
+                     run it as a regular user outside of it"
+                )
+            }
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Write the configuration file of a new or migrated run directory
+    /// found by `prepare_env`, which requires the lock of the run directory.
+    /// So two instances starting at the same time cannot overwrite the
+    /// configuration of each other. Returns true if the file is new.
+    fn write_config(config: &Config, file: ConfigFile) -> Result<bool> {
+        match file {
+            ConfigFile::Current => Ok(false),
+            ConfigFile::Migrated(migrated) => {
+                config.write_migrated(&migrated)?;
+                Ok(false)
+            }
+            // Another instance started and stopped a cluster in the
+            // meantime, whose settings would get lost.
+            ConfigFile::Missing if config.file_exists() => bail!(
+                "Another kubernix instance created a cluster in '{}' in the meantime, \
+                 start again to use it",
+                config.root().display()
+            ),
+            ConfigFile::Missing => {
+                config.to_file()?;
+                Ok(true)
+            }
+        }
     }
 
     /// The lock file of the root.
@@ -654,7 +892,7 @@ impl Kubernix {
                     .unwrap_or_default();
                 bail!(
                     "Another kubernix instance{} is already running in '{}', \
-                     use 'kubernix shell' to access it or a different root",
+                     use 'kubernix shell' to access it or a different --root",
                     pid,
                     config.root().display(),
                 )
@@ -672,6 +910,8 @@ impl Kubernix {
 
         let pid_file = Self::pid_file(config);
         let pid: i32 = match fs::read_to_string(&pid_file) {
+            // Not written completely yet, for example by an older version
+            Ok(pid) if pid.trim().is_empty() => return Ok(State::Starting(holder)),
             Ok(pid) => pid
                 .trim()
                 .parse()
@@ -702,52 +942,22 @@ impl Kubernix {
         }
     }
 
-    /// POSIX single-quote escaping: wraps in single quotes and escapes
-    /// any embedded single quotes with the '\'' sequence.
-    pub(crate) fn shell_escape(s: &str) -> String {
-        format!("'{}'", s.replace('\'', "'\\''"))
-    }
-
-    /// Remove the shell quoting of a single word, the inverse of
-    /// `shell_escape`. Also supports double quotes and backslash escapes.
-    fn shell_unquote(s: &str) -> String {
-        let mut out = String::with_capacity(s.len());
-        let mut chars = s.chars();
-        while let Some(c) = chars.next() {
-            match c {
-                '\'' => out.extend(chars.by_ref().take_while(|&c| c != '\'')),
-                '"' => {
-                    while let Some(c) = chars.next() {
-                        match c {
-                            '"' => break,
-                            '\\' => out.extend(chars.next()),
-                            c => out.push(c),
-                        }
-                    }
-                }
-                '\\' => out.extend(chars.next()),
-                c => out.push(c),
-            }
-        }
-        out
-    }
-
     /// Shell snippet which moves all processes of the cgroup into a child
     /// cgroup and enables the controllers for the children, since cgroup
-    /// v2's "no internal processes" rule forbids it otherwise.
+    /// v2's "no internal processes" rule forbids it otherwise. Controllers
+    /// which are not delegated get reported by `System::setup`.
     fn cgroup_evacuate(cgroup: &str, child: &str) -> String {
         format!(
             concat!(
                 "mkdir -p \"{cg}/{child}\"; ",
                 "for p in $(cat \"{cg}/cgroup.procs\"); do ",
                 "echo $p >\"{cg}/{child}/cgroup.procs\" 2>/dev/null; done; ",
-                "for c in memory cpu pids io; do ",
+                "for c in {controllers}; do ",
                 "echo \"+$c\" >\"{cg}/cgroup.subtree_control\" 2>/dev/null; done; ",
-                "grep -q memory \"{cg}/cgroup.subtree_control\" 2>/dev/null ",
-                "|| echo 'WARNING: cgroup memory controller not delegated, pods may fail' >&2; ",
             ),
             cg = cgroup,
             child = child,
+            controllers = rootless::CGROUP_CONTROLLERS.join(" "),
         )
     }
 
@@ -761,10 +971,10 @@ impl Kubernix {
 
         let kubernix_args = args
             .iter()
-            .map(|a| Self::shell_escape(a))
+            .map(|a| shell::quote(a))
             .collect::<Vec<_>>()
             .join(" ");
-        let kubernix_exe = Self::shell_escape(&exe.display().to_string());
+        let kubernix_exe = shell::quote(&exe.display().to_string());
 
         // Inside rootlesskit's cgroup namespace, evacuate processes from the
         // namespace root into a child and enable controllers, then exec.
@@ -785,7 +995,7 @@ impl Kubernix {
         // rootlesskit forwards all signals to its child.
         let outer_cmd = format!(
             concat!(
-                "CGRP=/sys/fs/cgroup$(cat /proc/self/cgroup | cut -d: -f3); ",
+                "CGRP=/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup); ",
                 "{evacuate}",
                 "exec rootlesskit --net=slirp4netns --mtu=65520 --cidr={cidr} ",
                 "--disable-host-loopback --cgroupns ",
@@ -797,7 +1007,7 @@ impl Kubernix {
             evacuate = Self::cgroup_evacuate("$CGRP", "init"),
             cidr = config::SLIRP4NETNS_CIDR,
             port = API_SERVER_PORT,
-            cmd = Self::shell_escape(&rootlesskit_cmd),
+            cmd = shell::quote(&rootlesskit_cmd),
         );
 
         let mut cmd = Command::new("systemd-run");
@@ -812,6 +1022,8 @@ impl Kubernix {
             "-c",
             &outer_cmd,
         ]);
+        // All options are passed as arguments
+        Config::remove_option_env(&mut cmd);
         cmd.env(ROOTLESS_ENV, "1");
         lock.inherit(&mut cmd)?;
 
@@ -819,11 +1031,13 @@ impl Kubernix {
         // No Kubernix struct or other Drop-bearing resources exist yet,
         // only the logger from prepare_env and the lock, which gets
         // inherited.
-        Err(cmd.exec()).context(
-            "Failed to start rootless session. \
-             Rootless mode requires systemd-run (with an active user session) \
-             and rootlesskit to be installed",
-        )
+        Err(cmd.exec()).with_context(|| {
+            format!(
+                "Unable to run systemd-run, which rootless mode needs together with \
+                 a systemd user session, see {}",
+                rootless::TROUBLESHOOTING
+            )
+        })
     }
 
     /// Stop kubernix by cleaning up all running processes. The processes
@@ -850,12 +1064,19 @@ impl Kubernix {
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
     fn bootstrap_cluster(config: Config, lock: RunLock) -> Result<()> {
         // Abort into the regular cleanup on termination signals, the
-        // components do not receive terminal signals.
+        // components do not receive terminal signals. Another signal force
+        // quits, also during the bootstrap.
         signals::register()?;
+        Self::watch_force_quit(&config);
 
         // Remove leftovers of a previous unclean exit, taking the lock
-        // already removed the PID file.
-        if !config.is_rootless() {
+        // already removed the PID file. In rootless mode, the CRI storage
+        // can only be removed inside the user namespace, otherwise its
+        // stale containers would be reused.
+        process::track_in(&config.root().join(PROCESS_GROUPS_FILE));
+        if config.is_rootless() {
+            Self::cleanup_rootless_storage(&config);
+        } else {
             Self::umount_below(config.root(), Duration::ZERO);
         }
 
@@ -875,14 +1096,26 @@ impl Kubernix {
         let p = Progress::new(steps, config.log_level(), config.log_format());
         info!("Bootstrapping cluster");
 
-        // Setup the network and fail early on unusable socket paths
+        // Setup the network and fail early on unusable socket paths or
+        // ports which are in use, for example by the cluster of another
+        // root, before changing the system. The kubelets in the node
+        // containers of a killed instance keep listening on their ports.
+        Container::remove_stale_on_start(&config);
         let network = Network::new(&config)?;
         for node in 0..config.nodes() {
             Kubelet::validate_paths(&config, &network, node)?;
         }
+        network
+            .check_ports(config.nodes())
+            .map_err(|e| Container::explain_port_conflict(&config, e))?;
 
         // Ensure that the system is prepared
         let system = System::setup(&config).context("Unable to setup system")?;
+        if let Ok(mut restore) = FORCE_QUIT_HOSTS.lock() {
+            *restore = Some(Box::new(system.hosts_restore()));
+        }
+        // Removed again on drop, also if anything below fails
+        let bridges = network.setup_bridges()?;
         signals::check()?;
         Container::build(&config)?;
         signals::check()?;
@@ -919,8 +1152,9 @@ impl Kubernix {
             network,
             kubectl,
             processes,
-            _nat_exemption: nat_exemption,
-            system,
+            nat_exemption,
+            bridges: Some(bridges),
+            system: Some(system),
             _lock: lock,
         };
 
@@ -941,6 +1175,7 @@ impl Kubernix {
         }
         info!("Everything is up and running");
         p.reset();
+        Stage::Running.set();
 
         if spawn_shell {
             kubernix.spawn_shell()
@@ -996,7 +1231,7 @@ impl Kubernix {
 
     /// Wait until a termination signal occurs or a component dies
     fn wait(&mut self) -> Result<()> {
-        info!("Waiting for interrupt…");
+        info!("Cluster running, stop it with Ctrl+C or 'kubernix stop'");
         loop {
             if signals::requested() {
                 return Ok(());
@@ -1009,32 +1244,59 @@ impl Kubernix {
     }
 
     /// Spawn a new interactive default system shell
-    fn spawn_shell(&self) -> Result<()> {
+    fn spawn_shell(&mut self) -> Result<()> {
         info!("Spawning interactive shell");
         info!("Please be aware that the cluster stops if you exit the shell");
 
         let mut cmd = Command::new(self.config.shell_ok()?);
         cmd.current_dir(self.config.root());
         Self::apply_env_file(&Self::env_file(&self.config), &mut cmd)?;
-        RunLock::forget(&mut cmd);
-        let mut child = cmd.spawn().context("Unable to spawn shell")?;
+        Self::remove_internal_env(&mut cmd);
+        cmd.envs(Self::shell_env(&self.config));
 
+        // An interrupt from the terminal is meant for the shell, but the
+        // other termination signals stop the cluster.
+        signals::set_shell(true);
+        let result = cmd
+            .spawn()
+            .context("Unable to spawn shell")
+            .and_then(|mut child| self.wait_shell(&mut child));
+        signals::set_shell(false);
+        result
+    }
+
+    /// Wait until the shell exits or a termination signal occurs. A died
+    /// component only gets reported, the shell stays usable.
+    fn wait_shell(&mut self, child: &mut Child) -> Result<()> {
+        let mut died = false;
         loop {
             if child.try_wait()?.is_some() {
-                // An interrupt from the terminal was meant for the shell
-                signals::clear_interrupt();
                 return Ok(());
             }
-            // An interrupt from the terminal is meant for the shell, but
-            // SIGTERM and SIGHUP stop the cluster.
-            signals::clear_interrupt();
-            if signals::terminated() {
+            if signals::requested() {
                 info!("Received termination signal, stopping the shell");
-                Self::kill_shell(&mut child);
+                Self::kill_shell(child);
                 return Ok(());
+            }
+            if !died && self.processes.iter_mut().flatten().any(|p| p.died()) {
+                died = true;
+                warn!(
+                    "A cluster component died unexpectedly, the cluster may not work \
+                     until you exit the shell and start it again"
+                );
             }
             sleep(Duration::from_millis(100));
         }
+    }
+
+    /// Remove the internal environment variables, which pass the state
+    /// between the stages of kubernix, from a command which is not a stage.
+    /// Otherwise kubernix started from it would skip its own stages.
+    pub(crate) fn remove_internal_env(cmd: &mut Command) {
+        cmd.env_remove(ROOTLESS_ENV);
+        cmd.env_remove(CLUSTER_SHELL_ENV);
+        Nix::remove_internal_env(cmd);
+        RunLock::forget(cmd);
     }
 
     /// Stop the interactive shell, which may ignore SIGTERM but not SIGHUP.
@@ -1062,7 +1324,7 @@ impl Kubernix {
         for line in content.lines() {
             let line = line.strip_prefix("export ").unwrap_or(line);
             if let Some((key, value)) = line.split_once('=') {
-                cmd.env(key, Self::shell_unquote(value));
+                cmd.env(key, shell::unquote(value));
             }
         }
         Ok(())
@@ -1071,8 +1333,8 @@ impl Kubernix {
     /// Lay out the env file
     fn write_env_file(&self) -> Result<()> {
         info!("Writing environment file");
-        fs::write(
-            Self::env_file(&self.config),
+        write_file(
+            &Self::env_file(&self.config),
             Self::env_file_content(&[
                 (
                     RUNTIME_ENV,
@@ -1082,17 +1344,17 @@ impl Kubernix {
                     "KUBECONFIG",
                     self.kubectl.kubeconfig().display().to_string(),
                 ),
-            ]),
+            ])
+            .as_bytes(),
         )
-        .context("Unable to write environment file")?;
-        Ok(())
+        .context("Unable to write environment file")
     }
 
     /// The env file content for the provided variables, with shell quoted
     /// values.
     fn env_file_content(vars: &[(&str, String)]) -> String {
         vars.iter()
-            .map(|(key, value)| format!("export {}={}\n", key, Self::shell_escape(value)))
+            .map(|(key, value)| format!("export {}={}\n", key, shell::quote(value)))
             .collect()
     }
 
@@ -1110,7 +1372,7 @@ impl Kubernix {
     fn write_pid_file(&self) -> Result<()> {
         let pid_file = Self::pid_file(&self.config);
         debug!("Writing pid file to: {}", pid_file.display());
-        fs::write(pid_file, id().to_string()).context("Unable to write pid file")
+        write_file(&pid_file, id().to_string().as_bytes()).context("Unable to write pid file")
     }
 
     /// Remove the PID file if it exists
@@ -1136,13 +1398,14 @@ impl Kubernix {
     /// Remove CRI storage directories while still inside the user namespace.
     /// Image layers contain files owned by unmapped uids that become
     /// unremovable after rootlesskit exits. Unmounts any lingering
-    /// container overlays first so remove_dir_all can succeed.
-    fn cleanup_rootless_storage(&self) {
-        if !self.config.is_rootless() {
+    /// container overlays first so remove_dir_all can succeed. Runs on
+    /// shutdown and on startup, for the leftovers of an unclean exit.
+    fn cleanup_rootless_storage(config: &Config) {
+        if !config.is_rootless() {
             return;
         }
         debug!("Removing rootless CRI storage");
-        let root = self.config.root();
+        let root = config.root();
         for entry in ["crio", "containerd"] {
             let dir = root.join(entry);
             if !dir.exists() {
@@ -1269,53 +1532,110 @@ impl Kubernix {
     }
 }
 
+/// The lifecycle stage of the cluster, which decides how the force quit
+/// watcher reports the first termination signal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+enum Stage {
+    Bootstrap,
+    Running,
+    Cleanup,
+    Done,
+}
+
+static STAGE: AtomicU8 = AtomicU8::new(Stage::Bootstrap as u8);
+
+/// Set once the first termination signal got reported, or the cleanup
+/// started because of it.
+static SIGNAL_NOTICED: AtomicBool = AtomicBool::new(false);
+
+/// The restore of the hosts file, which a force quit still does.
+type HostsRestore = Box<dyn FnOnce() + Send>;
+static FORCE_QUIT_HOSTS: Mutex<Option<HostsRestore>> = Mutex::new(None);
+
+impl Stage {
+    fn get() -> Self {
+        match STAGE.load(Ordering::SeqCst) {
+            0 => Stage::Bootstrap,
+            1 => Stage::Running,
+            2 => Stage::Cleanup,
+            _ => Stage::Done,
+        }
+    }
+
+    fn set(self) {
+        STAGE.store(self as u8, Ordering::SeqCst);
+    }
+}
+
 impl Kubernix {
-    /// Force quit on another termination signal during the cleanup: kill
-    /// all process groups, restore the hosts file, remove the PID file and
-    /// exit, which releases the lock. If the cleanup did not start because
-    /// of a signal, for example after the shell exited, it takes two
-    /// signals. Returns the flag to set once the cleanup is done.
-    fn watch_force_quit(
-        pid_file: PathBuf,
-        restore_hosts: impl FnOnce() + Send + 'static,
-    ) -> Arc<AtomicBool> {
-        let mut signaled = signals::requested();
-        signals::reset();
-        let done = Arc::new(AtomicBool::new(false));
-        let cleanup_done = Arc::clone(&done);
+    /// Force quit on another termination signal during the bootstrap or
+    /// the cleanup. If the cleanup did not start because of a signal, for
+    /// example after the shell exited, it takes two signals.
+    fn watch_force_quit(config: &Config) {
+        let pid_file = Self::pid_file(config);
+        let rootless_root = config.is_rootless().then(|| config.root().to_path_buf());
         thread::spawn(move || {
-            while !done.load(Ordering::Relaxed) {
-                if signals::requested() {
-                    signals::reset();
-                    if !signaled {
-                        signaled = true;
-                        warn!(
+            loop {
+                sleep(Duration::from_millis(50));
+                let stage = Stage::get();
+                if stage == Stage::Done {
+                    return;
+                }
+                if signals::forced() {
+                    Self::force_quit(&pid_file, rootless_root.as_deref());
+                }
+                if signals::requested() && !SIGNAL_NOTICED.swap(true, Ordering::SeqCst) {
+                    match stage {
+                        Stage::Bootstrap => warn!(
+                            "Received termination signal, aborting the bootstrap, \
+                             send another one to force quit"
+                        ),
+                        Stage::Cleanup => warn!(
                             "Received termination signal during the cleanup, \
                              send another one to force quit"
-                        );
-                        continue;
+                        ),
+                        Stage::Running | Stage::Done => {}
                     }
-                    warn!(
-                        "Received another termination signal during the cleanup, force quitting, \
-                         pods, node containers, mounts, network interfaces and firewall rules \
-                         may need a manual cleanup"
-                    );
-                    process::kill_all();
-                    restore_hosts();
-                    if let Err(e) = fs::remove_file(&pid_file)
-                        && e.kind() != ErrorKind::NotFound
-                    {
-                        warn!("Unable to remove '{}': {}", pid_file.display(), e);
-                    }
-                    if let Some(p) = Progress::get() {
-                        p.abandon();
-                    }
-                    std::process::exit(1);
                 }
-                sleep(Duration::from_millis(100));
             }
         });
-        cleanup_done
+    }
+
+    /// Kill all process groups, restore the hosts file, remove the PID
+    /// file and exit, which releases the lock.
+    fn force_quit(pid_file: &Path, rootless_root: Option<&Path>) -> ! {
+        warn!(
+            "Received another termination signal, force quitting, pods, node containers, \
+             mounts, network interfaces and firewall rules may need a manual cleanup"
+        );
+        process::kill_all();
+        if let Some(restore) = FORCE_QUIT_HOSTS.lock().ok().and_then(|mut r| r.take()) {
+            restore();
+        }
+        if let Err(e) = fs::remove_file(pid_file)
+            && e.kind() != ErrorKind::NotFound
+        {
+            warn!("Unable to remove '{}': {}", pid_file.display(), e);
+        }
+        if let Some(root) = rootless_root {
+            warn!("{}", Self::rootless_storage_hint(root));
+        }
+        if let Some(p) = Progress::get() {
+            p.abandon();
+        }
+        std::process::exit(1);
+    }
+
+    /// The hint for the CRI storage which a rootless force quit leaves
+    /// behind, since only a user namespace can remove it.
+    fn rootless_storage_hint(root: &Path) -> String {
+        format!(
+            "The rootless CRI storage contains files of subordinate users, the next \
+             start in the same run directory removes it, or remove the run directory \
+             with: {}",
+            Config::remove_command(root, true)
+        )
     }
 }
 
@@ -1328,15 +1648,17 @@ impl Drop for Kubernix {
         );
 
         info!("Cleaning up");
-        let cleanup_done =
-            Self::watch_force_quit(Self::pid_file(&self.config), self.system.hosts_restore());
+        if signals::requested() {
+            SIGNAL_NOTICED.store(true, Ordering::SeqCst);
+        }
+        Stage::Cleanup.set();
 
         self.addon_shutdown.store(true, Ordering::Relaxed);
         if let Some(handle) = self.addon_thread.take() {
             debug!("Waiting for addon deployment to finish");
             let deadline = Instant::now() + Duration::from_secs(5);
             while !handle.is_finished() && Instant::now() < deadline {
-                sleep(Duration::from_millis(100));
+                sleep(Duration::from_millis(10));
             }
             if handle.is_finished() {
                 let _ = handle.join();
@@ -1347,10 +1669,14 @@ impl Drop for Kubernix {
 
         self.stop();
         self.umount();
-        self.cleanup_rootless_storage();
-        self.network.cleanup();
+        Self::cleanup_rootless_storage(&self.config);
+        // Remove the firewall rule and the bridges, and restore the host
+        // state, while another signal still force quits
+        drop(self.nat_exemption.take());
+        drop(self.bridges.take());
+        drop(self.system.take());
         Self::remove_pid_file(&self.config);
-        cleanup_done.store(true, Ordering::Relaxed);
+        Stage::Done.set();
         info!("Cleanup done");
 
         p.reset();
@@ -1361,8 +1687,49 @@ impl Drop for Kubernix {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component::Phase;
     use std::io::Write;
     use tempfile::tempdir;
+
+    #[test]
+    fn register_components_orders_phases() {
+        let names = |args: &[&str]| -> Vec<(Phase, Vec<String>)> {
+            let config = config::tests::parse(args).unwrap();
+            Kubernix::register_components(&config)
+                .by_phase()
+                .into_iter()
+                .map(|(phase, c)| (phase, c.iter().map(|c| c.name().to_owned()).collect()))
+                .collect()
+        };
+        let expected = |runtime: &str| {
+            vec![
+                (Phase::Infrastructure, vec!["etcd".to_owned()]),
+                (Phase::ControlPlane, vec!["API Server".to_owned()]),
+                (
+                    Phase::Controller,
+                    vec![
+                        "Controller Manager".to_owned(),
+                        "Scheduler".to_owned(),
+                        format!("{} (node 0)", runtime),
+                        format!("{} (node 1)", runtime),
+                        "Proxy".to_owned(),
+                    ],
+                ),
+                (
+                    Phase::NodeAgent,
+                    vec!["Kubelet (node 0)".to_owned(), "Kubelet (node 1)".to_owned()],
+                ),
+            ]
+        };
+        assert_eq!(
+            names(&["--nodes=2", "--cri-runtime=crio"]),
+            expected("CRI-O")
+        );
+        assert_eq!(
+            names(&["--nodes=2", "--cri-runtime=containerd"]),
+            expected("Containerd")
+        );
+    }
 
     #[test]
     fn content_hash_depends_on_inputs() {
@@ -1370,37 +1737,6 @@ mod tests {
         assert_eq!(a, content_hash(&[b"crun", b"df"]));
         assert_ne!(a, content_hash(&[b"crun runc", b"df"]));
         assert_ne!(a, content_hash(&[b"crund", b"f"]));
-    }
-
-    #[test]
-    fn write_if_changed_creates_new_file() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("test.txt");
-        write_if_changed(&path, "hello").unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), "hello");
-    }
-
-    #[test]
-    fn write_if_changed_skips_identical() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("test.txt");
-        fs::write(&path, "hello").unwrap();
-        let before = fs::metadata(&path).unwrap().modified().unwrap();
-
-        // Small delay so mtime would differ if rewritten
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        write_if_changed(&path, "hello").unwrap();
-        let after = fs::metadata(&path).unwrap().modified().unwrap();
-        assert_eq!(before, after);
-    }
-
-    #[test]
-    fn write_if_changed_updates_different() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("test.txt");
-        fs::write(&path, "old").unwrap();
-        write_if_changed(&path, "new").unwrap();
-        assert_eq!(fs::read_to_string(&path).unwrap(), "new");
     }
 
     #[test]
@@ -1502,29 +1838,25 @@ mod tests {
     }
 
     #[test]
-    fn shell_unquote_inverts_escape() {
-        for s in [
-            "",
-            "plain",
-            "a b",
-            "it's",
-            "'''",
-            "\"quoted\"",
-            "back\\slash",
-        ] {
-            assert_eq!(Kubernix::shell_unquote(&Kubernix::shell_escape(s)), s);
-        }
-        assert_eq!(Kubernix::shell_unquote(r#""a \"b\"""#), r#"a "b""#);
-        assert_eq!(Kubernix::shell_unquote(r"a\ b"), "a b");
-    }
-
-    #[test]
     fn cgroup_evacuate_snippet() {
         let snippet = Kubernix::cgroup_evacuate("$CGRP", "init");
         assert!(snippet.contains("mkdir -p \"$CGRP/init\"; "));
         assert!(snippet.contains("echo $p >\"$CGRP/init/cgroup.procs\""));
+        assert!(snippet.contains("for c in memory cpu pids io; do "));
         assert!(snippet.contains(">\"$CGRP/cgroup.subtree_control\""));
         assert!(snippet.ends_with("; "));
+        // Warnings go through the logger instead
+        assert!(!snippet.contains("echo '"));
+    }
+
+    #[test]
+    fn rootless_storage_hint_quotes_root() {
+        let hint = Kubernix::rootless_storage_hint(Path::new("/run dir"));
+        assert!(
+            hint.ends_with("unshare --map-auto --map-root-user rm -rf '/run dir'"),
+            "{}",
+            hint
+        );
     }
 
     #[test]
@@ -1605,6 +1937,10 @@ mod tests {
         fs::write(Kubernix::pid_file(&config), "invalid")?;
         assert!(Kubernix::state(&config).is_err());
 
+        // An empty PID file is not written completely yet
+        fs::write(Kubernix::pid_file(&config), "\n")?;
+        assert_eq!(Kubernix::state(&config)?, State::Starting(Some(pid)));
+
         drop(lock);
         assert!(runlock::tests::released(&Kubernix::lock_file(&config))?);
         assert_eq!(Kubernix::state(&config)?, State::Stopped);
@@ -1612,16 +1948,37 @@ mod tests {
     }
 
     #[test]
+    fn remove_internal_env_removes_markers() {
+        let mut cmd = Command::new("true");
+        Kubernix::remove_internal_env(&mut cmd);
+        let removed: Vec<String> = cmd
+            .get_envs()
+            .filter(|(_, v)| v.is_none())
+            .map(|(k, _)| k.to_string_lossy().into())
+            .collect();
+        assert_eq!(
+            removed,
+            [
+                "_KUBERNIX_CLUSTER_SHELL",
+                "_KUBERNIX_IN_NIX",
+                "_KUBERNIX_LOCK_FD",
+                "_KUBERNIX_ROOTLESS"
+            ]
+        );
+    }
+
+    #[test]
     fn shell_args_interactive() -> Result<()> {
         let config = config::tests::test_config()?;
         let env_file = Path::new("/run dir/kubernix.env");
-        let args = Kubernix::shell_args(&config, 42, env_file, &[])?;
+        let args = Kubernix::shell_args(&config, 42, &[], env_file, Some(Path::new("/cwd")), &[])?;
         assert_eq!(args[..2], ["bash", "-c"]);
         assert_eq!(
             args[2],
             format!(
-                ". '/run dir/kubernix.env' && exec {}",
-                Kubernix::shell_escape(&config.shell_ok()?)
+                ". '/run dir/kubernix.env' && export KUBERNIX_ROOT={} && exec {}",
+                shell::quote(&config.root().display().to_string()),
+                shell::quote(&config.shell_ok()?)
             )
         );
         assert_eq!(args.len(), 3);
@@ -1632,9 +1989,14 @@ mod tests {
     fn shell_args_rootless_enter_namespaces() -> Result<()> {
         let config = config::tests::test_config_rootless()?;
         let command = ["kubectl", "get", "nodes"].map(String::from);
-        let args = temp_env::with_var_unset(ROOTLESS_ENV, || {
-            Kubernix::shell_args(&config, 42, Path::new("/env"), &command)
-        })?;
+        let args = Kubernix::shell_args(
+            &config,
+            42,
+            &["-U", "-m", "-n"],
+            Path::new("/env"),
+            Some(Path::new("/my dir")),
+            &command,
+        )?;
         assert_eq!(
             args,
             [
@@ -1645,16 +2007,68 @@ mod tests {
                 "-m",
                 "-n",
                 "--preserve-credentials",
+                "--wd=/my dir",
                 "bash",
                 "-c",
-                ". '/env' && exec \"$@\"",
+                &format!(
+                    ". '/env' && export KUBERNIX_ROOT={root} && \
+                     export _KUBERNIX_CLUSTER_SHELL={root} && exec \"$@\"",
+                    root = shell::quote(&config.root().display().to_string())
+                ),
                 "kubernix",
                 "kubectl",
                 "get",
                 "nodes",
             ]
         );
+
+        // Without the user namespace, the credentials stay unchanged
+        let args = Kubernix::shell_args(&config, 42, &["-n"], Path::new("/env"), None, &command)?;
+        assert_eq!(args[..5], ["nsenter", "-t", "42", "-n", "bash"]);
         Ok(())
+    }
+
+    #[test]
+    fn write_config_only_new_files() -> Result<()> {
+        let config = config::tests::test_config()?;
+        assert!(Kubernix::write_config(&config, ConfigFile::Missing)?);
+        assert!(config.file_exists());
+
+        // The file of another instance which took the lock first is kept
+        fs::write(config.file(), "other")?;
+        let err = Kubernix::write_config(&config, ConfigFile::Missing).unwrap_err();
+        assert!(err.to_string().contains("in the meantime"), "{err}");
+        assert!(!Kubernix::write_config(&config, ConfigFile::Current)?);
+        assert_eq!(fs::read_to_string(config.file())?, "other");
+
+        let migrated = Box::new((*config).clone());
+        assert!(!Kubernix::write_config(
+            &config,
+            ConfigFile::Migrated(migrated)
+        )?);
+        assert_ne!(fs::read_to_string(config.file())?, "other");
+        Ok(())
+    }
+
+    #[test]
+    fn shell_namespaces_skips_shared() -> Result<()> {
+        let pid = i32::try_from(std::process::id())?;
+        temp_env::with_var_unset(ROOTLESS_ENV, || -> Result<()> {
+            // The own namespaces are shared
+            let config = config::tests::test_config_rootless()?;
+            assert!(Kubernix::shell_namespaces(&config, pid).is_empty());
+
+            // Unknown ones get entered
+            assert_eq!(
+                Kubernix::shell_namespaces(&config, i32::MAX),
+                ["-U", "-m", "-n"]
+            );
+
+            // Root mode does not enter any
+            let config = config::tests::test_config()?;
+            assert!(Kubernix::shell_namespaces(&config, i32::MAX).is_empty());
+            Ok(())
+        })
     }
 
     #[test]
@@ -1668,15 +2082,83 @@ mod tests {
         let command = [
             "sh",
             "-c",
-            "printf '%s %s' \"$KUBECONFIG\" \"$1\"; exit 7",
+            "printf '%s %s %s %s' \"$KUBECONFIG\" \"$1\" \"$KUBERNIX_ROOT\" \
+             \"${_KUBERNIX_CLUSTER_SHELL-unset}\"; exit 7",
             "sh",
             "a 'b'",
         ]
         .map(String::from);
-        let args = Kubernix::shell_args(&config, 0, &env_file, &command)?;
-        let output = Command::new(&args[0]).args(&args[1..]).output()?;
-        assert_eq!(output.status.code(), Some(7));
-        assert_eq!(String::from_utf8_lossy(&output.stdout), "/it's/admin a 'b'");
+        let run = |config: &Config| -> Result<(Option<i32>, String)> {
+            let args = Kubernix::shell_args(config, 0, &[], &env_file, None, &command)?;
+            // A relative root in the environment of the caller gets replaced
+            let output = Command::new(&args[0])
+                .args(&args[1..])
+                .env(ROOT_ENV, "kubernix-run")
+                .env_remove(CLUSTER_SHELL_ENV)
+                .output()?;
+            Ok((
+                output.status.code(),
+                String::from_utf8_lossy(&output.stdout).into(),
+            ))
+        };
+        let root = config.root().display();
+        assert_eq!(
+            run(&config)?,
+            (Some(7), format!("/it's/admin a 'b' {} unset", root))
+        );
+
+        // The shells of a rootless cluster are marked
+        let mut rootless = (*config).clone();
+        rootless.set_rootless(true);
+        assert_eq!(
+            run(&rootless)?,
+            (Some(7), format!("/it's/admin a 'b' {} {}", root, root))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn shell_env_marks_rootless_shells() -> Result<()> {
+        let config = config::tests::test_config()?;
+        let root = config.root().display().to_string();
+        assert_eq!(Kubernix::shell_env(&config), [(ROOT_ENV, root.clone())]);
+        let mut cmd = Command::new("true");
+        Kubernix::remove_internal_env(&mut cmd);
+        cmd.envs(Kubernix::shell_env(&config));
+        assert!(envs(&cmd).contains(&(ROOT_ENV.into(), root.clone())));
+
+        let config = config::tests::test_config_rootless()?;
+        let root = config.root().display().to_string();
+        assert_eq!(
+            Kubernix::shell_env(&config),
+            [(ROOT_ENV, root.clone()), (CLUSTER_SHELL_ENV, root)]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn rootless_mode_decision() -> Result<()> {
+        let mode = |root, userns, stage, shell, bootstrap| {
+            Kubernix::rootless_mode(root, userns, stage, shell, bootstrap)
+        };
+        for bootstrap in [false, true] {
+            // Regular users
+            assert!(mode(false, false, false, false, bootstrap)?);
+            assert!(mode(false, true, false, true, bootstrap)?);
+            // Real root, where the markers do not count
+            assert!(!mode(true, false, false, false, bootstrap)?);
+            assert!(!mode(true, false, true, true, bootstrap)?);
+            // Root in a rootless or user namespaced container
+            assert!(!mode(true, true, false, false, bootstrap)?);
+            // Inside rootlesskit
+            assert!(mode(true, true, true, false, bootstrap)?);
+            assert!(mode(true, true, true, true, bootstrap)?);
+        }
+        // The shell of a rootless cluster runs the subcommands, but cannot
+        // start a cluster
+        assert!(mode(true, true, false, true, false)?);
+        let err = mode(true, true, false, true, true).unwrap_err().to_string();
+        assert!(err.contains("shell of a rootless cluster"), "{}", err);
         Ok(())
     }
 
@@ -1767,10 +2249,10 @@ mod tests {
                 "pid": 42,
                 "mode": "rootless",
                 "nodes": 2,
-                "cri_runtime": "containerd",
-                "oci_runtime": "runc",
-                "api_server": "https://127.0.0.1:6443",
-                "node_status": [
+                "cri-runtime": "containerd",
+                "oci-runtime": "runc",
+                "api-server": "https://127.0.0.1:6443",
+                "node-status": [
                     {"name": "node-0", "ready": true},
                     {"name": "node-1", "ready": false},
                 ],

@@ -6,16 +6,22 @@
 //! rootless session), since the next stage inherits the file descriptor
 //! and adopts the lock instead of taking a new one. Other processes can
 //! check the lock without taking it.
+//!
+//! Only the owner can open the lock file, since a process which is able to
+//! open it could take a read lock and block kubernix from starting. Other
+//! users check the lock via `/proc/locks` instead.
 
-use crate::process::ProcStat;
+use crate::{
+    files::{open_lock_file, try_lock, whole_file_lock},
+    process::ProcStat,
+};
 use anyhow::{Context, Result};
 use nix::{
-    errno::Errno,
     fcntl::{FcntlArg, FdFlag, fcntl},
     libc,
 };
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{ErrorKind, Write},
     mem::ManuallyDrop,
     os::{
@@ -27,8 +33,11 @@ use std::{
 };
 
 /// The environment variable which passes the file descriptor of the lock
-/// to the next stage.
-const FD_ENV: &str = "KUBERNIX_LOCK_FD";
+/// to the next stage, which is internal and not part of the interface.
+const FD_ENV: &str = "_KUBERNIX_LOCK_FD";
+
+/// The locks of all processes.
+const PROC_LOCKS: &str = "/proc/locks";
 
 /// An exclusive lock of the run directory, released once the file
 /// descriptor gets closed in all processes which inherited it.
@@ -59,19 +68,11 @@ impl RunLock {
             return Ok(Some(Self { file: None }));
         }
 
-        let mut file = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(path)
-            .with_context(|| format!("Unable to open lock file '{}'", path.display()))?;
-        match fcntl(&file, FcntlArg::F_OFD_SETLK(&Self::flock(libc::F_WRLCK))) {
-            Ok(_) => {}
-            Err(Errno::EAGAIN | Errno::EACCES) => return Ok(None),
-            Err(e) => {
-                return Err(e).with_context(|| format!("Unable to lock '{}'", path.display()));
-            }
+        let mut file = open_lock_file(path)?;
+        if !try_lock(&file, libc::F_WRLCK)
+            .with_context(|| format!("Unable to lock '{}'", path.display()))?
+        {
+            return Ok(None);
         }
         file.set_len(0)
             .and_then(|()| write!(file, "{}", id()))
@@ -103,8 +104,9 @@ impl RunLock {
         // Do not pass it to the components, and take the lock again,
         // which succeeds if the open file description already holds it.
         fcntl(&file, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).ok()?;
-        fcntl(&file, FcntlArg::F_OFD_SETLK(&Self::flock(libc::F_WRLCK))).ok()?;
-        Some(Self { file: Some(file) })
+        try_lock(&file, libc::F_WRLCK)
+            .ok()?
+            .then_some(Self { file: Some(file) })
     }
 
     /// Pass the lock to the command, which replaces the current process.
@@ -135,12 +137,17 @@ impl RunLock {
         let file = match File::open(path) {
             Ok(file) => file,
             Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+            // The lock file of another user, which is only readable by
+            // its owner
+            Err(e) if e.kind() == ErrorKind::PermissionDenied => {
+                return Ok(Self::locked(path)?.then_some(None));
+            }
             Err(e) => {
                 return Err(e)
                     .with_context(|| format!("Unable to open lock file '{}'", path.display()));
             }
         };
-        let mut flock = Self::flock(libc::F_WRLCK);
+        let mut flock = whole_file_lock(libc::F_WRLCK);
         fcntl(&file, FcntlArg::F_OFD_GETLK(&mut flock))
             .with_context(|| format!("Unable to check the lock '{}'", path.display()))?;
         if i32::from(flock.l_type) == libc::F_UNLCK {
@@ -153,13 +160,26 @@ impl RunLock {
         ))
     }
 
-    /// A lock description for the whole file.
-    fn flock(lock_type: libc::c_int) -> libc::flock {
-        // SAFETY: flock is a plain C struct, for which all zero is valid.
-        let mut flock: libc::flock = unsafe { std::mem::zeroed() };
-        flock.l_type = lock_type as libc::c_short;
-        flock.l_whence = libc::SEEK_SET as libc::c_short;
-        flock
+    /// Check via `/proc/locks` whether a process holds a lock of `path`,
+    /// which works without opening it.
+    fn locked(path: &Path) -> Result<bool> {
+        let metadata = fs::metadata(path)
+            .with_context(|| format!("Unable to access lock file '{}'", path.display()))?;
+        let locks = fs::read_to_string(PROC_LOCKS)
+            .with_context(|| format!("Unable to read '{}'", PROC_LOCKS))?;
+        Ok(Self::locks_contain(&locks, metadata.dev(), metadata.ino()))
+    }
+
+    /// Returns true if the content of `/proc/locks` contains a granted lock
+    /// of the file with the device and inode number. The lines look like
+    /// `1: OFDLCK ADVISORY WRITE -1 00:1d:1234 0 EOF`, where blocked
+    /// requests have a `->` after the number.
+    fn locks_contain(locks: &str, dev: u64, ino: u64) -> bool {
+        let id = format!("{:02x}:{:02x}:{}", libc::major(dev), libc::minor(dev), ino);
+        locks.lines().any(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            fields.get(1) != Some(&"->") && fields.get(5) == Some(&id.as_str())
+        })
     }
 }
 
@@ -167,6 +187,8 @@ impl RunLock {
 pub(crate) mod tests {
     use super::*;
     use std::{
+        fs::Permissions,
+        os::unix::fs::PermissionsExt,
         thread::sleep,
         time::{Duration, Instant},
     };
@@ -209,6 +231,49 @@ pub(crate) mod tests {
         assert!(released(&path)?);
         assert!(RunLock::acquire_with(&path, None)?.is_some());
         Ok(())
+    }
+
+    #[test]
+    fn acquire_restricts_lock_file() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("lock");
+        fs::write(&path, "")?;
+        fs::set_permissions(&path, Permissions::from_mode(0o644))?;
+        let lock = RunLock::acquire_with(&path, None)?.context("not acquired")?;
+        assert_eq!(fs::metadata(&path)?.mode() & 0o777, 0o600);
+        drop(lock);
+
+        // Symbolic links are not followed
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&path, &link)?;
+        assert!(RunLock::acquire_with(&link, None).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn locked_via_proc_locks() -> Result<()> {
+        let dir = tempdir()?;
+        let path = dir.path().join("lock");
+        let lock = RunLock::acquire_with(&path, None)?.context("not acquired")?;
+        assert!(RunLock::locked(&path)?);
+        drop(lock);
+        assert!(released(&path)?);
+        assert!(!RunLock::locked(&path)?);
+        Ok(())
+    }
+
+    #[test]
+    fn locks_contain_granted_locks() {
+        let locks = "1: OFDLCK ADVISORY  WRITE -1 00:1d:1234 0 EOF\n\
+                     1: -> OFDLCK ADVISORY  WRITE -1 fd:01:99 0 EOF\n\
+                     2: POSIX  ADVISORY  READ 42 fd:01:5 0 EOF\n";
+        let dev = |major, minor| libc::makedev(major, minor);
+        assert!(RunLock::locks_contain(locks, dev(0, 0x1d), 1234));
+        assert!(RunLock::locks_contain(locks, dev(0xfd, 1), 5));
+        // Blocked requests do not hold the lock
+        assert!(!RunLock::locks_contain(locks, dev(0xfd, 1), 99));
+        assert!(!RunLock::locks_contain(locks, dev(0, 0x1d), 123));
+        assert!(!RunLock::locks_contain("", dev(0, 0x1d), 1234));
     }
 
     #[test]

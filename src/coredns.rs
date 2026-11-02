@@ -7,11 +7,15 @@ use anyhow::{Context, Result};
 use log::debug;
 use std::{fs::create_dir_all, net::Ipv4Addr, sync::atomic::AtomicBool};
 
-// CoreDNS runs in the host network, so its health and readiness ports
-// replace the defaults 8080 and 8181, which other services on the host
-// often use.
+// CoreDNS runs in the host network, so its DNS server listens on an
+// unprivileged port, which the Service maps to port 53, and its health and
+// readiness ports replace the defaults 8080 and 8181. So they do not
+// collide with other services on the host, like a DNS server listening on
+// port 53 of all addresses.
+const DNS_PORT: u16 = 10053;
 const HEALTH_PORT: u16 = 10054;
 const READY_PORT: u16 = 10055;
+const METRICS_PORT: u16 = 9153;
 
 /// Deploys the CoreDNS addon to the cluster.
 pub struct CoreDns;
@@ -44,10 +48,16 @@ impl CoreDns {
         // CoreDNS uses hostNetwork, so it can always reach the API server
         // at 127.0.0.1. Setting these env vars explicitly avoids depending
         // on kube-proxy ClusterIP routing being ready when CoreDNS starts.
-        // The DNS server binds only the pod IP, which is the node IP with
-        // hostNetwork and the endpoint of the Service, so it does not
-        // collide with local resolvers on loopback addresses, like
-        // systemd-resolved on 127.0.0.53.
+        // All servers bind only the pod IP, which is the node IP with
+        // hostNetwork and the endpoint of the Service. It is the gateway
+        // address of the bridge of the node in root mode (see
+        // Network::node_ip), so that the resolver and the metrics do not
+        // listen on the addresses of the host, which other machines use.
+        // The address is not advertised, but a machine in the same layer 2
+        // network which routes the CIDR via the host can still reach it,
+        // since the host accepts packets for all of its addresses on every
+        // interface. In rootless mode, it is the address of the network
+        // namespace of rootlesskit.
         let env = format!(
             concat!(
                 "        env:\n",
@@ -78,8 +88,10 @@ impl CoreDns {
             include_str!("assets/coredns.yml"),
             dns = dns,
             env = env,
+            dns_port = DNS_PORT,
             health_port = HEALTH_PORT,
             ready_port = READY_PORT,
+            metrics_port = METRICS_PORT,
             resources = resources,
         )
     }
@@ -88,85 +100,210 @@ impl CoreDns {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Deserialize;
+    use serde_norway::{Deserializer, Value};
 
-    #[test]
-    fn render_contains_dns_ip() {
-        let ip = Ipv4Addr::new(10, 10, 1, 2);
-        let yml = CoreDns::render(ip, false);
-        assert!(yml.contains("clusterIP: 10.10.1.2"));
-        assert!(yml.contains("k8s-app: coredns"));
+    const DNS: Ipv4Addr = Ipv4Addr::new(10, 10, 1, 2);
+
+    /// Render and parse the manifest into its documents.
+    fn documents(rootless: bool) -> Vec<Value> {
+        Deserializer::from_str(&CoreDns::render(DNS, rootless))
+            .map(|d| Value::deserialize(d).unwrap())
+            .collect()
+    }
+
+    fn kind<'a>(docs: &'a [Value], kind: &str) -> &'a Value {
+        docs.iter()
+            .find(|d| d["kind"].as_str() == Some(kind))
+            .unwrap_or_else(|| panic!("no {} in the manifest", kind))
+    }
+
+    fn container(docs: &[Value]) -> &Value {
+        let containers = &kind(docs, "Deployment")["spec"]["template"]["spec"]["containers"];
+        assert_eq!(containers.as_sequence().unwrap().len(), 1);
+        &containers[0]
+    }
+
+    fn env<'a>(docs: &'a [Value], name: &str) -> &'a Value {
+        container(docs)["env"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .find(|e| e["name"].as_str() == Some(name))
+            .unwrap_or_else(|| panic!("no env {}", name))
+    }
+
+    fn corefile(docs: &[Value]) -> &str {
+        kind(docs, "ConfigMap")["data"]["Corefile"]
+            .as_str()
+            .unwrap()
     }
 
     #[test]
     fn render_contains_resource_kinds() {
-        let yml = CoreDns::render(Ipv4Addr::new(10, 0, 0, 2), false);
-        assert!(yml.contains("kind: ServiceAccount"));
-        assert!(yml.contains("kind: ClusterRole"));
-        assert!(yml.contains("kind: ClusterRoleBinding"));
-        assert!(yml.contains("kind: ConfigMap"));
-        assert!(yml.contains("kind: Deployment"));
-        assert!(yml.contains("kind: Service"));
+        for rootless in [true, false] {
+            let kinds: Vec<_> = documents(rootless)
+                .iter()
+                .map(|d| d["kind"].as_str().unwrap().to_owned())
+                .collect();
+            assert_eq!(
+                kinds,
+                [
+                    "ServiceAccount",
+                    "ClusterRole",
+                    "ClusterRoleBinding",
+                    "ConfigMap",
+                    "Deployment",
+                    "Service",
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn render_service_uses_dns_ip() {
+        let docs = documents(false);
+        let service = &kind(&docs, "Service")["spec"];
+        assert_eq!(service["clusterIP"].as_str(), Some("10.10.1.2"));
+        assert_eq!(service["selector"]["k8s-app"].as_str(), Some("coredns"));
+        let deployment = &kind(&docs, "Deployment")["spec"];
+        assert_eq!(
+            deployment["selector"]["matchLabels"]["k8s-app"].as_str(),
+            Some("coredns")
+        );
+        assert_eq!(
+            deployment["template"]["metadata"]["labels"]["k8s-app"].as_str(),
+            Some("coredns")
+        );
     }
 
     #[test]
     fn render_always_sets_api_server_env() {
         for rootless in [true, false] {
-            let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), rootless);
-            assert!(yml.contains("KUBERNETES_SERVICE_HOST"));
-            assert!(yml.contains("value: \"127.0.0.1\""));
-            assert!(yml.contains("KUBERNETES_SERVICE_PORT"));
-            assert!(yml.contains(&format!("value: \"{}\"", crate::API_SERVER_PORT)));
+            let docs = documents(rootless);
+            assert_eq!(
+                env(&docs, "KUBERNETES_SERVICE_HOST")["value"].as_str(),
+                Some("127.0.0.1")
+            );
+            assert_eq!(
+                env(&docs, "KUBERNETES_SERVICE_PORT")["value"].as_str(),
+                Some(API_SERVER_PORT.to_string().as_str())
+            );
         }
     }
 
     #[test]
     fn render_binds_pod_ip() {
         for rootless in [true, false] {
-            let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), rootless);
-            assert!(yml.contains("    .:53 {\n        bind {$POD_IP}\n"));
-            assert!(yml.contains(concat!(
-                "        - name: POD_IP\n",
-                "          valueFrom:\n",
-                "            fieldRef:\n",
-                "              fieldPath: status.podIP\n",
-            )));
+            let docs = documents(rootless);
+            let corefile = corefile(&docs);
+            assert!(corefile.starts_with(".:10053 {\n    bind {$POD_IP}\n"));
+            assert!(corefile.contains("    health {$POD_IP}:10054 {\n"));
+            assert!(corefile.contains("    ready {$POD_IP}:10055\n"));
+            assert!(corefile.contains("    prometheus {$POD_IP}:9153\n"));
+            assert_eq!(
+                env(&docs, "POD_IP")["valueFrom"]["fieldRef"]["fieldPath"].as_str(),
+                Some("status.podIP")
+            );
         }
     }
 
+    /// The container ports by name.
+    fn ports(docs: &[Value]) -> Vec<(String, u64)> {
+        container(docs)["ports"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .map(|p| {
+                (
+                    p["name"].as_str().unwrap().to_owned(),
+                    p["containerPort"].as_u64().unwrap(),
+                )
+            })
+            .collect()
+    }
+
     #[test]
-    fn render_uses_uncommon_probe_ports() {
-        let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), false);
-        assert!(yml.contains(&format!("health :{} {{\n", HEALTH_PORT)));
-        assert!(yml.contains(&format!("ready :{}\n", READY_PORT)));
-        assert!(yml.contains(&format!("containerPort: {}\n", HEALTH_PORT)));
-        assert!(yml.contains(&format!("containerPort: {}\n", READY_PORT)));
+    fn render_uses_uncommon_ports() {
+        let docs = documents(false);
+        let port = |name: &str| {
+            ports(&docs)
+                .into_iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, p)| p)
+        };
+        assert_eq!(port("dns"), Some(u64::from(DNS_PORT)));
+        assert_eq!(port("dns-tcp"), Some(u64::from(DNS_PORT)));
+        assert_eq!(port("metrics"), Some(u64::from(METRICS_PORT)));
+        assert_eq!(port("liveness-probe"), Some(u64::from(HEALTH_PORT)));
+        assert_eq!(port("readiness-probe"), Some(u64::from(READY_PORT)));
+        assert!(ports(&docs).iter().all(|(_, p)| *p >= 1024));
+
+        let yml = CoreDns::render(DNS, false);
         assert!(!yml.contains("8080"));
         assert!(!yml.contains("8181"));
+        // The image grants the binary NET_BIND_SERVICE as file capability,
+        // which has to stay in the bounding set for exec to succeed
+        let capabilities = &container(&docs)["securityContext"]["capabilities"];
+        assert_eq!(capabilities["add"][0].as_str(), Some("NET_BIND_SERVICE"));
+        assert_eq!(capabilities["drop"][0].as_str(), Some("ALL"));
     }
 
     #[test]
-    fn render_non_rootless_has_resources() {
-        let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), false);
-        assert!(yml.contains("memory: 170Mi"));
-        assert!(yml.contains("cpu: 100m"));
+    fn render_service_maps_dns_port() {
+        let docs = documents(false);
+        let ports: Vec<_> = kind(&docs, "Service")["spec"]["ports"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .map(|p| {
+                (
+                    p["name"].as_str().unwrap(),
+                    p["port"].as_u64().unwrap(),
+                    p["targetPort"].as_str().unwrap(),
+                    p["protocol"].as_str().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            ports,
+            [
+                ("dns", 53, "dns", "UDP"),
+                ("dns-tcp", 53, "dns-tcp", "TCP"),
+                ("metrics", u64::from(METRICS_PORT), "metrics", "TCP"),
+            ]
+        );
     }
 
     #[test]
-    fn render_rootless_no_resources() {
-        let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), true);
-        assert!(!yml.contains("memory: 170Mi"));
-    }
-
-    #[test]
-    fn render_produces_valid_structure() {
+    fn render_container_structure() {
         for rootless in [true, false] {
-            let yml = CoreDns::render(Ipv4Addr::new(10, 10, 1, 2), rootless);
-            assert!(yml.contains("KUBERNETES_SERVICE_HOST"));
-            let args_pos = yml.find("        args:").unwrap();
-            let env_pos = yml.find("        env:\n").unwrap();
-            let mounts_pos = yml.find("        volumeMounts:").unwrap();
-            assert!(args_pos < env_pos, "args must precede env");
-            assert!(env_pos < mounts_pos, "env must precede volumeMounts");
+            let docs = documents(rootless);
+            let container = container(&docs);
+            assert_eq!(container["name"].as_str(), Some("coredns"));
+            let args: Vec<_> = container["args"]
+                .as_sequence()
+                .unwrap()
+                .iter()
+                .map(|a| a.as_str().unwrap())
+                .collect();
+            assert_eq!(args, ["-conf", "/etc/coredns/Corefile"]);
+            assert_eq!(
+                container["volumeMounts"][0]["mountPath"].as_str(),
+                Some("/etc/coredns")
+            );
         }
+    }
+
+    #[test]
+    fn render_resources_only_without_rootless() {
+        let docs = documents(false);
+        let resources = &container(&docs)["resources"];
+        assert_eq!(resources["limits"]["memory"].as_str(), Some("170Mi"));
+        assert_eq!(resources["requests"]["cpu"].as_str(), Some("100m"));
+        assert_eq!(resources["requests"]["memory"].as_str(), Some("70Mi"));
+
+        let docs = documents(true);
+        assert!(container(&docs).get("resources").is_none());
     }
 }
