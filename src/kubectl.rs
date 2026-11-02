@@ -8,10 +8,14 @@ use anyhow::{Context, Result, bail};
 use log::{debug, trace};
 use std::{
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
+    sync::atomic::{AtomicBool, Ordering},
     thread::sleep,
     time::{Duration, Instant},
 };
+
+/// Interval for checking the shutdown flag while waiting.
+const SHUTDOWN_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Wraps the `kubectl` binary with a fixed kubeconfig path.
 pub struct Kubectl {
@@ -33,12 +37,28 @@ impl Kubectl {
 
     /// Run a generic kubectl command
     pub fn execute(&self, args: &[&str]) -> Result<Output> {
-        let output = Command::new("kubectl")
-            .args(args)
-            .arg("--kubeconfig")
-            .arg(&self.kubeconfig)
+        let output = self
+            .command(args)
             .output()
             .context("Unable to run kubectl")?;
+        Self::check_output(args, output)
+    }
+
+    /// Run a kubectl command like `execute`, but kill it as soon as
+    /// `shutdown` is set.
+    fn execute_cancelable(&self, args: &[&str], shutdown: &AtomicBool) -> Result<Output> {
+        let output =
+            run_cancelable(self.command(args), shutdown).context("Unable to run kubectl")?;
+        Self::check_output(args, output)
+    }
+
+    fn command(&self, args: &[&str]) -> Command {
+        let mut cmd = Command::new("kubectl");
+        cmd.args(args).arg("--kubeconfig").arg(&self.kubeconfig);
+        cmd
+    }
+
+    fn check_output(args: &[&str], output: Output) -> Result<Output> {
         if !output.status.success() {
             trace!("kubectl args: {:?}", args);
             debug!("kubectl output: {:?}", output);
@@ -63,19 +83,27 @@ impl Kubectl {
         Ok(())
     }
 
-    /// Wait for all pods matching a label to be ready
-    pub fn wait_ready(&self, name: &str) -> Result<()> {
+    /// Wait for all pods matching a label to be ready, or until `shutdown`
+    /// is set.
+    pub fn wait_ready(&self, name: &str, shutdown: &AtomicBool) -> Result<()> {
         debug!("Waiting for {} to be ready", name);
         let now = Instant::now();
         while now.elapsed().as_secs() < READINESS_TIMEOUT {
-            let output = self.execute(&[
-                "wait",
-                "--for=condition=Ready",
-                "pod",
-                "-n=kube-system",
-                &format!("-l=k8s-app={}", name),
-                "--timeout=5s",
-            ]);
+            if shutdown.load(Ordering::Relaxed) {
+                bail!("Shutdown requested while waiting for {}", name)
+            }
+            let output = self.execute_cancelable(
+                &[
+                    "wait",
+                    "--for=condition=Ready",
+                    "pod",
+                    "-n=kube-system",
+                    &format!("-l=k8s-app={}", name),
+                    "--timeout=5s",
+                    "--request-timeout=5s",
+                ],
+                shutdown,
+            );
             match output {
                 Ok(_) => {
                     debug!("{} ready", name);
@@ -91,7 +119,10 @@ impl Kubectl {
                     );
                 }
             }
-            sleep(Duration::from_secs(2));
+            let retry = Instant::now() + Duration::from_secs(2);
+            while Instant::now() < retry && !shutdown.load(Ordering::Relaxed) {
+                sleep(SHUTDOWN_POLL_INTERVAL);
+            }
         }
         bail!("Unable to wait for {} pod", name)
     }
@@ -112,6 +143,22 @@ impl Kubectl {
         debug!("API server /readyz is ok");
         Ok(())
     }
+}
+
+/// Run the command and collect its output, kill it if `shutdown` gets set.
+/// The output must fit into the pipe buffers, which is the case for short
+/// running commands like `kubectl wait`.
+fn run_cancelable(mut cmd: Command, shutdown: &AtomicBool) -> Result<Output> {
+    let mut child = cmd.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    while child.try_wait()?.is_none() {
+        if shutdown.load(Ordering::Relaxed) {
+            let _ = child.kill();
+            let _ = child.wait();
+            bail!("Shutdown requested")
+        }
+        sleep(SHUTDOWN_POLL_INTERVAL);
+    }
+    Ok(child.wait_with_output()?)
 }
 
 /// Run `check` every `interval` until it returns true or `timeout` elapsed.
@@ -145,13 +192,49 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
+    use std::{path::PathBuf, sync::Arc, thread};
 
     #[test]
     fn execute_success() -> Result<()> {
         let k = Kubectl::new(&PathBuf::from(""));
         k.execute(&[])?;
         Ok(())
+    }
+
+    #[test]
+    fn run_cancelable_output() -> Result<()> {
+        let mut cmd = Command::new("echo");
+        cmd.arg("hello");
+        let output = run_cancelable(cmd, &AtomicBool::new(false))?;
+        assert!(output.status.success());
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "hello\n");
+        Ok(())
+    }
+
+    #[test]
+    fn run_cancelable_stops_on_shutdown() {
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&shutdown);
+        let setter = thread::spawn(move || {
+            sleep(Duration::from_millis(200));
+            flag.store(true, Ordering::Relaxed);
+        });
+        let start = Instant::now();
+        let mut cmd = Command::new("sleep");
+        cmd.arg("30");
+        let err = run_cancelable(cmd, &shutdown).unwrap_err();
+        assert_eq!(err.to_string(), "Shutdown requested");
+        assert!(start.elapsed() < Duration::from_secs(5));
+        setter.join().unwrap();
+    }
+
+    #[test]
+    fn wait_ready_returns_on_shutdown() {
+        let k = Kubectl::new(&PathBuf::from(""));
+        let start = Instant::now();
+        let err = k.wait_ready("coredns", &AtomicBool::new(true)).unwrap_err();
+        assert!(err.to_string().contains("Shutdown requested"));
+        assert!(start.elapsed() < Duration::from_secs(1));
     }
 
     #[test]

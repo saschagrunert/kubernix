@@ -17,8 +17,9 @@ use crate::{
     write_if_changed,
 };
 use anyhow::{Context, Result};
+use log::debug;
 use std::{
-    fs::create_dir_all,
+    fs::{self, create_dir_all},
     path::{Path, PathBuf},
 };
 
@@ -60,9 +61,17 @@ pub struct Crio {
     socket: CriSocket,
     container: Option<NodeContainer>,
     node_name: String,
+    attach_socket_dir: PathBuf,
 }
 
 const CRIO: &str = "crio";
+
+/// Base directory of the container attach sockets. CRI-O creates them at
+/// `<dir>/<container id>/attach`, which exceeds the unix socket path length
+/// limit for most directories below the run root. In rootless mode, `/run`
+/// belongs to the mount namespace of rootlesskit, in multi-node root mode to
+/// the node container.
+pub const ATTACH_SOCKET_BASE: &str = "/run/kubernix";
 
 impl Crio {
     /// Start a CRI-O instance for the given node index.
@@ -81,16 +90,16 @@ impl Crio {
         let config_file = config_dir.join("crio.conf");
         let network_dir = dir.join("cni");
         let socket = Self::socket(config, network, node)?;
+        let attach_socket_dir = Self::attach_socket_dir(config, node);
 
         // Always render the configuration, since it references the current
         // Nix store paths.
         create_dir_all(&network_dir).context("Unable to create CRI-O CNI directory")?;
         create_dir_all(&config_dir).context("Unable to create CRI-O config directory")?;
-        create_dir_all(dir.join("attach")).context("Unable to create CRI-O attach directory")?;
         create_dir_all(dir.join("ns")).context("Unable to create CRI-O namespace directory")?;
         write_if_changed(
             &config_file,
-            &Self::render_config(config, &dir, &socket, &conmon, &paths),
+            &Self::render_config(config, &dir, &socket, &attach_socket_dir, &conmon, &paths),
         )
         .context("Unable to write CRI-O config")?;
         cri::write_cni_config(&network_dir, &node_name, node, network)?;
@@ -120,6 +129,7 @@ impl Crio {
             socket,
             container,
             node_name,
+            attach_socket_dir,
         }))
     }
 
@@ -131,6 +141,7 @@ impl Crio {
         config: &Config,
         dir: &Path,
         socket: &CriSocket,
+        attach_socket_dir: &Path,
         conmon: &str,
         paths: &RuntimePaths,
     ) -> String {
@@ -159,7 +170,7 @@ impl Crio {
         let containers_dir = dir.join("containers");
         format!(
             include_str!("assets/crio.conf"),
-            attach_socket_dir = dir.join("attach").display(),
+            attach_socket_dir = attach_socket_dir.display(),
             conmon = conmon,
             containers_root = containers_dir.join("storage").display(),
             containers_runroot = containers_dir.join("run").display(),
@@ -184,6 +195,33 @@ impl Crio {
         CriSocket::new(Self::path(config, network, node).join("crio.sock"))
     }
 
+    /// Retrieve the attach socket directory for the node, which is unique per
+    /// run root and node. CRI-O creates it on startup.
+    fn attach_socket_dir(config: &Config, node: u8) -> PathBuf {
+        PathBuf::from(ATTACH_SOCKET_BASE)
+            .join(System::root_id(config.root()))
+            .join(node.to_string())
+    }
+
+    /// Remove the attach socket directory of the node and its parents, as
+    /// long as they are empty.
+    fn remove_attach_socket_dir(&self) {
+        if let Err(e) = fs::remove_dir_all(&self.attach_socket_dir)
+            && self.attach_socket_dir.exists()
+        {
+            debug!(
+                "Unable to remove '{}': {}",
+                self.attach_socket_dir.display(),
+                e
+            );
+        }
+        for dir in self.attach_socket_dir.ancestors().skip(1).take(2) {
+            if fs::remove_dir(dir).is_err() {
+                break;
+            }
+        }
+    }
+
     /// Retrieve the working path for the node
     fn path(config: &Config, network: &Network, node: u8) -> PathBuf {
         config
@@ -203,6 +241,10 @@ impl Stoppable for Crio {
         if let Some(container) = &mut self.container {
             container.remove();
         }
+        // A CRI-O which is still running may use the sockets
+        if stopped.is_ok() {
+            self.remove_attach_socket_dir();
+        }
         removed.and(stopped)
     }
 
@@ -214,8 +256,11 @@ impl Stoppable for Crio {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::OciRuntime;
+    use crate::{config::OciRuntime, cri::MAX_SOCKET_PATH_LEN};
     use clap::Parser;
+
+    /// Container ID and file name of an attach socket below its directory.
+    const ATTACH_SOCKET_SUFFIX_LEN: usize = "/".len() + 64 + "/attach".len();
 
     #[test]
     fn component_metadata() {
@@ -243,7 +288,8 @@ mod tests {
     fn render_with(config: &Config, paths: &RuntimePaths) -> Result<toml::Value> {
         let dir = PathBuf::from("/kubernix/crio/node");
         let socket = CriSocket::new(dir.join("crio.sock"))?;
-        let content = Crio::render_config(config, &dir, &socket, "/bin/conmon", paths);
+        let attach = PathBuf::from("/run/kubernix/0123abcd/0");
+        let content = Crio::render_config(config, &dir, &socket, &attach, "/bin/conmon", paths);
         Ok(toml::from_str(&content)?)
     }
 
@@ -300,5 +346,44 @@ mod tests {
         assert_eq!(runtimes["crun"]["runtime_path"].as_str(), Some(""));
         assert_eq!(runtimes["runc"]["runtime_path"].as_str(), Some(""));
         Ok(())
+    }
+
+    #[test]
+    fn render_config_attach_socket_dir() -> Result<()> {
+        let v = render(&Config::parse_from(["kubernix"]))?;
+        assert_eq!(
+            v["crio"]["runtime"]["container_attach_socket_dir"].as_str(),
+            Some("/run/kubernix/0123abcd/0")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn attach_socket_dir_fits_socket_path_limit() {
+        let root = format!("/{}", "a".repeat(4000));
+        let config = Config::parse_from(["kubernix", "--root", &root]);
+        for node in [0, 9, 63, u8::MAX] {
+            let dir = Crio::attach_socket_dir(&config, node);
+            assert!(dir.starts_with(ATTACH_SOCKET_BASE));
+            assert!(dir.as_os_str().len() + ATTACH_SOCKET_SUFFIX_LEN <= MAX_SOCKET_PATH_LEN);
+        }
+    }
+
+    #[test]
+    fn attach_socket_dir_unique_per_root_and_node() {
+        let a = Config::parse_from(["kubernix", "--root", "/home/user/kubernix-run"]);
+        let b = Config::parse_from(["kubernix", "--root", "/home/user/other-run"]);
+        assert_ne!(
+            Crio::attach_socket_dir(&a, 0),
+            Crio::attach_socket_dir(&a, 1)
+        );
+        assert_ne!(
+            Crio::attach_socket_dir(&a, 0),
+            Crio::attach_socket_dir(&b, 0)
+        );
+        assert_eq!(
+            Crio::attach_socket_dir(&a, 0),
+            Crio::attach_socket_dir(&a, 0)
+        );
     }
 }

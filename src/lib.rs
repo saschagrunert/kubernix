@@ -609,7 +609,8 @@ impl Kubernix {
                 return;
             }
             if addon_config.addons().iter().any(|a| a == "coredns")
-                && let Err(e) = CoreDns::apply(&addon_config, &addon_network, &kubectl)
+                && let Err(e) =
+                    CoreDns::apply(&addon_config, &addon_network, &kubectl, &addon_shutdown)
                 && !addon_shutdown.load(Ordering::Relaxed)
             {
                 error!("Failed to deploy CoreDNS addon: {}", e);

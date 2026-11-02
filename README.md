@@ -394,10 +394,10 @@ variables:
 | `-u, --container-runtime` | Container runtime for the node containers, only used in multinode root mode         | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
 | `-o, --overlay`           | Nix package overlay to be used                                                      |                | `KUBERNIX_OVERLAY`           |
 | `-d, --dockerfile`        | Custom Dockerfile for multi-node container image builds                             |                | `KUBERNIX_DOCKERFILE`        |
-| `-p, --packages`          | Additional Nix dependencies to be added to the environment                          |                | `KUBERNIX_PACKAGES`          |
+| `-p, --packages`          | Additional Nix dependencies to be added to the environment, comma separated         |                | `KUBERNIX_PACKAGES`          |
 | `--cri-runtime`           | CRI runtime to use (`crio` or `containerd`)                                         | `crio`         | `KUBERNIX_CRI_RUNTIME`       |
 | `--oci-runtime`           | Default OCI runtime (`crun` or `runc`)                                              | `crun`         | `KUBERNIX_OCI_RUNTIME`       |
-| `-a, --addons`            | Cluster addons to deploy (available: coredns)                                       | `coredns`      | `KUBERNIX_ADDONS`            |
+| `-a, --addons`            | Cluster addons to deploy, comma separated (available: coredns)                      | `coredns`      | `KUBERNIX_ADDONS`            |
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
@@ -496,7 +496,9 @@ $ kubernix -p kubernetes-helm
 version.BuildInfo{Version:"v…", …}
 ```
 
-All available packages are listed on the [official Nix package search][10].
+Multiple packages can be passed comma separated, for example
+`-p kubernetes-helm,jq` or `KUBERNIX_PACKAGES=kubernetes-helm,jq`. All
+available packages are listed on the [official Nix package search][10].
 
 [9]: https://helm.sh
 [10]: https://search.nixos.org/packages?channel=unstable
