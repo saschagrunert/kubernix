@@ -17,7 +17,6 @@ podCIDR: "{cidr}"
 runtimeRequestTimeout: "15m"
 tlsCertFile: "{cert}"
 tlsPrivateKeyFile: "{key}"
-cgroupDriver: "none"
 cgroupsPerQOS: false
 failSwapOn: false
 enforceNodeAllocatable: []

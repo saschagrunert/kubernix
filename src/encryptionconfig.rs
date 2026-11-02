@@ -7,10 +7,10 @@ use crate::Config;
 use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use log::info;
-use rand::random;
 use std::{
-    fs::{self, create_dir_all},
-    os::unix::fs::PermissionsExt,
+    fs::{OpenOptions, create_dir_all},
+    io::Write,
+    os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
 };
 
@@ -36,12 +36,19 @@ impl EncryptionConfig {
         // Create only if not already existing to make cluster reuse work
         if !path.exists() {
             info!("Creating encryption config");
-            let rnd: [u8; 32] = random();
+            let mut rnd = [0u8; 32];
+            getrandom::fill(&mut rnd).context("Unable to generate encryption key")?;
             let b64 = STANDARD.encode(rnd);
             let yml = format!(include_str!("assets/encryptionconfig.yml"), secret = b64);
-            fs::write(&path, yml).context("Unable to write encryption config")?;
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
-                .context("Unable to restrict encryption config permissions")?;
+            // Create the file with restricted permissions, so that the key
+            // is never readable by others.
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(&path)
+                .and_then(|mut f| f.write_all(yml.as_bytes()))
+                .context("Unable to write encryption config")?;
         }
 
         Ok(EncryptionConfig { path })
@@ -52,12 +59,29 @@ impl EncryptionConfig {
 mod tests {
     use super::*;
     use crate::config::tests::{test_config, test_config_wrong_root};
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn encryptionconfig_success() -> Result<()> {
         let c = test_config()?;
         let e = EncryptionConfig::new(&c)?;
-        assert!(e.path().exists());
+        let mode = std::fs::metadata(e.path())?.permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+        let content = std::fs::read_to_string(e.path())?;
+        let secret = content
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("secret: "))
+            .context("missing secret")?;
+        assert_eq!(STANDARD.decode(secret)?.len(), 32);
+        Ok(())
+    }
+
+    #[test]
+    fn encryptionconfig_reused() -> Result<()> {
+        let c = test_config()?;
+        let first = std::fs::read(EncryptionConfig::new(&c)?.path())?;
+        let second = std::fs::read(EncryptionConfig::new(&c)?.path())?;
+        assert_eq!(first, second);
         Ok(())
     }
 

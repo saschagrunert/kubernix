@@ -1,0 +1,26 @@
+---
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - RequestReceived
+rules:
+  # Skip the health checks and the high volume read-only requests of the
+  # cluster components.
+  - level: None
+    nonResourceURLs:
+      - /healthz*
+      - /livez*
+      - /readyz*
+      - /version
+  - level: None
+    verbs: ["get", "list", "watch"]
+    users:
+      - system:apiserver
+      - system:kube-controller-manager
+      - system:kube-proxy
+      - system:kube-scheduler
+  - level: None
+    verbs: ["get", "list", "watch"]
+    userGroups:
+      - system:nodes
+  - level: Metadata

@@ -121,7 +121,7 @@ metadata:
 spec:
   containers:
     - name: pause
-      image: registry.k8s.io/pause:3.10
+      image: registry.k8s.io/pause:3.10.2
       securityContext:
         privileged: true
 EOF
@@ -146,7 +146,7 @@ spec:
   ${runtime_class:+runtimeClassName: $runtime_class}
   containers:
     - name: pause
-      image: registry.k8s.io/pause:3.10
+      image: registry.k8s.io/pause:3.10.2
 EOF
   if ! kubectl wait --for=condition=Ready "pod/$name" --timeout=120s; then
     kubectl describe pod "$name" || true

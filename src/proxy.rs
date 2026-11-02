@@ -85,7 +85,8 @@ impl Proxy {
     fn render(kubeconfig: &str, cluster_cidr: &str, rootless: bool) -> String {
         let rootless = if rootless {
             concat!(
-                "masqueradeAll: true\n",
+                "iptables:\n",
+                "  masqueradeAll: true\n",
                 "conntrack:\n",
                 "  maxPerCore: 0\n",
                 "  tcpEstablishedTimeout: 0s\n",
@@ -111,10 +112,10 @@ mod tests {
 
     #[test]
     fn config_template_renders() {
-        let yml = Proxy::render("/tmp/proxy.kubeconfig", "10.10.0.0/18", false);
+        let yml = Proxy::render("/tmp/proxy.kubeconfig", "10.10.0.0/17", false);
         assert!(yml.contains("kind: KubeProxyConfiguration"));
         assert!(yml.contains("kubeconfig: \"/tmp/proxy.kubeconfig\""));
-        assert!(yml.contains("clusterCIDR: \"10.10.0.0/18\""));
+        assert!(yml.contains("clusterCIDR: \"10.10.0.0/17\""));
         assert!(yml.contains("mode: \"iptables\""));
         assert!(!yml.contains("conntrack:"));
         assert!(!yml.contains("masqueradeAll:"));
@@ -122,8 +123,10 @@ mod tests {
 
     #[test]
     fn rootless_config_skips_conntrack_sysctls() {
-        let yml = Proxy::render("/tmp/proxy.kubeconfig", "10.10.0.0/18", true);
-        assert!(yml.contains("masqueradeAll: true\n"));
+        let yml = Proxy::render("/tmp/proxy.kubeconfig", "10.10.0.0/17", true);
+        // masqueradeAll is no top level field of the v1alpha1 config
+        assert!(yml.contains("\niptables:\n  masqueradeAll: true\n"));
+        assert!(!yml.lines().any(|l| l.starts_with("masqueradeAll")));
         assert!(yml.contains("conntrack:\n  maxPerCore: 0\n"));
         assert!(yml.contains("tcpEstablishedTimeout: 0s"));
         assert!(yml.contains("tcpCloseWaitTimeout: 0s"));

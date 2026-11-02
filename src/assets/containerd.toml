@@ -1,13 +1,18 @@
-version = 3
+version = 4
 root = "{root}"
 state = "{state}"
 
-[grpc]
+[plugins."io.containerd.server.v1.grpc"]
 address = "{socket}"
 
+[plugins."io.containerd.server.v1.ttrpc"]
+address = "{socket}.ttrpc"
+
 [plugins."io.containerd.cri.v1.images"]
-sandbox_image = "registry.k8s.io/pause:3.10"
 snapshotter = "{snapshotter}"
+
+[plugins."io.containerd.cri.v1.images".pinned_images]
+sandbox = "registry.k8s.io/pause:3.10.2"
 
 [plugins."io.containerd.cri.v1.runtime"]
 enable_unprivileged_ports = true

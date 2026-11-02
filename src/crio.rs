@@ -65,6 +65,11 @@ pub struct Crio {
 }
 
 const CRIO: &str = "crio";
+const CONMON: &str = "conmon";
+
+/// Registries for short image names, which CRI-O resolves via the
+/// containers-registries.conf(5) file.
+const REGISTRIES_CONF: &str = "unqualified-search-registries = [\"docker.io\", \"quay.io\"]\n";
 
 /// Base directory of the container attach sockets. CRI-O creates them at
 /// `<dir>/<container id>/attach`, which exceeds the unix socket path length
@@ -79,11 +84,12 @@ impl Crio {
         let node_name = Node::name(config, network, node);
 
         let paths = RuntimePaths::resolve(config)?;
-        let conmon = System::find_executable("conmon")?.display().to_string();
+        let monitor = System::find_executable(CONMON)?.display().to_string();
 
         let dir = Self::path(config, network, node);
         let config_dir = dir.join("crio.conf.d");
         let config_file = config_dir.join("crio.conf");
+        let registries_file = dir.join("registries.conf");
         let network_dir = dir.join("cni");
         let socket = Self::socket(config, network, node)?;
         let attach_socket_dir = Self::attach_socket_dir(config, node);
@@ -95,16 +101,21 @@ impl Crio {
         create_dir_all(dir.join("ns")).context("Unable to create CRI-O namespace directory")?;
         write_if_changed(
             &config_file,
-            &Self::render_config(config, &dir, &socket, &attach_socket_dir, &conmon, &paths),
+            &Self::render_config(config, &dir, &socket, &attach_socket_dir, &monitor, &paths),
         )
         .context("Unable to write CRI-O config")?;
+        write_if_changed(&registries_file, REGISTRIES_CONF)
+            .context("Unable to write CRI-O registries config")?;
         cri::write_cni_config(&network_dir, &node_name, node, network)?;
 
         if config.is_rootless() {
             cri::reset_ipam_data(&network_dir)?;
         }
         let config_dir_arg = format!("--config-dir={}", config_dir.display());
-        let args: &[&str] = &[&config_dir_arg];
+        // Short image names get resolved via the registries config, which
+        // does not depend on the one of the host.
+        let registries_arg = format!("--registries-conf={}", registries_file.display());
+        let args: &[&str] = &[&config_dir_arg, &registries_arg];
 
         let mut process = if config.multi_node() && !config.is_rootless() {
             // Run inside a container
@@ -128,13 +139,14 @@ impl Crio {
     /// Render the CRI-O configuration for the node working directory.
     ///
     /// Both OCI runtimes are registered as runtime handlers with their own
-    /// state directory, the configured one is used as default.
+    /// state directory, the configured one is used as default. conmon gets
+    /// configured per handler, which replaces the deprecated global options.
     fn render_config(
         config: &Config,
         dir: &Path,
         socket: &CriSocket,
         attach_socket_dir: &Path,
-        conmon: &str,
+        monitor: &str,
         paths: &RuntimePaths,
     ) -> String {
         let runtimes = paths
@@ -145,7 +157,12 @@ impl Crio {
                     "[crio.runtime.runtimes.{name}]\n\
                      runtime_path = \"{path}\"\n\
                      runtime_root = \"{root}\"\n\
-                     runtime_type = \"oci\"\n",
+                     runtime_type = \"oci\"\n\
+                     monitor_path = \"{monitor}\"\n\
+                     monitor_cgroup = \"pod\"\n\
+                     monitor_env = [\n    \
+                     \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n\
+                     ]\n",
                     name = runtime,
                     root = dir.join(runtime.name()).display(),
                 )
@@ -156,7 +173,6 @@ impl Crio {
         format!(
             include_str!("assets/crio.conf"),
             attach_socket_dir = attach_socket_dir.display(),
-            conmon = conmon,
             containers_root = containers_dir.join("storage").display(),
             containers_runroot = containers_dir.join("run").display(),
             listen = socket,
@@ -274,7 +290,7 @@ mod tests {
         let dir = PathBuf::from("/kubernix/crio/node");
         let socket = CriSocket::new(dir.join("crio.sock"))?;
         let attach = PathBuf::from("/run/kubernix/0123abcd/0");
-        let content = Crio::render_config(config, &dir, &socket, &attach, "/bin/conmon", paths);
+        let content = Crio::render_config(config, &dir, &socket, &attach, "/nix/bin/conmon", paths);
         Ok(toml::from_str(&content)?)
     }
 
@@ -300,6 +316,7 @@ mod tests {
         assert_eq!(runtime["default_runtime"].as_str(), Some("crun"));
         let crun = &runtime["runtimes"]["crun"];
         assert_eq!(crun["runtime_path"].as_str(), Some("/nix/bin/crun"));
+        assert_eq!(crun["monitor_path"].as_str(), Some("/nix/bin/conmon"));
         assert_eq!(
             crun["runtime_root"].as_str(),
             Some("/kubernix/crio/node/crun")
@@ -321,6 +338,60 @@ mod tests {
             Some("runc")
         );
         assert!(v["crio"]["runtime"]["runtimes"].get("crun").is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn render_config_configures_conmon_per_handler() -> Result<()> {
+        for args in [&["kubernix"][..], &["kubernix", "--nodes=2"]] {
+            for rootless in [false, true] {
+                let mut c = Config::parse_from(args);
+                c.set_rootless(rootless);
+                let v = render(&c)?;
+                for name in ["crun", "runc"] {
+                    let runtime = &v["crio"]["runtime"]["runtimes"][name];
+                    assert_eq!(runtime["runtime_type"].as_str(), Some("oci"));
+                    assert_eq!(runtime["monitor_path"].as_str(), Some("/nix/bin/conmon"));
+                    assert_eq!(runtime["monitor_cgroup"].as_str(), Some("pod"));
+                    assert_eq!(runtime["monitor_env"].as_array().map(Vec::len), Some(1));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn render_config_skips_removed_options() -> Result<()> {
+        let v = render(&Config::parse_from(["kubernix"]))?;
+        let runtime = &v["crio"]["runtime"];
+        for key in [
+            "conmon",
+            "conmon_cgroup",
+            "conmon_env",
+            "default_mounts",
+            "pids_limit",
+            "log_size_max",
+            "uid_mappings",
+            "gid_mappings",
+        ] {
+            assert!(runtime.get(key).is_none(), "{} is set", key);
+        }
+        let image = &v["crio"]["image"];
+        assert!(image.get("registries").is_none());
+        assert_eq!(
+            image["pause_image"].as_str(),
+            Some("registry.k8s.io/pause:3.10.2")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn registries_conf_resolves_short_names() -> Result<()> {
+        let v: toml::Value = toml::from_str(REGISTRIES_CONF)?;
+        assert_eq!(
+            v["unqualified-search-registries"],
+            toml::Value::Array(vec!["docker.io".into(), "quay.io".into()])
+        );
         Ok(())
     }
 

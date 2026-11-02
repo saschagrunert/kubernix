@@ -238,6 +238,10 @@ If a component runs inside a node container (multinode root mode), then its
 log file is named after the container runtime, for example
 `crio/node-1/podman.log`.
 
+The kubeconfigs embed the client keys, so they are only readable by their
+owner. When running via `sudo`, the `kubeconfig/admin.kubeconfig` belongs to
+the invoking user.
+
 If you want to spawn an additional shell session, simply run `kubernix shell`
 in the same directory as where the initial bootstrap happened. In rootless
 mode, the shell enters the namespaces of the running cluster via `nsenter`.
@@ -281,10 +285,12 @@ handy if you want to test configuration changes.
 
 If you start KuberNix again in the same run directory, then it will re-use the
 configuration during the cluster bootstrapping process. This means that you
-can modify all data inside the run root for testing and debugging purposes. The
-startup of the individual components will be initiated by JSON files called
-`run.json`, which are available inside the directories of the corresponding
-components. For example, etcd gets started via:
+can modify all data inside the run root for testing and debugging purposes.
+Run directories created by an incompatible KuberNix version are rejected and
+have to be removed (see [Run Directory](#run-directory)). The startup of the
+individual components will be initiated by JSON files called `run.json`, which
+are available inside the directories of the corresponding components. For
+example, etcd gets started via:
 
 ```
 > cat kubernix-run/etcd/run.json
@@ -413,7 +419,12 @@ given after the `shell` subcommand.
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
-up over the necessary cluster components.
+up over the necessary cluster components: the first half is the cluster network,
+which gets split equally into the pod networks of the nodes, and the second half
+contains the service network, which is at most a `/16`. For example, the default
+`10.10.0.0/16` results in the pod network `10.10.0.0/17` and the service network
+`10.10.128.0/17` for a single node, while three nodes get the pod networks
+`10.10.0.0/19`, `10.10.32.0/19` and `10.10.64.0/19`.
 
 #### OCI Runtimes
 
@@ -474,6 +485,11 @@ mode, size and modification time) of all files in its build context, except
 the run directory. So they get recreated if the inputs change, which is why
 the build context should be small, and the images of previous builds get
 removed afterwards.
+
+All nodes share the network namespace of the host (or the one of rootlesskit),
+where every node has its own bridge. The bridges masquerade the traffic leaving
+the cluster network, while an iptables rule exempts the traffic between pods of
+different nodes, so it is routed without NAT.
 
 [8]: https://github.com/containers/podman
 
@@ -620,9 +636,10 @@ directories of the same version as is, migrates those of older versions in
 place if possible, and otherwise refuses them with an error asking to remove
 the run directory. It also refuses run directories created by a newer
 KuberNix, starting with 1.0: earlier versions ignore the `version` field and
-use any run directory, which is harmless for version 1 since it shares the
-format of version 0. The other fields of the file are not part of the stable
-interface.
+use any run directory. Version 2 changed the network layout and the PKI, so run
+directories of version 0 and 1 have to be removed, and KuberNix versions before
+1.0 must not be used with run directories of version 2. The other fields of
+the file are not part of the stable interface.
 
 #### Library
 
