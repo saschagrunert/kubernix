@@ -107,15 +107,14 @@ impl Containerd {
         .context("Unable to write containerd config")?;
 
         cri::write_cni_config(&cni_conf_dir, &node_name, node, network)?;
+        if config.is_rootless() {
+            cri::reset_ipam_data(&cni_conf_dir)?;
+        }
 
         // containerd-shim-runc-v2 hardcodes its socket path to /run/containerd/s/.
-        // rootlesskit's --copy-up=/run creates an overlay that preserves
-        // host-owned subdirectories with wrong ownership (host root maps to
-        // UID 65534). Recreate with correct ownership. Safe: runs inside
-        // rootlesskit's private mount namespace before containerd starts.
-        if config.is_rootless() && create_dir_all("/run/containerd/s").is_err() {
-            fs::remove_dir_all("/run/containerd")
-                .context("Failed to remove host-owned /run/containerd")?;
+        // System::setup recreates /run/containerd with the correct ownership
+        // in rootless mode, before the nodes start in parallel.
+        if config.is_rootless() {
             create_dir_all("/run/containerd/s").context("Unable to create /run/containerd/s")?;
         }
 

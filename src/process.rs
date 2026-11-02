@@ -9,14 +9,17 @@ use anyhow::{Context, Result, bail};
 use log::{debug, error, info};
 use nix::{
     errno::Errno,
+    mount::{MsFlags, mount},
+    sched::{CloneFlags, unshare},
     sys::signal::{Signal, kill},
     unistd::Pid,
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    ffi::{CStr, CString},
     fs::{self, File, create_dir_all},
     io::{BufRead, BufReader},
-    os::unix::process::CommandExt,
+    os::unix::{ffi::OsStrExt, process::CommandExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::mpsc::{Receiver, SyncSender, sync_channel},
@@ -82,6 +85,33 @@ impl Process {
     /// Creates a new `Process` instance by spawning the provided `command` and `args`.
     /// If the process creation fails, an `Error` will be returned.
     pub fn start(dir: &Path, identifier: &str, command: &str, args: &[&str]) -> Result<Process> {
+        Self::spawn(dir, identifier, command, args, None)
+    }
+
+    /// Like [`Process::start`], but runs the process in a new mount namespace
+    /// in which `source` is bind mounted over `target`.
+    pub fn start_with_bind_mount(
+        dir: &Path,
+        identifier: &str,
+        command: &str,
+        args: &[&str],
+        source: &Path,
+        target: &Path,
+    ) -> Result<Process> {
+        let source = CString::new(source.as_os_str().as_bytes())
+            .context("Invalid bind mount source path")?;
+        let target = CString::new(target.as_os_str().as_bytes())
+            .context("Invalid bind mount target path")?;
+        Self::spawn(dir, identifier, command, args, Some((source, target)))
+    }
+
+    fn spawn(
+        dir: &Path,
+        identifier: &str,
+        command: &str,
+        args: &[&str],
+        bind_mount: Option<(CString, CString)>,
+    ) -> Result<Process> {
         // Prepare the commands
         if command.is_empty() {
             bail!("No valid command provided")
@@ -113,12 +143,22 @@ impl Process {
         cmd.args(run.args)
             .stderr(Stdio::from(err_file))
             .stdout(Stdio::from(out_file));
-        // SAFETY: setsid() is async-signal-safe per POSIX.
+        // SAFETY: setsid(), unshare() and mount() are plain syscalls, and the
+        // paths are prepared before forking, so nothing allocates.
         unsafe {
-            cmd.pre_exec(|| {
-                nix::unistd::setsid()
-                    .map(|_| ())
-                    .map_err(std::io::Error::from)
+            cmd.pre_exec(move || {
+                nix::unistd::setsid()?;
+                if let Some((source, target)) = &bind_mount {
+                    unshare(CloneFlags::CLONE_NEWNS)?;
+                    mount(
+                        Some(source.as_c_str()),
+                        target.as_c_str(),
+                        None::<&CStr>,
+                        MsFlags::MS_BIND,
+                        None::<&CStr>,
+                    )?;
+                }
+                Ok(())
             });
         }
         let mut child = cmd
@@ -299,6 +339,34 @@ impl Drop for Process {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn start_with_bind_mount_invalid_path() {
+        let dir = tempdir().unwrap();
+        let invalid = Path::new("/invalid\0path");
+        assert!(
+            Process::start_with_bind_mount(
+                dir.path(),
+                "test",
+                "true",
+                &[],
+                invalid,
+                Path::new("/")
+            )
+            .is_err()
+        );
+        assert!(
+            Process::start_with_bind_mount(
+                dir.path(),
+                "test",
+                "true",
+                &[],
+                Path::new("/"),
+                invalid
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn start_success() -> Result<()> {

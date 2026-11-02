@@ -4,7 +4,7 @@ use crate::{
     API_SERVER_PORT, config::Config, kubectl::Kubectl, network::Network, write_if_changed,
 };
 use anyhow::{Context, Result};
-use log::info;
+use log::debug;
 use std::{fs::create_dir_all, net::Ipv4Addr};
 
 /// Deploys the CoreDNS addon to the cluster.
@@ -13,7 +13,7 @@ pub struct CoreDns;
 impl CoreDns {
     /// Render the CoreDNS manifest, apply it, and wait for the pod to be ready.
     pub fn apply(config: &Config, network: &Network, kubectl: &Kubectl) -> Result<()> {
-        info!("Deploying CoreDNS and waiting to be ready");
+        debug!("Deploying CoreDNS and waiting to be ready");
 
         let dir = config.root().join("coredns");
         create_dir_all(&dir).context("Unable to create CoreDNS directory")?;
@@ -24,7 +24,7 @@ impl CoreDns {
 
         kubectl.apply(&file).context("Unable to deploy CoreDNS")?;
         kubectl.wait_ready("coredns")?;
-        info!("CoreDNS deployed");
+        debug!("CoreDNS deployed");
         Ok(())
     }
 

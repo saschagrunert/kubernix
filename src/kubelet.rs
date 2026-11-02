@@ -13,11 +13,13 @@ use crate::{
     node::Node,
     pki::Pki,
     process::{Process, ProcessState, stoppable},
+    system::System,
     write_if_changed,
 };
-use anyhow::{Context, bail};
-use std::fs::create_dir_all;
+use anyhow::{Context, Result, bail};
+use std::{fs::create_dir_all, path::Path};
 
+const KUBELET: &str = "kubelet";
 const KUBELET_PORT_BASE: u16 = 11250;
 const HEALTHZ_PORT_BASE: u16 = 12250;
 
@@ -57,6 +59,24 @@ pub struct Kubelet {
 }
 
 impl Kubelet {
+    /// Ensure that the unix sockets of the node fit into the length limit.
+    pub fn validate_paths(config: &Config, network: &Network, node: u8) -> Result<()> {
+        let root_dir = config
+            .root()
+            .join(KUBELET)
+            .join(Node::name(config, network, node))
+            .join("run");
+        // pod-resources/<pid> is the longest socket path kubelet creates
+        if root_dir.as_os_str().len() + "pod-resources/1234567890".len() > MAX_SOCKET_PATH_LEN {
+            bail!(
+                "Kubelet run path '{}' is too long for unix sockets, use a shorter --root",
+                root_dir.display()
+            )
+        }
+        cri::cri_socket(config, network, node)?;
+        Ok(())
+    }
+
     /// Start the kubelet for the given node index.
     pub fn start(
         config: &Config,
@@ -66,17 +86,9 @@ impl Kubelet {
         kubeconfig: &KubeConfig,
     ) -> ProcessState {
         let node_name = Node::name(config, network, node);
-        const KUBELET: &str = "kubelet";
 
         let dir = config.root().join(KUBELET).join(&node_name);
         let root_dir = dir.join("run");
-        // pod-resources/<pid> is the longest socket path kubelet creates
-        if root_dir.as_os_str().len() + "pod-resources/1234567890".len() > MAX_SOCKET_PATH_LEN {
-            bail!(
-                "Kubelet run path '{}' is too long for unix sockets",
-                root_dir.display()
-            )
-        }
 
         create_dir_all(&dir).context("Unable to create kubelet directory")?;
 
@@ -105,6 +117,7 @@ impl Kubelet {
                 cert = cert,
                 key = key,
                 cri_socket = cri_socket,
+                pod_logs_dir = dir.join("pods").display(),
                 port = port,
                 healthzPort = healthz_port,
             )
@@ -155,11 +168,22 @@ impl Kubelet {
                 &modargs,
             )?
         } else if config.multi_node() {
-            // Rootless multi-node: direct process with hostname override
+            // Rootless multi-node: direct process with hostname override and
+            // its own device plugin directory
             let arg_hostname = format!("--hostname-override={}", node_name);
             let mut modargs: Vec<&str> = vec![&arg_hostname];
             modargs.extend(args);
-            Process::start(&dir, "Kubelet", KUBELET, &modargs)?
+            let device_plugins = dir.join("device-plugins");
+            create_dir_all(&device_plugins)
+                .context("Unable to create kubelet device plugin directory")?;
+            Process::start_with_bind_mount(
+                &dir,
+                "Kubelet",
+                KUBELET,
+                &modargs,
+                &device_plugins,
+                Path::new(System::DEVICE_PLUGINS_DIR),
+            )?
         } else {
             // Single-node: run as usual process
             Process::start(&dir, "Kubelet", KUBELET, args)?
@@ -175,6 +199,7 @@ stoppable!(Kubelet);
 mod tests {
     use super::*;
     use crate::cri::MAX_SOCKET_PATH_LEN;
+    use clap::Parser;
 
     #[test]
     fn config_template_renders() {
@@ -200,11 +225,25 @@ mod tests {
     }
 
     #[test]
-    fn socket_path_too_long() {
-        // A very long root_dir path should fail validation
-        let long_path = "a".repeat(MAX_SOCKET_PATH_LEN);
-        let total = long_path.len() + "pod-resources/1234567890".len();
-        assert!(total > MAX_SOCKET_PATH_LEN);
+    fn validate_paths_short_root() -> Result<()> {
+        let config = crate::config::tests::test_config()?;
+        let network = Network::new(&config)?;
+        Kubelet::validate_paths(&config, &network, 0)
+    }
+
+    #[test]
+    fn validate_paths_long_kubelet_root() -> Result<()> {
+        // The CRI socket path fits, but the kubelet pod resources socket not
+        let node = Network::new(&crate::config::tests::test_config()?)?
+            .hostname()
+            .to_string();
+        let root = format!("/{}", "a".repeat(MAX_SOCKET_PATH_LEN - node.len() - 20));
+        let config = Config::parse_from(["kubernix", "--root", &root]);
+        let network = Network::new(&config)?;
+        cri::cri_socket(&config, &network, 0)?;
+        let err = Kubelet::validate_paths(&config, &network, 0).unwrap_err();
+        assert!(err.to_string().contains("Kubelet run path"));
+        Ok(())
     }
 
     #[test]
@@ -230,11 +269,13 @@ mod tests {
             cert = "/tmp/kubelet.pem",
             key = "/tmp/kubelet-key.pem",
             cri_socket = "unix:///run/crio/crio.sock",
+            pod_logs_dir = "/tmp/kubelet/node-0/pods",
             port = KUBELET_PORT_BASE,
             healthzPort = HEALTHZ_PORT_BASE,
         );
         assert!(yml.contains("kind: KubeletConfiguration"));
         assert!(yml.contains("cgroupDriver: \"none\""));
+        assert!(yml.contains("podLogsDir: \"/tmp/kubelet/node-0/pods\""));
         assert!(yml.contains("containerRuntimeEndpoint: \"unix:///run/crio/crio.sock\""));
         assert!(yml.contains("KubeletInUserNamespace: true"));
     }

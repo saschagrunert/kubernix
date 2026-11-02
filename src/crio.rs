@@ -95,6 +95,9 @@ impl Crio {
         .context("Unable to write CRI-O config")?;
         cri::write_cni_config(&network_dir, &node_name, node, network)?;
 
+        if config.is_rootless() {
+            cri::reset_ipam_data(&network_dir)?;
+        }
         let config_dir_arg = format!("--config-dir={}", config_dir.display());
         let args: &[&str] = &[&config_dir_arg];
 

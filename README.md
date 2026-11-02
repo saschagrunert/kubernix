@@ -167,8 +167,10 @@ they have to be loaded on the host (for example `iptable_nat` and
 `nf_conntrack`).
 
 In multi-node rootless mode, all nodes run as direct processes (no container
-isolation) with `--hostname-override` for node identity. Running with `sudo`
-gives container-based multi-node isolation.
+isolation) with `--hostname-override` for node identity. Every kubelet runs in
+its own mount namespace, because it always uses
+`/var/lib/kubelet/device-plugins`, and writes its pod logs into its node
+directory. Running with `sudo` gives container-based multi-node isolation.
 
 #### Shell Environment
 
@@ -373,9 +375,10 @@ option.
 
 It is possible to spawn multiple worker nodes, too. To do this, simply adjust
 the `-n, --nodes` command line argument. Every node gets its own CRI runtime
-and kubelet. In root mode, they run inside containers of a base image, which
-KuberNix builds from the Nix environment, or from a custom Dockerfile passed
-via `-d, --dockerfile`. The container runtime can be selected via
+and kubelet. In rootless mode, they run as processes in the same user and
+network namespace. In root mode, they run inside containers of a base image,
+which KuberNix builds from the Nix environment, or from a custom Dockerfile
+passed via `-d, --dockerfile`. The container runtime can be selected via
 `-u, --container-runtime`. The default runtime is [podman][8], but other Docker
 compatible runtimes should work as well.
 
