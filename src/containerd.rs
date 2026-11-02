@@ -122,24 +122,9 @@ impl Containerd {
         let args: &[&str] = &[&config_arg];
 
         let mut process = if config.multi_node() && !config.is_rootless() {
-            // containerd has no --cni-plugin-dir CLI flag (unlike CRI-O), so
-            // patch bin_dirs in the config before starting the daemon. The
-            // container entrypoint runs all args through `bash -c "$*"`, so
-            // shell constructs (&&, $(...)) are interpreted.
+            // Run inside a container
             let identifier = format!("Containerd {}", node_name);
-            let patch_bin_dirs = format!(
-                r#"sed -i "s|bin_dirs = .*|bin_dirs = [\"$(dirname $(which loopback))\"]|" {} &&"#,
-                config_file.display(),
-            );
-            let container_args: &[&str] = &[CONTAINERD, &config_arg];
-            Container::start(
-                config,
-                &dir,
-                &identifier,
-                &patch_bin_dirs,
-                &node_name,
-                container_args,
-            )?
+            Container::start(config, &dir, &identifier, CONTAINERD, &node_name, args)?
         } else {
             Process::start(&dir, "Containerd", CONTAINERD, args)?
         };

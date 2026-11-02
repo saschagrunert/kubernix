@@ -308,11 +308,16 @@ components. For example, etcd gets started via:
 
 The generated Nix environment in the `nix` directory is an exception: it gets
 regenerated if it differs from the one of the running KuberNix version, for
-example after an upgrade or when the content of the overlay changed. The same
-applies to the CRI runtime configurations and the `Dockerfile`, since they
-reference the Nix store paths. The multinode base image is tagged with a hash of
-its inputs (`kubernix:base-<hash>`), so it gets rebuilt as well, and the images
-of previous builds get removed afterwards.
+example after an upgrade or when the content of the overlay changed. The
+evaluated environment is cached as a Nix profile in `nix-profile/<hash>`, where
+the hash covers the files of the `nix` directory. This includes all inputs,
+since the overlay gets copied into it and cannot refer to other local files
+(see [Overlays](#overlays)). Starting KuberNix or a new shell re-enters the
+cached environment without evaluating the flake again, and a changed or
+unusable environment, for example one with removed store paths, gets replaced.
+The profile is a garbage collector root as well, so `nix-collect-garbage` keeps
+the store paths of the run directory until it gets removed. The CRI runtime
+configurations are always rendered, since they reference the Nix store paths.
 
 The `kubernix.toml` keeps the settings of the existing cluster. Options which
 shape the cluster (`--nodes`, `--cidr`, `--cri-runtime`, `--oci-runtime`,
@@ -393,7 +398,7 @@ variables:
 | `-n, --nodes`         | The number of nodes to be registered (`1` to `64`)                          | `1`            | `KUBERNIX_NODES`             |
 | `--container-runtime` | Container runtime for the node containers, only used in multinode root mode | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
 | `-o, --overlay`       | Nix package overlay to be used                                              |                | `KUBERNIX_OVERLAY`           |
-| `-d, --dockerfile`    | Custom Dockerfile for multi-node container image builds                     |                | `KUBERNIX_DOCKERFILE`        |
+| `-d, --dockerfile`    | Custom Dockerfile for the multi-node container image                        |                | `KUBERNIX_DOCKERFILE`        |
 | `-p, --packages`      | Additional Nix packages to be added to the environment, comma separated     |                | `KUBERNIX_PACKAGES`          |
 | `--cri-runtime`       | CRI runtime to use (`crio` or `containerd`)                                 | `crio`         | `KUBERNIX_CRI_RUNTIME`       |
 | `--oci-runtime`       | Default OCI runtime (`crun` or `runc`)                                      | `crun`         | `KUBERNIX_OCI_RUNTIME`       |
@@ -441,11 +446,34 @@ option.
 It is possible to spawn multiple worker nodes, too. To do this, simply adjust
 the `-n, --nodes` command line argument. Every node gets its own CRI runtime
 and kubelet. In rootless mode, they run as processes in the same user and
-network namespace. In root mode, they run inside containers of a base image,
-which KuberNix builds from the Nix environment, or from a custom Dockerfile
-passed via `-d, --dockerfile`. The container runtime can be selected via
+network namespace. In root mode, they run inside containers, which mount the
+Nix store of the host read-only and use the `PATH` of the Nix environment, so
+the nodes run the same binaries as the host without building or pulling an
+image which contains them. The image of the containers only consists of a
+minimal root file system (the `/etc/passwd` and `/etc/group` of root as well
+as `/run`, `/tmp` and `/var/tmp`), which KuberNix imports on the first
+multinode run. The container runtime can be selected via
 `--container-runtime`. The default runtime is [podman][8], but other Docker
 compatible runtimes should work as well.
+
+The nodes trust the same CA bundle for pulling images as the components on the
+host: the one of `SSL_CERT_FILE`, otherwise the first system bundle like
+`/etc/ssl/certs/ca-certificates.crt` or `/etc/pki/tls/certs/ca-bundle.crt`,
+otherwise the one of the Nix environment. A bundle outside of the Nix store
+gets mounted read-only to `/etc/ssl/certs/ca-certificates.crt`, so registry CAs
+installed on the host work in multinode mode as well.
+
+A custom image can be built via `-d, --dockerfile`, for example to provide
+additional files in the node containers. Its build context is the directory of
+the Dockerfile. The Nix store and the environment get mounted into the
+containers the same way, so the image does not need to contain Nix. Note that
+the mounted store hides a `/nix/store` of the image. The node images are tagged
+with a hash of their inputs (`kubernix:base-<hash>`): the content of the
+default image, or the custom Dockerfile together with the metadata (path,
+mode, size and modification time) of all files in its build context, except
+the run directory. So they get recreated if the inputs change, which is why
+the build context should be small, and the images of previous builds get
+removed afterwards.
 
 [8]: https://github.com/containers/podman
 

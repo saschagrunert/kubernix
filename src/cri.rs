@@ -32,34 +32,23 @@ pub struct RuntimePaths {
 }
 
 impl RuntimePaths {
-    /// Resolve the OCI runtime and CNI plugin paths. In multi-node
-    /// non-rootless mode, binaries are resolved from $PATH inside the
-    /// container at runtime.
+    /// Resolve the OCI runtime and CNI plugin paths. Node containers mount
+    /// the Nix store of the host, so the paths are valid in all modes.
     pub fn resolve(config: &Config) -> Result<Self> {
         use crate::system::System;
-        if config.multi_node() && !config.is_rootless() {
-            Ok(Self {
-                runtimes: OciRuntime::ALL
-                    .iter()
-                    .map(|r| (*r, r.name().to_string()))
-                    .collect(),
-                plugin_dir: "/tmp/cni-plugins".to_string(),
-            })
-        } else {
-            let runtimes = Self::available_runtimes(config.oci_runtime(), |r| {
-                Ok(System::find_executable(r.name())?.display().to_string())
-            })?;
-            let loopback = System::find_executable("loopback")?;
-            let plugin_dir = loopback
-                .parent()
-                .context("Unable to find CNI plugin dir")?
-                .display()
-                .to_string();
-            Ok(Self {
-                runtimes,
-                plugin_dir,
-            })
-        }
+        let runtimes = Self::available_runtimes(config.oci_runtime(), |r| {
+            Ok(System::find_executable(r.name())?.display().to_string())
+        })?;
+        let loopback = System::find_executable("loopback")?;
+        let plugin_dir = loopback
+            .parent()
+            .context("Unable to find CNI plugin dir")?
+            .display()
+            .to_string();
+        Ok(Self {
+            runtimes,
+            plugin_dir,
+        })
     }
 
     /// Look up all OCI runtimes. A missing default runtime is an error,

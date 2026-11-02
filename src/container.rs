@@ -1,31 +1,74 @@
 //! Multi-node container management.
 //!
-//! Handles building the base container image and running cluster
-//! components inside containers for multi-node setups in root mode. Each
-//! container shares the host network namespace and mounts the runtime root
-//! directory.
+//! Handles preparing the node image and running cluster components inside
+//! containers for multi-node setups in root mode. Each container shares the
+//! host network namespace, mounts the runtime root directory and the Nix
+//! store of the host read-only, so that the components run from the same
+//! store paths as on the host.
 
-use crate::{Config, nix::Nix, podman::Podman, process::Process, system::System, write_if_changed};
+use crate::{
+    Config, content_hash, podman::Podman, process::Process, system::System, write_if_changed,
+};
 use anyhow::{Context, Result, bail};
 use log::{LevelFilter, debug, info, trace};
 use std::{
+    env::var,
     fmt::Display,
     fs,
+    io::{ErrorKind, Write},
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
+/// The prefix of the node images, which get tagged with a hash of their
+/// content.
 const IMAGE_PREFIX: &str = "kubernix:base";
+
 const DEFAULT_ROOT: &str = "kubernix";
 
-/// The base image of the default Dockerfile.
-const BASE_IMAGE: &str = "docker.io/nixos/nix:latest";
+/// The Nix store, which gets mounted read-only into the node containers.
+const NIX_STORE: &str = "/nix/store";
 
-/// Provides container image building and process execution for multi-node clusters.
+/// The location of the CA bundle in the node containers, if the one of the
+/// host is not part of the Nix store.
+const CA_BUNDLE: &str = "/etc/ssl/certs/ca-certificates.crt";
+
+/// The CA bundles which Go programs use if `SSL_CERT_FILE` is not set.
+const SYSTEM_CA_BUNDLES: [&str; 6] = [
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/ssl/ca-bundle.pem",
+    "/etc/pki/tls/cacert.pem",
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+    "/etc/ssl/cert.pem",
+];
+
+/// Directories of the default node image as (path, mode).
+const ROOTFS_DIRS: [(&str, u32); 6] = [
+    ("etc", 0o755),
+    ("root", 0o700),
+    ("run", 0o755),
+    ("tmp", 0o1777),
+    ("var", 0o755),
+    ("var/tmp", 0o1777),
+];
+
+/// Files of the default node image as (path, content). Some components
+/// look up the user database, for example to resolve the home directory.
+const ROOTFS_FILES: [(&str, &str); 2] = [
+    (
+        "etc/passwd",
+        "root:x:0:0:root:/root:/bin/sh\nnobody:x:65534:65534:nobody:/:/bin/sh\n",
+    ),
+    ("etc/group", "root:x:0:\nnobody:x:65534:\n"),
+];
+
+/// Provides node image preparation and process execution for multi-node clusters.
 pub struct Container;
 
 impl Container {
-    /// Build the base image used for the nodes
+    /// Prepare the image used for the nodes
     pub fn build(config: &Config) -> Result<()> {
         // Verify that the provided runtime exists
         System::find_executable(config.container_runtime())?;
@@ -40,29 +83,18 @@ impl Container {
             return Ok(());
         }
 
-        // Prepare the Dockerfile: use a custom one if provided, otherwise
-        // fall back to the embedded default. It gets refreshed on every run,
-        // so that the image tag reflects the current content.
-        let dockerfile = match config.dockerfile() {
-            Some(custom) => {
-                debug!("Using custom Dockerfile '{}'", custom.display());
-                fs::read_to_string(custom).with_context(|| {
-                    format!("Unable to read custom Dockerfile '{}'", custom.display())
-                })?
-            }
-            None => format!(
-                include_str!("assets/Dockerfile"),
-                base = BASE_IMAGE,
-                nix = Nix::DIR,
-                root = DEFAULT_ROOT
-            ),
-        };
-        write_if_changed(&config.root().join("Dockerfile"), &dockerfile)
-            .context("Unable to write Dockerfile")?;
+        // Older versions wrote a Dockerfile into the run root, which is not
+        // needed any more.
+        let dockerfile = config.root().join("Dockerfile");
+        if let Err(e) = fs::remove_file(&dockerfile)
+            && e.kind() != ErrorKind::NotFound
+        {
+            return Err(e).with_context(|| format!("Unable to remove '{}'", dockerfile.display()));
+        }
 
-        // Skip rebuild if the image for the current environment already
-        // exists. The tag contains a hash of the build inputs, so a changed
-        // Nix environment results in a new image.
+        // Skip the image creation if it already exists. The tag contains a
+        // hash of the default image content or the custom build inputs, so
+        // changed inputs result in a new image.
         let image = Self::image(config)?;
         let runtime_args = Self::runtime_args(config)?;
         if Self::image_exists(config, &runtime_args, &image) {
@@ -70,38 +102,132 @@ impl Container {
             return Ok(());
         }
 
-        // Build the base container image
-        info!("Building base container image '{}'", image);
+        if let Some(dockerfile) = config.dockerfile() {
+            Self::build_image(config, dockerfile, &policy_json, &image)?;
+        } else {
+            Self::import_image(config, &policy_json, &image)?;
+        }
+        Self::prune_images(config, &runtime_args, &image);
+        Ok(())
+    }
 
-        // Prepare the arguments
+    /// Build the node image from the custom Dockerfile, using its directory
+    /// as build context.
+    fn build_image(
+        config: &Config,
+        dockerfile: &Path,
+        policy_json: &Path,
+        image: &str,
+    ) -> Result<()> {
+        info!(
+            "Building container image '{}' from '{}'",
+            image,
+            dockerfile.display()
+        );
         let mut args = if Podman::is_configured(config) {
-            Podman::build_args(config, &policy_json)?
+            Podman::signature_args(config, "build", policy_json)?
         } else {
             vec!["build".into()]
         };
-        args.extend([format!("-t={image}"), ".".into()]);
-        trace!("Container runtime build args: {:?}", args);
+        args.extend([
+            format!("--file={}", dockerfile.display()),
+            format!("--tag={image}"),
+            Self::build_context(dockerfile)?.display().to_string(),
+        ]);
 
-        // Run the build
         debug!("Running container runtime with args: {}", args.join(" "));
         let status = Command::new(config.container_runtime())
-            .current_dir(config.root())
             .args(args)
             .stderr(Self::stdio(config))
             .stdout(Self::stdio(config))
             .status()?;
         if !status.success() {
             bail!(
-                "Unable to build container base image '{}' using '{}' (exit: {})",
+                "Unable to build container image '{}' using '{}' (exit: {})",
                 image,
                 config.container_runtime(),
                 status,
             );
         }
-
-        info!("Container base image built");
-        Self::prune_images(config, &runtime_args, &image);
+        info!("Container image built");
         Ok(())
+    }
+
+    /// Import the default node image, which only contains the directories
+    /// and files of a minimal root file system, since everything else gets
+    /// mounted from the host.
+    fn import_image(config: &Config, policy_json: &Path, image: &str) -> Result<()> {
+        info!("Creating container image '{}'", image);
+        let mut args = if Podman::is_configured(config) {
+            Podman::signature_args(config, "import", policy_json)?
+        } else {
+            vec!["import".into()]
+        };
+        args.extend(["-".into(), image.into()]);
+
+        debug!("Running container runtime with args: {}", args.join(" "));
+        let mut child = Command::new(config.container_runtime())
+            .args(args)
+            .stdin(Stdio::piped())
+            .stderr(Self::stdio(config))
+            .stdout(Self::stdio(config))
+            .spawn()?;
+
+        let written = child
+            .stdin
+            .take()
+            .context("Unable to access container runtime stdin")?
+            .write_all(&Self::rootfs());
+        let status = child.wait()?;
+        written.context("Unable to write image archive")?;
+        if !status.success() {
+            bail!(
+                "Unable to import container image '{}' using '{}' (exit: {})",
+                image,
+                config.container_runtime(),
+                status,
+            );
+        }
+        Ok(())
+    }
+
+    /// The default node image content as tar archive.
+    fn rootfs() -> Vec<u8> {
+        let mut archive = vec![];
+        for (path, mode) in ROOTFS_DIRS {
+            Self::tar_entry(&mut archive, &format!("{}/", path), mode, b'5', b"");
+        }
+        for (path, content) in ROOTFS_FILES {
+            Self::tar_entry(&mut archive, path, 0o644, b'0', content.as_bytes());
+        }
+        // The end of the archive consists of two zero filled blocks
+        archive.resize(archive.len() + 1024, 0);
+        archive
+    }
+
+    /// Append a ustar entry owned by root to the archive.
+    fn tar_entry(archive: &mut Vec<u8>, path: &str, mode: u32, kind: u8, content: &[u8]) {
+        let mut header = [0u8; 512];
+        let mut field = |offset: usize, value: &[u8]| {
+            header[offset..offset + value.len()].copy_from_slice(value);
+        };
+        field(0, path.as_bytes());
+        field(100, format!("{:07o}\0", mode).as_bytes());
+        field(108, b"0000000\0");
+        field(116, b"0000000\0");
+        field(124, format!("{:011o}\0", content.len()).as_bytes());
+        field(136, b"00000000000\0");
+        field(148, b"        ");
+        field(156, &[kind]);
+        field(257, b"ustar\0");
+        field(263, b"00");
+        field(265, b"root");
+        field(297, b"root");
+        let checksum: u32 = header.iter().map(|b| u32::from(*b)).sum();
+        header[148..156].copy_from_slice(format!("{:06o}\0 ", checksum).as_bytes());
+        archive.extend_from_slice(&header);
+        archive.extend_from_slice(content);
+        archive.resize(archive.len().next_multiple_of(512), 0);
     }
 
     /// Retrieve the default signature policy file location
@@ -127,6 +253,13 @@ impl Container {
         let arg_hostname = &format!("--hostname={}", container_name);
         let arg_name = &format!("--name={}", Self::prefixed_container_name(container_name));
         let arg_volume_root = &Self::volume_arg(config.root().display());
+        let arg_volume_store = &format!("{}:ro", Self::volume_arg(NIX_STORE));
+        let arg_entrypoint = &format!(
+            "--entrypoint={}",
+            System::find_executable(process_name)?.display()
+        );
+        let arg_env = Self::env_args();
+        let arg_ca_bundle = Self::ca_bundle_args();
         let mut args_vec = vec![
             "run",
             "--net=host",
@@ -136,7 +269,11 @@ impl Container {
             arg_hostname,
             arg_name,
             arg_volume_root,
+            arg_volume_store,
+            arg_entrypoint,
         ];
+        args_vec.extend(arg_env.iter().map(String::as_str));
+        args_vec.extend(arg_ca_bundle.iter().map(String::as_str));
 
         // Podman specific arguments
         args_vec.extend(runtime_args.iter().map(String::as_str));
@@ -148,9 +285,9 @@ impl Container {
             args_vec.push(arg_volume_dev_mapper);
         }
 
-        // Add the process and the user provided args
+        // Add the image and the user provided args
         let image = Self::image(config)?;
-        args_vec.extend(&[image.as_str(), process_name]);
+        args_vec.push(&image);
         args_vec.extend(args);
 
         // Start the process
@@ -176,6 +313,49 @@ impl Container {
         format!("--volume={v}:{v}", v = volume)
     }
 
+    /// The environment of the node containers. The processes run from the
+    /// Nix store of the host, so they use the `PATH` of the Nix environment
+    /// as well.
+    fn env_args() -> Vec<String> {
+        var("PATH")
+            .map(|path| vec![format!("--env=PATH={}", path)])
+            .unwrap_or_default()
+    }
+
+    /// The arguments which provide the CA bundle for pulling images to the
+    /// node containers, since the node image may not contain one.
+    fn ca_bundle_args() -> Vec<String> {
+        Self::ca_bundle_args_from(
+            |key| var(key).ok(),
+            |path| fs::canonicalize(path).ok().filter(|p| p.is_file()),
+        )
+    }
+
+    /// Select the CA bundle which the components use on the host: the
+    /// `SSL_CERT_FILE`, a system bundle or the one of the Nix environment.
+    /// A bundle outside of the Nix store gets mounted read-only.
+    fn ca_bundle_args_from<F, R>(get: F, resolve: R) -> Vec<String>
+    where
+        F: Fn(&str) -> Option<String>,
+        R: Fn(&Path) -> Option<PathBuf>,
+    {
+        let bundle = get("SSL_CERT_FILE")
+            .into_iter()
+            .chain(SYSTEM_CA_BUNDLES.iter().map(|b| b.to_string()))
+            .chain(get("NIX_SSL_CERT_FILE"))
+            .find_map(|bundle| resolve(Path::new(&bundle)));
+        match bundle {
+            Some(bundle) if bundle.starts_with(NIX_STORE) => {
+                vec![format!("--env=SSL_CERT_FILE={}", bundle.display())]
+            }
+            Some(bundle) => vec![
+                format!("--volume={}:{}:ro", bundle.display(), CA_BUNDLE),
+                format!("--env=SSL_CERT_FILE={}", CA_BUNDLE),
+            ],
+            None => vec![],
+        }
+    }
+
     /// Exec a command on a container instance
     pub fn exec(
         config: &Config,
@@ -190,22 +370,9 @@ impl Container {
         let mut args_vec: Vec<&str> = runtime_args.iter().map(String::as_str).collect();
 
         let name = Self::prefixed_container_name(container_name);
-        let flake_ref = format!("path:{}", DEFAULT_ROOT);
-        let mut cmd_parts = vec![process_name.to_string()];
-        cmd_parts.extend(args.iter().map(|a| a.to_string()));
-        let run_cmd = cmd_parts.join(" ");
-        args_vec.extend([
-            "exec",
-            &name,
-            "nix",
-            "develop",
-            &flake_ref,
-            "--no-update-lock-file",
-            "--command",
-            "bash",
-            "-c",
-            &run_cmd,
-        ]);
+        let executable = System::find_executable(process_name)?.display().to_string();
+        args_vec.extend(["exec", &name, &executable]);
+        args_vec.extend(args);
 
         // Run as usual process
         trace!("Container runtime exec args: {:?}", args_vec);
@@ -263,41 +430,79 @@ impl Container {
         }
     }
 
-    /// The base image name, tagged with a hash of the Nix environment, the
-    /// Dockerfile and its default base image, which are the inputs of the
-    /// image build.
+    /// The node image name, tagged with a hash of the default image content
+    /// or of the custom build inputs.
     fn image(config: &Config) -> Result<String> {
-        let nix_dir = config.root().join(Nix::DIR);
-        let mut inputs = vec![];
-        for file in Nix::FILES {
-            let path = nix_dir.join(file);
-            inputs.push(
-                fs::read(&path).with_context(|| format!("Unable to read '{}'", path.display()))?,
-            );
-        }
-        let dockerfile = config.root().join("Dockerfile");
-        inputs.push(
-            fs::read(&dockerfile)
+        let Some(dockerfile) = config.dockerfile() else {
+            return Ok(Self::image_name(&[&Self::rootfs()]));
+        };
+        let mut inputs = vec![
+            fs::read(dockerfile)
                 .with_context(|| format!("Unable to read '{}'", dockerfile.display()))?,
-        );
-        inputs.push(BASE_IMAGE.as_bytes().to_vec());
+        ];
+        let context = Self::build_context(dockerfile)?;
+        let root = fs::canonicalize(config.root()).unwrap_or_else(|_| config.root().into());
+        Self::context_inputs(&context, &context, &root, &mut inputs)?;
+        let inputs: Vec<&[u8]> = inputs.iter().map(Vec::as_slice).collect();
         Ok(Self::image_name(&inputs))
     }
 
-    /// The base image name for the provided build inputs.
-    fn image_name(inputs: &[Vec<u8>]) -> String {
-        // FNV-1a, stable across Rust versions and platforms.
-        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-        for input in inputs {
-            for byte in (input.len() as u64).to_le_bytes().iter().chain(input) {
-                hash ^= u64::from(*byte);
-                hash = hash.wrapping_mul(0x0100_0000_01b3);
-            }
-        }
-        format!("{}-{:016x}", IMAGE_PREFIX, hash)
+    /// The image name for the provided build inputs.
+    fn image_name(inputs: &[&[u8]]) -> String {
+        format!("{}-{:016x}", IMAGE_PREFIX, content_hash(inputs))
     }
 
-    /// Check whether the base container image already exists.
+    /// The build context of a custom Dockerfile, which is its directory.
+    fn build_context(dockerfile: &Path) -> Result<PathBuf> {
+        let dockerfile = fs::canonicalize(dockerfile)
+            .with_context(|| format!("Unable to resolve '{}'", dockerfile.display()))?;
+        dockerfile
+            .parent()
+            .map(Path::to_path_buf)
+            .context("Dockerfile has no parent directory")
+    }
+
+    /// Collect the metadata of all entries in the build context
+    /// recursively, except the run root. The metadata changes together with
+    /// the content and is cheaper to read.
+    fn context_inputs(
+        context: &Path,
+        dir: &Path,
+        exclude: &Path,
+        inputs: &mut Vec<Vec<u8>>,
+    ) -> Result<()> {
+        let mut entries = fs::read_dir(dir)
+            .with_context(|| format!("Unable to read build context '{}'", dir.display()))?
+            .collect::<Result<Vec<_>, _>>()
+            .with_context(|| format!("Unable to read build context '{}'", dir.display()))?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            if path == exclude {
+                continue;
+            }
+            let metadata = entry
+                .metadata()
+                .with_context(|| format!("Unable to read '{}'", path.display()))?;
+            inputs.push(
+                format!(
+                    "{} {:o} {} {}.{}",
+                    path.strip_prefix(context).unwrap_or(&path).display(),
+                    metadata.mode(),
+                    metadata.len(),
+                    metadata.mtime(),
+                    metadata.mtime_nsec(),
+                )
+                .into_bytes(),
+            );
+            if metadata.is_dir() {
+                Self::context_inputs(context, &path, exclude, inputs)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Check whether the node image already exists.
     /// Uses `image inspect` which works for both podman and docker.
     fn image_exists(config: &Config, runtime_args: &[String], image: &str) -> bool {
         Command::new(config.container_runtime())
@@ -309,8 +514,9 @@ impl Container {
             .is_ok_and(|s| s.success())
     }
 
-    /// Remove the base images of previous builds. Images which are still
-    /// in use, for example by another run root, fail to be removed.
+    /// Remove the node images of previous builds and older versions. Images
+    /// which are still in use, for example by another run root, fail to be
+    /// removed.
     fn prune_images(config: &Config, runtime_args: &[String], image: &str) {
         let output = match Command::new(config.container_runtime())
             .args(runtime_args)
@@ -334,8 +540,8 @@ impl Container {
         }
     }
 
-    /// Filter the listed `repository:tag` images for base images other
-    /// than the provided one. Podman prefixes the repository with
+    /// Filter the listed `repository:tag` images for `kubernix:base-*`
+    /// images other than the provided one. Podman prefixes the repository with
     /// `localhost/`.
     fn stale_images(list: &str, image: &str) -> Vec<String> {
         let (repo, prefix) = IMAGE_PREFIX.split_once(':').unwrap_or_default();
@@ -413,20 +619,96 @@ mod tests {
 
     #[test]
     fn image_name_depends_on_inputs() {
-        let a = Container::image_name(&[b"crun".to_vec(), b"df".to_vec()]);
+        let a = Container::image_name(&[b"FROM scratch"]);
         assert!(a.starts_with("kubernix:base-"));
+        assert_eq!(a, Container::image_name(&[b"FROM scratch"]));
+        assert_ne!(a, Container::image_name(&[b"FROM alpine"]));
+    }
+
+    #[test]
+    fn image_custom_depends_on_build_context() -> Result<()> {
+        let context = tempfile::tempdir()?;
+        let dockerfile = context.path().join("Dockerfile");
+        fs::write(&dockerfile, "FROM scratch\nCOPY file /\n")?;
+        fs::write(context.path().join("file"), "a")?;
+        let root = context.path().join("kubernix-run");
+        fs::create_dir(&root)?;
+        let config = || {
+            Config::parse_from([
+                "kubernix",
+                "--nodes=2",
+                &format!("--root={}", root.display()),
+                &format!("--dockerfile={}", dockerfile.display()),
+            ])
+        };
+        let image = Container::image(&config())?;
+        assert!(image.starts_with("kubernix:base-"));
+        assert_ne!(image, Container::image(&Config::parse_from(["kubernix"]))?);
+        assert_eq!(image, Container::image(&config())?);
+
+        // The run root is excluded
+        fs::write(root.join("state"), "changed")?;
+        assert_eq!(image, Container::image(&config())?);
+
+        // Files in the context and the Dockerfile are included
+        fs::create_dir(context.path().join("dir"))?;
+        fs::write(context.path().join("dir").join("nested"), "b")?;
+        let nested = Container::image(&config())?;
+        assert_ne!(image, nested);
+        fs::write(context.path().join("dir").join("nested"), "bc")?;
+        assert_ne!(nested, Container::image(&config())?);
+        fs::write(&dockerfile, "FROM alpine\n")?;
+        assert_ne!(nested, Container::image(&config())?);
+        Ok(())
+    }
+
+    #[test]
+    fn build_context_is_dockerfile_dir() -> Result<()> {
+        let context = tempfile::tempdir()?;
+        let dockerfile = context.path().join("Dockerfile");
+        fs::write(&dockerfile, "FROM scratch\n")?;
         assert_eq!(
-            a,
-            Container::image_name(&[b"crun".to_vec(), b"df".to_vec()])
+            Container::build_context(&dockerfile)?,
+            fs::canonicalize(context.path())?
         );
-        assert_ne!(
-            a,
-            Container::image_name(&[b"crun runc".to_vec(), b"df".to_vec()])
+        assert!(Container::build_context(&context.path().join("missing")).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn image_default_is_rootfs() -> Result<()> {
+        let c = Config::parse_from(["kubernix", "--nodes=2"]);
+        assert_eq!(
+            Container::image(&c)?,
+            Container::image_name(&[&Container::rootfs()])
         );
-        assert_ne!(
-            a,
-            Container::image_name(&[b"crund".to_vec(), b"f".to_vec()])
-        );
+        Ok(())
+    }
+
+    #[test]
+    fn rootfs_is_valid_tar() {
+        let archive = Container::rootfs();
+        assert_eq!(archive.len() % 512, 0);
+        assert!(archive.ends_with(&[0; 1024]));
+
+        // The first entry is a directory with a valid checksum
+        let header = &archive[..512];
+        assert_eq!(&header[..4], b"etc/");
+        assert_eq!(header[156], b'5');
+        assert_eq!(&header[257..263], b"ustar\0");
+        let stored = std::str::from_utf8(&header[148..154]).unwrap();
+        let mut copy = header.to_vec();
+        copy[148..156].copy_from_slice(b"        ");
+        let sum: u32 = copy.iter().map(|b| u32::from(*b)).sum();
+        assert_eq!(u32::from_str_radix(stored, 8).unwrap(), sum);
+
+        // The passwd file contains root
+        let passwd = archive
+            .chunks(512)
+            .position(|block| block.starts_with(b"etc/passwd\0"))
+            .unwrap();
+        assert_eq!(archive[passwd * 512 + 156], b'0');
+        assert!(archive[(passwd + 1) * 512..].starts_with(b"root:x:0:0:"));
     }
 
     #[test]
@@ -450,14 +732,87 @@ mod tests {
     }
 
     #[test]
-    fn default_dockerfile_uses_base_image() {
-        let dockerfile = format!(
-            include_str!("assets/Dockerfile"),
-            base = BASE_IMAGE,
-            nix = Nix::DIR,
-            root = DEFAULT_ROOT
+    fn env_args_forward_path() {
+        let path = var("PATH").unwrap_or_default();
+        assert_eq!(Container::env_args(), vec![format!("--env=PATH={}", path)]);
+    }
+
+    fn ca_bundle_args(vars: &[(&str, &str)], files: &[(&str, &str)]) -> Vec<String> {
+        Container::ca_bundle_args_from(
+            |key| {
+                vars.iter()
+                    .find(|(k, _)| *k == key)
+                    .map(|(_, v)| v.to_string())
+            },
+            |path| {
+                files
+                    .iter()
+                    .find(|(f, _)| Path::new(f) == path)
+                    .map(|(_, target)| PathBuf::from(target))
+            },
+        )
+    }
+
+    #[test]
+    fn ca_bundle_args_prefers_ssl_cert_file() {
+        // A host bundle gets mounted to a fixed location
+        assert_eq!(
+            ca_bundle_args(
+                &[
+                    ("SSL_CERT_FILE", "/etc/custom.crt"),
+                    ("NIX_SSL_CERT_FILE", "/nix/store/c/ca.crt"),
+                ],
+                &[
+                    ("/etc/custom.crt", "/etc/custom.crt"),
+                    (
+                        "/etc/ssl/certs/ca-certificates.crt",
+                        "/etc/ssl/certs/ca.crt"
+                    ),
+                    ("/nix/store/c/ca.crt", "/nix/store/c/ca.crt"),
+                ],
+            ),
+            vec![
+                "--volume=/etc/custom.crt:/etc/ssl/certs/ca-certificates.crt:ro",
+                "--env=SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
+            ]
         );
-        assert!(dockerfile.starts_with(&format!("FROM {}\n", BASE_IMAGE)));
+
+        // A missing SSL_CERT_FILE falls back to the system bundle
+        assert_eq!(
+            ca_bundle_args(
+                &[("SSL_CERT_FILE", "/etc/missing.crt")],
+                &[("/etc/pki/tls/certs/ca-bundle.crt", "/etc/pki/ca.crt")],
+            ),
+            vec![
+                "--volume=/etc/pki/ca.crt:/etc/ssl/certs/ca-certificates.crt:ro",
+                "--env=SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
+            ]
+        );
+    }
+
+    #[test]
+    fn ca_bundle_args_uses_store_paths_directly() {
+        // A system bundle which resolves into the Nix store, like on NixOS
+        assert_eq!(
+            ca_bundle_args(
+                &[("NIX_SSL_CERT_FILE", "/nix/store/c/ca.crt")],
+                &[
+                    ("/etc/ssl/certs/ca-certificates.crt", "/nix/store/s/ca.crt"),
+                    ("/nix/store/c/ca.crt", "/nix/store/c/ca.crt"),
+                ],
+            ),
+            vec!["--env=SSL_CERT_FILE=/nix/store/s/ca.crt"]
+        );
+
+        // The bundle of the Nix environment if the host has none
+        assert_eq!(
+            ca_bundle_args(
+                &[("NIX_SSL_CERT_FILE", "/nix/store/c/ca.crt")],
+                &[("/nix/store/c/ca.crt", "/nix/store/c/ca.crt")],
+            ),
+            vec!["--env=SSL_CERT_FILE=/nix/store/c/ca.crt"]
+        );
+        assert!(ca_bundle_args(&[], &[]).is_empty());
     }
 
     #[test]
