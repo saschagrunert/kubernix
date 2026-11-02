@@ -11,10 +11,12 @@ use crate::{
     kubectl::Kubectl,
     network::Network,
     pki::Pki,
-    process::{ProcessState, Started, Stoppables},
+    process::{ProcessState, Stoppables},
+    signals,
 };
-use log::{debug, info};
-use rayon::prelude::*;
+use anyhow::anyhow;
+use log::{debug, error, info};
+use std::thread;
 
 /// Boot phases control the startup order of cluster components.
 /// Components in the same phase start concurrently; phases run sequentially.
@@ -115,70 +117,75 @@ impl ComponentRegistry {
 
     /// Execute all registered components phase by phase.
     ///
-    /// Within each phase, components start in parallel via rayon.
-    /// If any component in a phase fails, subsequent phases are skipped
-    /// (later phases depend on earlier ones).
+    /// Within each phase, components start in parallel, each on its own
+    /// thread since a start blocks until the component is ready.
+    /// If any component in a phase fails or a termination signal has been
+    /// received, subsequent phases are skipped (later phases depend on
+    /// earlier ones).
     ///
     /// The Controller phase runs controllers, CRI-O, and proxy in parallel
     /// since they all only depend on the API server.
     ///
-    /// Returns stoppable handles in reverse phase order (for proper
-    /// shutdown: node agents before runtimes, runtimes before control
-    /// plane, etc.) and a flag indicating whether all succeeded.
-    pub fn run(&self, ctx: &ClusterContext<'_>) -> (Stoppables, bool) {
+    /// Returns stoppable handles grouped by phase in reverse phase order
+    /// (for proper shutdown: node agents before runtimes, runtimes before
+    /// control plane, etc.) and the startup failures.
+    pub fn run(&self, ctx: &ClusterContext<'_>) -> (Vec<Stoppables>, Vec<String>) {
         info!("Starting processes");
-        let mut all_results: Vec<(Phase, ProcessState)> = Vec::new();
+        let mut groups: Vec<Stoppables> = Vec::new();
+        let mut failures: Vec<String> = Vec::new();
 
         for (phase, components) in &self.by_phase() {
+            if let Err(e) = signals::check() {
+                failures.push(e.to_string());
+                break;
+            }
             debug!(
                 "Starting {:?} phase ({} components)",
                 phase,
                 components.len()
             );
-            let results: Vec<ProcessState> = components
-                .par_iter()
-                .map(|c| {
-                    debug!("Starting {}", c.name());
-                    c.start(ctx)
-                })
-                .collect();
-
-            let phase_ok = results.iter().all(|r| r.is_ok());
-            if !phase_ok {
-                let failures: Vec<_> = results
+            let results: Vec<ProcessState> = thread::scope(|s| {
+                let handles: Vec<_> = components
                     .iter()
-                    .filter_map(|r| r.as_ref().err().map(|e| e.to_string()))
+                    .map(|c| {
+                        s.spawn(move || {
+                            debug!("Starting {}", c.name());
+                            c.start(ctx)
+                        })
+                    })
                     .collect();
-                info!(
+                handles
+                    .into_iter()
+                    .zip(components)
+                    .map(|(h, c)| {
+                        h.join()
+                            .unwrap_or_else(|_| Err(anyhow!("Starting {} panicked", c.name())))
+                    })
+                    .collect()
+            });
+
+            let mut group = Stoppables::new();
+            for result in results {
+                match result {
+                    Ok(p) => group.push(p),
+                    Err(e) => failures.push(format!("{:#}", e)),
+                }
+            }
+            groups.push(group);
+
+            if !failures.is_empty() {
+                error!(
                     "Phase {:?} failed ({} errors: {}), skipping remaining phases",
                     phase,
                     failures.len(),
                     failures.join(", ")
                 );
-                all_results.extend(results.into_iter().map(|r| (*phase, r)));
                 break;
             }
-            all_results.extend(results.into_iter().map(|r| (*phase, r)));
         }
 
-        let all_ok = all_results.iter().all(|(_, r)| r.is_ok());
-
-        // Collect successful starts, then reverse so shutdown happens
-        // in reverse phase order.
-        let mut stoppables: Vec<(Phase, Started)> = all_results
-            .into_iter()
-            .filter_map(|(phase, r)| match r {
-                Ok(p) => Some((phase, p)),
-                Err(e) => {
-                    debug!("{}", e);
-                    None
-                }
-            })
-            .collect();
-        stoppables.reverse();
-
-        let processes: Stoppables = stoppables.into_iter().map(|(_, p)| p).collect();
-        (processes, all_ok)
+        groups.reverse();
+        (groups, failures)
     }
 }
 

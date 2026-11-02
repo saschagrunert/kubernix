@@ -10,11 +10,11 @@ use crate::{
     pki::{Identity, Pki},
 };
 use anyhow::{Context, Result};
-use log::{debug, info};
+use log::{debug, info, warn};
 use nix::sys::stat::{Mode, fchmod};
 use rayon::prelude::*;
 use std::{
-    fs::{File, create_dir_all},
+    fs::{self, File, create_dir_all},
     net::Ipv4Addr,
     path::{Path, PathBuf},
 };
@@ -29,6 +29,9 @@ pub struct KubeConfig {
 }
 
 impl KubeConfig {
+    /// The directory of the kubeconfigs in the root.
+    pub const DIR: &'static str = "kubeconfig";
+
     /// Kubeconfig file paths for each kubelet node.
     pub fn kubelets(&self) -> &[PathBuf] {
         &self.kubelets
@@ -54,27 +57,48 @@ impl KubeConfig {
         &self.admin
     }
 
+    /// Returns true if all kubeconfig files exist.
+    fn complete(&self) -> bool {
+        [
+            &self.proxy,
+            &self.controller_manager,
+            &self.scheduler,
+            &self.admin,
+        ]
+        .into_iter()
+        .chain(&self.kubelets)
+        .all(|p| p.exists())
+    }
+
     /// Generate or load kubeconfig files for all cluster components.
     pub fn new(config: &Config, pki: &Pki) -> Result<KubeConfig> {
         // Create the target dir
-        let dir = config.root().join("kubeconfig");
+        let dir = config.root().join(Self::DIR);
 
         if dir.exists() {
-            info!("Kubeconfig directory already exists, skipping generation");
-
             let kubelets = pki
                 .kubelets()
                 .iter()
                 .map(|i| Self::target_config(&dir, i))
                 .collect();
 
-            Ok(KubeConfig {
+            let kubeconfig = KubeConfig {
                 kubelets,
                 proxy: Self::target_config(&dir, pki.proxy()),
                 controller_manager: Self::target_config(&dir, pki.controller_manager()),
                 scheduler: Self::target_config(&dir, pki.scheduler()),
                 admin: Self::target_config(&dir, pki.admin()),
-            })
+            };
+
+            // A failed generation leaves an incomplete directory behind
+            if !kubeconfig.complete() {
+                warn!("Kubeconfig directory is incomplete, regenerating it");
+                fs::remove_dir_all(&dir)
+                    .context("Unable to remove incomplete kubeconfig directory")?;
+                return Self::new(config, pki);
+            }
+            info!("Kubeconfig directory already exists, skipping generation");
+            Ok(kubeconfig)
         } else {
             info!("Creating kubeconfigs");
             create_dir_all(&dir).context("Unable to create kubeconfig directory")?;
@@ -180,6 +204,17 @@ mod tests {
         let n = test_network()?;
         let p = Pki::new(&c, &n)?;
         let _kc = KubeConfig::new(&c, &p)?;
+        Ok(())
+    }
+
+    #[test]
+    fn new_regenerates_incomplete() -> Result<()> {
+        let c = test_config()?;
+        let n = test_network()?;
+        let p = Pki::new(&c, &n)?;
+        create_dir_all(c.root().join(KubeConfig::DIR))?;
+        let kc = KubeConfig::new(&c, &p)?;
+        assert!(kc.complete());
         Ok(())
     }
 }

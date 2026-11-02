@@ -25,7 +25,7 @@ impl Logger {
     /// let logger = Logger::new(LevelFilter::Info, LogFormat::Text);
     /// ```
     pub fn new(level: LevelFilter, format: LogFormat) -> Box<Self> {
-        set_max_level(LevelFilter::Trace);
+        set_max_level(level);
         Self { level, format }.into()
     }
 

@@ -11,6 +11,7 @@ use log::{debug, info};
 use std::{
     env::{current_exe, var},
     fs::{self, create_dir_all},
+    os::unix::process::CommandExt,
     path::Path,
     process::Command,
 };
@@ -25,6 +26,9 @@ impl Nix {
     pub const FILES: [&'static str; 4] = ["flake.nix", "flake.lock", "packages.nix", "overlay.nix"];
     const NIX_ENV: &'static str = "IN_NIX";
 
+    /// The `.dockerignore` content of older versions.
+    const DOCKERIGNORE: &'static str = "nix/.git\n";
+
     /// Bootstrap the nix environment
     pub fn bootstrap(config: Config) -> Result<()> {
         // Prepare the nix dir
@@ -33,12 +37,12 @@ impl Nix {
 
         // Write the environment, regenerating it if the rendered files
         // differ, for example after upgrading kubernix or changing packages.
+        // The `path:` flake reference makes Nix use all files of the
+        // directory, even if it is part of a git worktree.
         if Self::write_files(&dir, &Self::render_files(&config)?)? {
-            // Initialize a standalone git repo so that Nix flakes can
-            // discover the generated files. Without this, Nix would use
-            // the parent git worktree and filter to only tracked files.
-            Self::git_init(&dir)?;
+            debug!("Nix environment written to '{}'", dir.display());
         }
+        Self::remove_leftovers(config.root())?;
 
         // Run the shell, forwarding all config options
         let exe = current_exe()?.display().to_string();
@@ -93,6 +97,10 @@ impl Nix {
             args.push("--addons");
             args.push(addon.as_str());
         }
+        if config.addons().is_empty() {
+            // Explicitly disable the default addons
+            args.push("--addons");
+        }
 
         if config.no_shell() {
             args.push("--no-shell");
@@ -101,14 +109,16 @@ impl Nix {
             args.push(&shell_val);
         }
 
-        Self::run(&config, &args)
+        Self::exec(&config, &args)
     }
 
-    /// Run a command inside the nix develop shell.
+    /// Replace the current process by a command inside the nix develop
+    /// shell, which only returns on failure. Signals reach the command
+    /// directly, since `nix develop` execs it as well.
     ///
     /// Each element in `args` is passed as a separate OS argument to
     /// `nix develop --command`, avoiding shell interpretation.
-    pub fn run(config: &Config, args: &[&str]) -> Result<()> {
+    pub fn exec(config: &Config, args: &[&str]) -> Result<()> {
         let nix_dir = config.root().join(Self::DIR);
         let flake_ref = format!("path:{}", nix_dir.display());
 
@@ -123,11 +133,7 @@ impl Nix {
         for arg in args {
             cmd.arg(arg);
         }
-        let status = cmd.status().context("Unable to run nix develop")?;
-        if !status.success() {
-            bail!("nix develop exited with status {}", status);
-        }
-        Ok(())
+        Err(cmd.exec()).context("Unable to run nix develop")
     }
 
     /// Render all files of the Nix environment as (file name, content).
@@ -197,23 +203,21 @@ impl Nix {
         Ok(true)
     }
 
-    /// Initialize a git repo in the given directory so Nix flakes
-    /// treats it as a standalone source tree.
-    fn git_init(dir: &Path) -> Result<()> {
-        let git = System::find_executable("git")?;
-        let run = |args: &[&str]| -> Result<()> {
-            let status = Command::new(&git).arg("-C").arg(dir).args(args).status()?;
-            if !status.success() {
-                bail!("git {} failed with status {}", args.join(" "), status,);
-            }
-            Ok(())
-        };
-        run(&["init", "-q"])?;
-        run(&["config", "user.email", "kubernix@localhost"])?;
-        run(&["config", "user.name", "kubernix"])?;
-        run(&["config", "commit.gpgsign", "false"])?;
-        run(&["add", "."])?;
-        run(&["commit", "-q", "-m", "init", "--allow-empty"])?;
+    /// Remove the git repository of the Nix environment and its
+    /// `.dockerignore`, which older versions created.
+    fn remove_leftovers(root: &Path) -> Result<()> {
+        let git = root.join(Self::DIR).join(".git");
+        if git.exists() {
+            debug!("Removing '{}'", git.display());
+            fs::remove_dir_all(&git)
+                .with_context(|| format!("Unable to remove '{}'", git.display()))?;
+        }
+        let dockerignore = root.join(".dockerignore");
+        if fs::read_to_string(&dockerignore).is_ok_and(|c| c == Self::DOCKERIGNORE) {
+            debug!("Removing '{}'", dockerignore.display());
+            fs::remove_file(&dockerignore)
+                .with_context(|| format!("Unable to remove '{}'", dockerignore.display()))?;
+        }
         Ok(())
     }
 
@@ -279,17 +283,21 @@ mod tests {
     }
 
     #[test]
-    fn git_init_success() {
-        let dir = tempdir().unwrap().keep();
-        std::fs::write(dir.join("test.txt"), "hello").unwrap();
-        Nix::git_init(&dir).unwrap();
-        assert!(dir.join(".git").exists());
-    }
+    fn remove_leftovers_success() -> Result<()> {
+        let root = tempdir()?;
+        let git = root.path().join(Nix::DIR).join(".git");
+        fs::create_dir_all(git.join("objects"))?;
+        let dockerignore = root.path().join(".dockerignore");
+        fs::write(&dockerignore, Nix::DOCKERIGNORE)?;
+        Nix::remove_leftovers(root.path())?;
+        assert!(!git.exists());
+        assert!(!dockerignore.exists());
 
-    #[test]
-    fn git_init_invalid_dir() {
-        let dir = Path::new("/nonexistent/path");
-        assert!(Nix::git_init(dir).is_err());
+        // Custom files and missing leftovers are fine
+        fs::write(&dockerignore, "custom\n")?;
+        Nix::remove_leftovers(root.path())?;
+        assert!(dockerignore.exists());
+        Ok(())
     }
 
     #[test]

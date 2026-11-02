@@ -4,9 +4,9 @@
 //! `cfssl`/`cfssljson`. Certificates cover the API server, kubelet
 //! nodes, controller-manager, scheduler, proxy, and service accounts.
 
-use crate::{Config, network::Network, node::Node};
+use crate::{Config, kubeconfig::KubeConfig, network::Network, node::Node};
 use anyhow::{Context, Result, bail};
-use log::{debug, info};
+use log::{debug, info, warn};
 use rayon::prelude::*;
 use serde_json::{json, to_string_pretty};
 use std::{
@@ -77,6 +77,29 @@ impl Pki {
     /// Key pair used to sign and verify ServiceAccount tokens.
     pub fn service_account(&self) -> &Identity {
         &self.service_account
+    }
+
+    /// All identities, which have to be extended for new ones.
+    fn identities(&self) -> Vec<&Identity> {
+        let mut identities = vec![
+            &self.admin,
+            &self.apiserver,
+            &self.ca,
+            &self.controller_manager,
+            &self.etcd,
+            &self.proxy,
+            &self.scheduler,
+            &self.service_account,
+        ];
+        identities.extend(&self.kubelets);
+        identities
+    }
+
+    /// Returns true if the files of all identities exist.
+    fn complete(&self) -> bool {
+        self.identities()
+            .iter()
+            .all(|i| i.cert().exists() && i.key().exists())
     }
 }
 
@@ -171,8 +194,6 @@ impl Pki {
 
         // Create the CA only if necessary
         if dir.exists() {
-            info!("PKI directory already exists, skipping generation");
-
             let kubelets = if config.multi_node() {
                 // Multiple nodes get identified via their node name
                 nodes
@@ -188,7 +209,7 @@ impl Pki {
                 )]
             };
 
-            Ok(Pki {
+            let pki = Pki {
                 admin: Identity::new(dir, ADMIN_NAME, ADMIN_NAME),
                 apiserver: Identity::new(dir, APISERVER_NAME, APISERVER_NAME),
                 ca: Identity::new(dir, CA_NAME, CA_NAME),
@@ -202,7 +223,23 @@ impl Pki {
                 proxy: Identity::new(dir, PROXY_NAME, PROXY_USER),
                 scheduler: Identity::new(dir, SCHEDULER_NAME, SCHEDULER_USER),
                 service_account: Identity::new(dir, SERVICE_ACCOUNT_NAME, SERVICE_ACCOUNT_NAME),
-            })
+            };
+
+            // A failed generation leaves an incomplete directory behind
+            if !pki.complete() {
+                warn!("PKI directory is incomplete, regenerating it");
+                fs::remove_dir_all(dir).context("Unable to remove incomplete PKI directory")?;
+
+                // The kubeconfigs embed the certificates
+                let kubeconfig = config.root().join(KubeConfig::DIR);
+                if kubeconfig.exists() {
+                    fs::remove_dir_all(&kubeconfig)
+                        .context("Unable to remove outdated kubeconfig directory")?;
+                }
+                return Self::new(config, network);
+            }
+            info!("PKI directory already exists, skipping generation");
+            Ok(pki)
         } else {
             info!("Generating certificates");
             create_dir_all(dir).context("Unable to create PKI directory")?;
@@ -483,6 +520,18 @@ mod tests {
         let c = test_config()?;
         let n = test_network()?;
         let _pki = Pki::new(&c, &n)?;
+        Ok(())
+    }
+
+    #[test]
+    fn new_regenerates_incomplete() -> Result<()> {
+        let c = test_config()?;
+        let n = test_network()?;
+        create_dir_all(c.root().join("pki"))?;
+        create_dir_all(c.root().join(KubeConfig::DIR))?;
+        let pki = Pki::new(&c, &n)?;
+        assert!(pki.complete());
+        assert!(!c.root().join(KubeConfig::DIR).exists());
         Ok(())
     }
 

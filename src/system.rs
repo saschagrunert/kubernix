@@ -161,8 +161,8 @@ impl System {
     }
 
     /// Restore the initial system state
-    pub fn cleanup(&self) {
-        if let Some(hosts) = &self.hosts
+    fn cleanup(&mut self) {
+        if let Some(hosts) = self.hosts.take()
             && let Err(e) = fs::write(Self::hosts(), hosts)
         {
             warn!(
@@ -288,6 +288,14 @@ impl System {
     }
 }
 
+impl Drop for System {
+    /// Restore the system state on any exit path, including errors before
+    /// the cluster has been bootstrapped.
+    fn drop(&mut self) {
+        self.cleanup();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,7 +342,7 @@ mod tests {
     #[ignore]
     fn setup_success() -> Result<()> {
         let c = test_config()?;
-        let s = System::setup(&c)?;
+        let mut s = System::setup(&c)?;
         s.cleanup();
         Ok(())
     }

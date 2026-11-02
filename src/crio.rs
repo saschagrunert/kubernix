@@ -7,16 +7,17 @@
 use crate::{
     Config,
     component::{ClusterContext, Component, Phase},
-    container::Container,
+    container::{Container, NodeContainer},
     cri::{self, CriSocket, RuntimePaths},
     network::Network,
     node::Node,
     process::{Process, ProcessState, Stoppable},
     system::System,
+    write_if_changed,
 };
 use anyhow::{Context, Result};
 use std::{
-    fs::{self, create_dir_all},
+    fs::create_dir_all,
     path::{Path, PathBuf},
 };
 
@@ -56,6 +57,7 @@ impl Component for CrioComponent {
 pub struct Crio {
     process: Process,
     socket: CriSocket,
+    container: Option<NodeContainer>,
     node_name: String,
 }
 
@@ -79,24 +81,19 @@ impl Crio {
         let network_dir = dir.join("cni");
         let socket = Self::socket(config, network, node)?;
 
-        if !dir.exists() {
-            create_dir_all(&dir).context("Unable to create CRI-O directory")?;
-            create_dir_all(&network_dir).context("Unable to create CRI-O CNI directory")?;
-            create_dir_all(&config_dir).context("Unable to create CRI-O config directory")?;
+        // Always render the configuration, since it references the current
+        // Nix store paths.
+        create_dir_all(&network_dir).context("Unable to create CRI-O CNI directory")?;
+        create_dir_all(&config_dir).context("Unable to create CRI-O config directory")?;
+        create_dir_all(dir.join("attach")).context("Unable to create CRI-O attach directory")?;
+        create_dir_all(dir.join("ns")).context("Unable to create CRI-O namespace directory")?;
+        write_if_changed(
+            &config_file,
+            &Self::render_config(config, &dir, &socket, &conmon, &paths),
+        )
+        .context("Unable to write CRI-O config")?;
+        cri::write_cni_config(&network_dir, &node_name, node, network)?;
 
-            let attach_dir = dir.join("attach");
-            let ns_dir = dir.join("ns");
-            create_dir_all(&attach_dir).context("Unable to create CRI-O attach directory")?;
-            create_dir_all(&ns_dir).context("Unable to create CRI-O namespace directory")?;
-
-            fs::write(
-                &config_file,
-                Self::render_config(config, &dir, &socket, &conmon, &paths),
-            )
-            .context("Unable to write CRI-O config")?;
-
-            cri::write_cni_config(&network_dir, &node_name, node, network)?;
-        }
         let config_dir_arg = format!("--config-dir={}", config_dir.display());
         let args: &[&str] = &[&config_dir_arg];
 
@@ -111,11 +108,13 @@ impl Crio {
         } else {
             Process::start(&dir, "CRI-O", CRIO, args)?
         };
+        let container = Container::node(config, &node_name);
         process.wait_ready("No systemd watchdog enabled")?;
 
         Ok(Box::new(Self {
             process,
             socket,
+            container,
             node_name,
         }))
     }
@@ -192,10 +191,19 @@ impl Crio {
 
 impl Stoppable for Crio {
     fn stop(&mut self) -> Result<()> {
-        cri::remove_all_containers("CRI-O", &self.socket, &self.node_name)
-            .with_context(|| format!("Unable to remove CRI-O containers on {}", self.node_name))?;
+        // Always stop the process, even if the workloads cannot be removed,
+        // for example because CRI-O crashed.
+        let removed = cri::remove_all_containers("CRI-O", &self.socket, &self.node_name)
+            .with_context(|| format!("Unable to remove CRI-O containers on {}", self.node_name));
+        let stopped = self.process.stop();
+        if let Some(container) = &mut self.container {
+            container.remove();
+        }
+        removed.and(stopped)
+    }
 
-        self.process.stop()
+    fn died(&mut self) -> bool {
+        self.process.died()
     }
 }
 
