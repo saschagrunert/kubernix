@@ -4,7 +4,7 @@ with pkgs;
   cacert
   cfssl
   cni-plugins
-  conmon
+  conmon-rs
   conntrack-tools
   containerd
   cri-o

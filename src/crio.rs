@@ -65,7 +65,7 @@ pub struct Crio {
 }
 
 const CRIO: &str = "crio";
-const CONMON: &str = "conmon";
+const CONMONRS: &str = "conmonrs";
 
 /// Registries for short image names, which CRI-O resolves via the
 /// containers-registries.conf(5) file.
@@ -84,7 +84,7 @@ impl Crio {
         let node_name = Node::name(config, network, node);
 
         let paths = RuntimePaths::resolve(config)?;
-        let monitor = System::find_executable(CONMON)?.display().to_string();
+        let conmonrs = System::find_executable(CONMONRS)?.display().to_string();
 
         let dir = Self::path(config, network, node);
         let config_dir = dir.join("crio.conf.d");
@@ -99,9 +99,12 @@ impl Crio {
         create_dir_all(&network_dir).context("Unable to create CRI-O CNI directory")?;
         create_dir_all(&config_dir).context("Unable to create CRI-O config directory")?;
         create_dir_all(dir.join("ns")).context("Unable to create CRI-O namespace directory")?;
+        if config.is_rootless() {
+            cri::write_rootless_wrappers(&dir, &paths)?;
+        }
         write_if_changed(
             &config_file,
-            &Self::render_config(config, &dir, &socket, &attach_socket_dir, &monitor, &paths),
+            &Self::render_config(config, &dir, &socket, &attach_socket_dir, &conmonrs, &paths),
         )
         .context("Unable to write CRI-O config")?;
         write_if_changed(&registries_file, REGISTRIES_CONF)
@@ -139,30 +142,44 @@ impl Crio {
     /// Render the CRI-O configuration for the node working directory.
     ///
     /// Both OCI runtimes are registered as runtime handlers with their own
-    /// state directory, the configured one is used as default. conmon gets
-    /// configured per handler, which replaces the deprecated global options.
+    /// state directory, the configured one is used as default.
+    ///
+    /// The handlers use the pod runtime type, where one conmon-rs instance
+    /// per pod monitors the containers. CRI-O 1.37 creates that instance for
+    /// the infra container of the pod and replaces a dropped infra container
+    /// by a placeholder without runtime handler, which would run all
+    /// containers of the pod with the default handler instead of the one of
+    /// their RuntimeClass, so the infra container is kept. Its OOM score of
+    /// -998 cannot be set in a user namespace, so rootless mode uses the
+    /// runtime wrappers which remove it (see `cri::write_rootless_wrappers`).
+    /// Both workarounds become unnecessary once CRI-O passes the runtime
+    /// handler of the pod to the conmon-rs instance of a dropped infra
+    /// container, and skips or clamps the OOM score of the infra container
+    /// in a user namespace.
     fn render_config(
         config: &Config,
         dir: &Path,
         socket: &CriSocket,
         attach_socket_dir: &Path,
-        monitor: &str,
+        conmonrs: &str,
         paths: &RuntimePaths,
     ) -> String {
         let runtimes = paths
             .runtimes
             .iter()
             .map(|(runtime, path)| {
+                let path = if config.is_rootless() {
+                    cri::rootless_wrapper(dir, *runtime).display().to_string()
+                } else {
+                    path.clone()
+                };
                 format!(
                     "[crio.runtime.runtimes.{name}]\n\
                      runtime_path = \"{path}\"\n\
                      runtime_root = \"{root}\"\n\
-                     runtime_type = \"oci\"\n\
-                     monitor_path = \"{monitor}\"\n\
-                     monitor_cgroup = \"pod\"\n\
-                     monitor_env = [\n    \
-                     \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\",\n\
-                     ]\n",
+                     runtime_type = \"pod\"\n\
+                     monitor_path = \"{conmonrs}\"\n\
+                     monitor_cgroup = \"pod\"\n",
                     name = runtime,
                     root = dir.join(runtime.name()).display(),
                 )
@@ -290,7 +307,8 @@ mod tests {
         let dir = PathBuf::from("/kubernix/crio/node");
         let socket = CriSocket::new(dir.join("crio.sock"))?;
         let attach = PathBuf::from("/run/kubernix/0123abcd/0");
-        let content = Crio::render_config(config, &dir, &socket, &attach, "/nix/bin/conmon", paths);
+        let content =
+            Crio::render_config(config, &dir, &socket, &attach, "/nix/bin/conmonrs", paths);
         Ok(toml::from_str(&content)?)
     }
 
@@ -316,7 +334,7 @@ mod tests {
         assert_eq!(runtime["default_runtime"].as_str(), Some("crun"));
         let crun = &runtime["runtimes"]["crun"];
         assert_eq!(crun["runtime_path"].as_str(), Some("/nix/bin/crun"));
-        assert_eq!(crun["monitor_path"].as_str(), Some("/nix/bin/conmon"));
+        assert_eq!(crun["monitor_path"].as_str(), Some("/nix/bin/conmonrs"));
         assert_eq!(
             crun["runtime_root"].as_str(),
             Some("/kubernix/crio/node/crun")
@@ -342,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn render_config_configures_conmon_per_handler() -> Result<()> {
+    fn render_config_uses_conmonrs() -> Result<()> {
         for args in [&["kubernix"][..], &["kubernix", "--nodes=2"]] {
             for rootless in [false, true] {
                 let mut c = Config::parse_from(args);
@@ -350,11 +368,32 @@ mod tests {
                 let v = render(&c)?;
                 for name in ["crun", "runc"] {
                     let runtime = &v["crio"]["runtime"]["runtimes"][name];
-                    assert_eq!(runtime["runtime_type"].as_str(), Some("oci"));
-                    assert_eq!(runtime["monitor_path"].as_str(), Some("/nix/bin/conmon"));
+                    assert_eq!(runtime["runtime_type"].as_str(), Some("pod"));
+                    assert_eq!(runtime["monitor_path"].as_str(), Some("/nix/bin/conmonrs"));
                     assert_eq!(runtime["monitor_cgroup"].as_str(), Some("pod"));
-                    assert_eq!(runtime["monitor_env"].as_array().map(Vec::len), Some(1));
+                    assert!(runtime.get("monitor_env").is_none());
                 }
+                // Required for RuntimeClasses with the pod runtime type
+                assert_eq!(
+                    v["crio"]["runtime"]["drop_infra_ctr"].as_bool(),
+                    Some(false)
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn render_config_rootless_uses_wrappers() -> Result<()> {
+        for args in [&["kubernix"][..], &["kubernix", "--nodes=2"]] {
+            let mut c = Config::parse_from(args);
+            c.set_rootless(true);
+            let v = render(&c)?;
+            for name in ["crun", "runc"] {
+                assert_eq!(
+                    v["crio"]["runtime"]["runtimes"][name]["runtime_path"].as_str(),
+                    Some(format!("/kubernix/crio/node/{}-rootless", name).as_str())
+                );
             }
         }
         Ok(())

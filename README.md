@@ -44,7 +44,7 @@ The following technology stack is currently being used:
 | --------------- | -------- |
 | cfssl           | v1.6.5   |
 | cni-plugins     | v1.9.1   |
-| conmon          | v2.2.1   |
+| conmon-rs       | v1.1.1   |
 | conntrack-tools | v1.4.9   |
 | containerd      | v2.4.1   |
 | cri-o-wrapper   | v1.37.2  |

@@ -8,6 +8,7 @@ use crate::{
     containerd::Containerd,
     crio::Crio,
     network::Network,
+    write_if_changed,
 };
 use anyhow::{Context, Result, bail};
 use log::{debug, warn};
@@ -76,6 +77,32 @@ impl RuntimePaths {
         }
         Ok(runtimes)
     }
+}
+
+/// Path of the rootless wrapper script for the given OCI runtime.
+pub fn rootless_wrapper(dir: &Path, runtime: OciRuntime) -> PathBuf {
+    dir.join(format!("{}-rootless", runtime))
+}
+
+/// Write a wrapper script for every OCI runtime, used as runtime path in
+/// rootless mode. Lowering the OOM score is not permitted in a user
+/// namespace, so both crun and runc fail writing `/proc/self/oom_score_adj`
+/// for the values the kubelet or the CRI runtime (like for the infra
+/// container) set. The wrapper patches the `config.json` of the bundle
+/// before running the runtime: it removes `oomScoreAdj`, adds a private UTS
+/// namespace, which setting the hostname requires, and drops namespace
+/// paths which point to the namespaces of the runtime itself.
+pub fn write_rootless_wrappers(dir: &Path, paths: &RuntimePaths) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    for (runtime, path) in &paths.runtimes {
+        let wrapper = rootless_wrapper(dir, *runtime);
+        let script = include_str!("assets/oci-rootless.sh").replace("__RUNTIME_PATH__", path);
+        write_if_changed(&wrapper, &script)
+            .with_context(|| format!("Unable to write {} rootless wrapper", runtime))?;
+        fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))
+            .with_context(|| format!("Unable to set {} rootless wrapper permissions", runtime))?;
+    }
+    Ok(())
 }
 
 /// Maximum usable bytes in a Unix socket path (108 - 1 for null terminator).
@@ -268,6 +295,35 @@ mod tests {
         let socket = CriSocket::new("/run/crio.sock".into())?;
         assert_eq!(socket.to_socket_string(), "unix:///run/crio.sock");
         assert_eq!(socket.to_string(), "/run/crio.sock");
+        Ok(())
+    }
+
+    #[test]
+    fn write_rootless_wrappers_success() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir()?;
+        let paths = RuntimePaths {
+            runtimes: vec![
+                (OciRuntime::Crun, "/nix/bin/crun".into()),
+                (OciRuntime::Runc, "/nix/bin/runc".into()),
+            ],
+            plugin_dir: "/nix/cni".into(),
+        };
+        // Writing them twice keeps them unchanged
+        for _ in 0..2 {
+            write_rootless_wrappers(dir.path(), &paths)?;
+        }
+        for (runtime, path) in &paths.runtimes {
+            let wrapper = rootless_wrapper(dir.path(), *runtime);
+            assert_eq!(wrapper, dir.path().join(format!("{}-rootless", runtime)));
+            let script = std::fs::read_to_string(&wrapper)?;
+            assert!(script.starts_with("#!/bin/sh\n"));
+            assert!(script.contains("del(.process.oomScoreAdj)"));
+            assert!(script.ends_with(&format!("exec {} \"$@\"\n", path)));
+            assert!(!script.contains("__RUNTIME_PATH__"));
+            let mode = std::fs::metadata(&wrapper)?.permissions().mode();
+            assert_eq!(mode & 0o777, 0o755);
+        }
         Ok(())
     }
 

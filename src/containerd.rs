@@ -8,7 +8,6 @@
 use crate::{
     Config,
     component::{ClusterContext, Component, Phase},
-    config::OciRuntime,
     container::{Container, NodeContainer},
     cri::{self, CriSocket, RuntimePaths},
     network::Network,
@@ -18,7 +17,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use std::{
-    fs::{self, create_dir_all},
+    fs::create_dir_all,
     path::{Path, PathBuf},
 };
 
@@ -78,26 +77,8 @@ impl Containerd {
         // Nix store paths.
         create_dir_all(&cni_conf_dir).context("Unable to create containerd CNI directory")?;
 
-        // In rootless mode, kubelet sends oomScoreAdj via CRI, containerd
-        // passes it to the OCI spec, and both crun and runc fail writing
-        // /proc/self/oom_score_adj in a user namespace. Wrap each runtime
-        // to patch config.json before exec (strip oomScoreAdj, fix
-        // namespace config).
         if config.is_rootless() {
-            for (runtime, path) in &paths.runtimes {
-                let wrapper = Self::rootless_wrapper(&dir, *runtime);
-                let script =
-                    include_str!("assets/oci-rootless.sh").replace("__RUNTIME_PATH__", path);
-                write_if_changed(&wrapper, &script)
-                    .with_context(|| format!("Unable to write {} rootless wrapper", runtime))?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).with_context(
-                        || format!("Unable to set {} rootless wrapper permissions", runtime),
-                    )?;
-                }
-            }
+            cri::write_rootless_wrappers(&dir, &paths)?;
         }
 
         write_if_changed(
@@ -139,11 +120,6 @@ impl Containerd {
         }))
     }
 
-    /// Path of the rootless wrapper script for the given OCI runtime.
-    fn rootless_wrapper(dir: &Path, runtime: OciRuntime) -> PathBuf {
-        dir.join(format!("{}-rootless", runtime))
-    }
-
     /// Render the containerd configuration for the node working directory.
     ///
     /// Both OCI runtimes are registered as runtime handlers with their own
@@ -161,7 +137,7 @@ impl Containerd {
             .iter()
             .map(|(runtime, path)| {
                 let path = if config.is_rootless() {
-                    Self::rootless_wrapper(dir, *runtime).display().to_string()
+                    cri::rootless_wrapper(dir, *runtime).display().to_string()
                 } else {
                     path.clone()
                 };
@@ -237,6 +213,7 @@ impl Stoppable for Containerd {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::OciRuntime;
     use clap::Parser;
 
     #[test]
