@@ -274,10 +274,11 @@
 <a href=#274 id=274 data-nosnippet>274</a>            healthzPort = HEALTHZ_PORT_BASE,
 <a href=#275 id=275 data-nosnippet>275</a>        );
 <a href=#276 id=276 data-nosnippet>276</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"kind: KubeletConfiguration"</span>));
-<a href=#277 id=277 data-nosnippet>277</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"cgroupDriver: \"none\""</span>));
-<a href=#278 id=278 data-nosnippet>278</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"podLogsDir: \"/tmp/kubelet/node-0/pods\""</span>));
-<a href=#279 id=279 data-nosnippet>279</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"containerRuntimeEndpoint: \"unix:///run/crio/crio.sock\""</span>));
-<a href=#280 id=280 data-nosnippet>280</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"KubeletInUserNamespace: true"</span>));
-<a href=#281 id=281 data-nosnippet>281</a>    }
-<a href=#282 id=282 data-nosnippet>282</a>}
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="comment">// The kubelet takes the cgroup driver from the CRI runtime
+<a href=#278 id=278 data-nosnippet>278</a>        </span><span class="macro">assert!</span>(!yml.contains(<span class="string">"cgroupDriver"</span>));
+<a href=#279 id=279 data-nosnippet>279</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"podLogsDir: \"/tmp/kubelet/node-0/pods\""</span>));
+<a href=#280 id=280 data-nosnippet>280</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"containerRuntimeEndpoint: \"unix:///run/crio/crio.sock\""</span>));
+<a href=#281 id=281 data-nosnippet>281</a>        <span class="macro">assert!</span>(yml.contains(<span class="string">"KubeletInUserNamespace: true"</span>));
+<a href=#282 id=282 data-nosnippet>282</a>    }
+<a href=#283 id=283 data-nosnippet>283</a>}
 </code></pre></div></section></main></body></html>

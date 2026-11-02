@@ -57,11 +57,17 @@
 <a href=#57 id=57 data-nosnippet>57</a>    flags().interrupt.store(<span class="bool-val">false</span>, Ordering::Relaxed);
 <a href=#58 id=58 data-nosnippet>58</a>}
 <a href=#59 id=59 data-nosnippet>59</a>
-<a href=#60 id=60 data-nosnippet>60</a><span class="doccomment">/// Fail if a termination signal has been received.
-<a href=#61 id=61 data-nosnippet>61</a></span><span class="kw">pub fn </span>check() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">if </span>requested() {
-<a href=#63 id=63 data-nosnippet>63</a>        <span class="macro">bail!</span>(<span class="string">"Received termination signal, aborting"</span>)
-<a href=#64 id=64 data-nosnippet>64</a>    }
-<a href=#65 id=65 data-nosnippet>65</a>    <span class="prelude-val">Ok</span>(())
-<a href=#66 id=66 data-nosnippet>66</a>}
+<a href=#60 id=60 data-nosnippet>60</a><span class="doccomment">/// Forget all received signals, for example once the cleanup started.
+<a href=#61 id=61 data-nosnippet>61</a></span><span class="kw">pub fn </span>reset() {
+<a href=#62 id=62 data-nosnippet>62</a>    flags().terminate.store(<span class="bool-val">false</span>, Ordering::Relaxed);
+<a href=#63 id=63 data-nosnippet>63</a>    clear_interrupt();
+<a href=#64 id=64 data-nosnippet>64</a>}
+<a href=#65 id=65 data-nosnippet>65</a>
+<a href=#66 id=66 data-nosnippet>66</a><span class="doccomment">/// Fail if a termination signal has been received.
+<a href=#67 id=67 data-nosnippet>67</a></span><span class="kw">pub fn </span>check() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#68 id=68 data-nosnippet>68</a>    <span class="kw">if </span>requested() {
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="macro">bail!</span>(<span class="string">"Received termination signal, aborting"</span>)
+<a href=#70 id=70 data-nosnippet>70</a>    }
+<a href=#71 id=71 data-nosnippet>71</a>    <span class="prelude-val">Ok</span>(())
+<a href=#72 id=72 data-nosnippet>72</a>}
 </code></pre></div></section></main></body></html>
