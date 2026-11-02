@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Verify a running kubernix cluster: node and pod health, CoreDNS, privileged
+# pod admission, pod and Service networking, and the OCI runtime handlers.
 set -euo pipefail
 
 USAGE="Usage: $0 <expected-nodes> [<cri-runtime> <oci-runtime>]"

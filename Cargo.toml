@@ -5,11 +5,11 @@ authors = ["Sascha Grunert <mail@saschagrunert.de>"]
 edition = "2024"
 rust-version = "1.88"
 license = "Apache-2.0"
-categories = ["command-line-utilities"]
+categories = ["command-line-utilities", "development-tools"]
 description = "Kubernetes development cluster bootstrapping with Nix packages"
 documentation = "https://docs.rs/kubernix"
 homepage = "https://github.com/saschagrunert/kubernix"
-keywords = ["kubernetes", "nix", "nix-flakes", "crio", "containerd"]
+keywords = ["kubernetes", "nix", "cluster", "cri-o", "containerd"]
 readme = "README.md"
 repository = "https://github.com/saschagrunert/kubernix"
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The system preparation step needs to be done explicitly if running inside a
-# container
+# Load the kernel modules and set the sysctls needed by kubernix in root mode.
+# kubernix does this itself, except when running inside a container, where
+# this script has to be run on the host before.
 set -euo pipefail
 
 modprobe overlay

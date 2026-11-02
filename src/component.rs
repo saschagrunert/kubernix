@@ -22,9 +22,8 @@ use std::thread;
 /// Components in the same phase start concurrently; phases run sequentially.
 ///
 /// Phase ordering is optimized so that independent components overlap:
-/// - The CRI runtime (CRI-O or containerd) starts alongside controllers
-///   (it only needs etcd/apiserver, not controllers)
-/// - Proxy starts alongside kubelets (it only needs the API server to sync caches)
+/// the CRI runtime (CRI-O or containerd) and kube-proxy start alongside the
+/// controllers, since they only need the API server, not the controllers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Phase {
     /// Infrastructure services (etcd)
@@ -57,8 +56,8 @@ pub struct ClusterContext<'a> {
 
 /// Trait implemented by each cluster component.
 ///
-/// This provides a uniform interface for the orchestrator to discover,
-/// start, and order components without hardcoding them in `lib.rs`.
+/// This provides a uniform interface for the orchestrator to start the
+/// registered components and to order them by their boot phase.
 pub trait Component: Send + Sync {
     /// Human-readable name for logging
     fn name(&self) -> &str;
@@ -123,8 +122,8 @@ impl ComponentRegistry {
     /// received, subsequent phases are skipped (later phases depend on
     /// earlier ones).
     ///
-    /// The Controller phase runs controllers, CRI-O, and proxy in parallel
-    /// since they all only depend on the API server.
+    /// The Controller phase runs the controllers, the CRI runtimes and the
+    /// proxy in parallel, since they all only depend on the API server.
     ///
     /// Returns stoppable handles grouped by phase in reverse phase order
     /// (for proper shutdown: node agents before runtimes, runtimes before

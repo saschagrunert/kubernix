@@ -19,6 +19,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Paths of the generated kubeconfig files for all cluster identities.
 #[must_use]
 pub struct KubeConfig {
     kubelets: Vec<PathBuf>,

@@ -30,7 +30,7 @@ In case you haven’t, don’t worry, the important thing is that it provides al
 dependencies needed for this project, pinned to a dedicated version. This guarantees stable,
 reproducible installations.
 
-[2]: https://nixos.org/nix
+[2]: https://nixos.org
 
 KuberNix itself is a Rusty helper program, which takes care of bootstrapping
 the Kubernetes cluster, passing the right configuration parameters around and
@@ -65,14 +65,15 @@ The following technology stack is currently being used:
 | sysctl          | v4.0.7   |
 | util-linux      | v2.42.4  |
 
-Some other tools are not explicitly mentioned here, because they are no
-first-level dependencies.
+Some other tools are not explicitly mentioned here, because they are not
+direct dependencies.
 
 ### Boot Phases
 
 Components start in four sequential phases. Within each phase, components
 start in parallel. If any component in a phase fails, subsequent phases
-are skipped.
+are skipped. Once all components are running, KuberNix deploys the cluster
+addons (CoreDNS by default) in the background.
 
 ```mermaid
 graph TD
@@ -86,15 +87,13 @@ graph TD
     D --- kubelet["kubelet (x N)"]
 ```
 
-### Single Dependency
+### Requirements
 
-#### With Nix
-
-As already mentioned, there is only one single dependency needed to run this
-project: **Nix** (with [flakes][3] enabled). To setup Nix, simply run:
+As already mentioned, there is only one real dependency needed to run this
+project: **Nix** (with [flakes][3] enabled). To set up Nix, run:
 
 ```shell
-$ curl https://nixos.org/nix/install | sh
+$ curl -L https://nixos.org/nix/install | sh
 ```
 
 Please make sure to follow the instructions output by the script and that
@@ -102,39 +101,62 @@ Please make sure to follow the instructions output by the script and that
 
 [3]: https://wiki.nixos.org/wiki/Flakes
 
+Besides that, KuberNix expects a Linux host (`x86_64` or `aarch64`). All
+cluster components and tools come from Nix.
+
+KuberNix runs in **root mode** when started as root, for example via `sudo`:
+
+- `nix` has to be in the `PATH` of root, for example via
+  `sudo env "PATH=$PATH" kubernix`.
+- The kernel modules `overlay`, `br_netfilter` and `ip_conntrack` get loaded
+  and the required sysctls get set automatically. Inside a container this
+  step is skipped, so run [`contrib/prepare-system`](contrib/prepare-system)
+  on the host instead.
+
+Otherwise, it runs in **rootless mode**, which requires:
+
+- Unprivileged user namespaces (`kernel.unprivileged_userns_clone=1`). On
+  Ubuntu 23.10+, `kernel.apparmor_restrict_unprivileged_userns=0` may be
+  needed as well.
+- cgroup v2 with the `memory`, `cpu`, `pids` and `io` controllers delegated
+  to the user.
+- The setuid helpers `newuidmap` and `newgidmap` on the host (for example
+  from the `uidmap` or `shadow` package) and entries for the user in
+  `/etc/subuid` and `/etc/subgid`. Nix cannot provide setuid binaries.
+- `systemd-run` with a systemd user session, since KuberNix runs itself via
+  `systemd-run --user --scope`.
+
 ### Getting Started
 
 #### Cluster Bootstrap
 
-To bootstrap your first cluster, download one of the latest [release binaries][18] or
-build the application via:
+To bootstrap your first cluster, download the static binary for your
+architecture (`kubernix-x86_64` or `kubernix-aarch64`) from the
+[latest release][4] or build the application via:
 
-[18]: https://github.com/saschagrunert/kubernix/releases/latest
+[4]: https://github.com/saschagrunert/kubernix/releases/latest
 
 ```shell
 $ make build-release
 ```
 
-The binary should now be available in the `target/release/kubernix` directory of
-the project. Alternatively, install the application via `cargo install kubernix`.
+The binary is now available at `target/release/kubernix`. Alternatively,
+install the application via `cargo install kubernix`.
 
-After the successful binary retrieval, start KuberNix:
+Then start KuberNix:
 
 ```
 $ kubernix
 ```
 
-KuberNix will now take care that the Nix environment gets correctly setup,
-downloads the needed binaries and starts the cluster. Per default it will create
-a directory called `kubernix-run` in the current path which contains all necessary
-data for the cluster.
+KuberNix now sets up the Nix environment, downloads the needed binaries and
+starts the cluster. By default, it creates a directory called `kubernix-run` in
+the current path, which contains all data of the cluster.
 
 When running as a non-root user, KuberNix uses `rootlesskit` to provide a user
-namespace where all components run as fake root. This requires unprivileged user
-namespaces (`kernel.unprivileged_userns_clone=1`) and cgroup v2 with user
-delegation. On Ubuntu 23.10+, you may also need to set
-`kernel.apparmor_restrict_unprivileged_userns=0`. The cluster runs in its own
-network namespace, which `slirp4netns` connects to the outside world. Only the
+namespace where all components run as fake root (see the
+[requirements](#requirements)). The cluster runs in its own network
+namespace, which `slirp4netns` connects to the outside world. Only the
 API server port (6443) is published to `127.0.0.1` on the host, so NodePort
 Services and host ports are not reachable from the host, and the cluster
 cannot reach services listening on the loopback interface of the host. The
@@ -172,7 +194,7 @@ All configuration files have been written to the target directory, which is now
 the current one:
 
 ```
-> ls -1
+> ls -1p
 apiserver/
 controllermanager/
 coredns/
@@ -208,18 +230,20 @@ scheduler/kube-scheduler.log
 
 The CRI runtime and kubelet data is stored per node, where `<node>` is the
 hostname for a single node cluster and `node-0`, `node-1`, … in multinode mode.
-If a component runs inside a node container, then its log file is named after
-the container runtime, for example `crio/node-1/podman.log`.
+If a component runs inside a node container (multinode root mode), then its
+log file is named after the container runtime, for example
+`crio/node-1/podman.log`.
 
 If you want to spawn an additional shell session, simply run `kubernix shell`
 in the same directory as where the initial bootstrap happened. In rootless
 mode, the shell enters the namespaces of the running cluster via `nsenter`.
-Only one KuberNix instance can run per run directory, a second one fails to
+If no cluster is running there (or it is not ready yet), `kubernix shell`
+fails with an error. Only one KuberNix instance can run per run directory, a second one fails to
 start and points to `kubernix shell` instead.
 
 ```
 $ kubernix shell
-[INFO ] Spawning new kubernix shell in: 'kubernix-run'
+[INFO ] Spawning new kubernix shell in: '/…/kubernix-run'
 > kubectl run alpine --image=alpine -it --rm -- sh
 If you don't see a command prompt, try pressing enter.
 / #
@@ -264,13 +288,15 @@ components. For example, etcd gets started via:
 
 ```json
 {
-  "command": "/nix/store/…-etcd-3.6.15-bin/bin/etcd",
+  "command": "/nix/store/…-etcd-…/bin/etcd",
   "args": [
-    "--advertise-client-urls=https://127.0.0.1:2379",
+    "--auto-compaction-mode=periodic",
+    "--auto-compaction-retention=1h",
     "--client-cert-auth",
+    "…",
+    "--advertise-client-urls=https://127.0.0.1:2379",
+    "--cert-file=/…/kubernix-run/pki/etcd.pem",
     "--data-dir=/…/kubernix-run/etcd/run",
-    "--listen-client-urls=https://127.0.0.1:2379",
-    "--name=etcd",
     "…"
   ]
 }
@@ -293,18 +319,19 @@ set on the command line or via the environment.
 
 ### Configuration
 
-KuberNix has some configuration possibilities, which are currently:
+KuberNix can be configured via command line arguments or environment
+variables:
 
 | CLI argument              | Description                                                                         | Default        | Environment Variable         |
 | ------------------------- | ----------------------------------------------------------------------------------- | -------------- | ---------------------------- |
 | `-r, --root`              | Path where all the runtime data is stored                                           | `kubernix-run` | `KUBERNIX_ROOT`              |
-| `-l, --log-level`         | Logging verbosity                                                                   | `info`         | `KUBERNIX_LOG_LEVEL`         |
+| `-l, --log-level`         | Logging verbosity (`off`, `error`, `warn`, `info`, `debug` or `trace`)              | `info`         | `KUBERNIX_LOG_LEVEL`         |
 | `-f, --log-format`        | Log output format (`text` or `json`)                                                | `text`         | `KUBERNIX_LOG_FORMAT`        |
 | `-c, --cidr`              | CIDR used for the cluster network                                                   | `10.10.0.0/16` | `KUBERNIX_CIDR`              |
 | `-s, --shell`             | The shell executable to be used                                                     | `$SHELL`/`sh`  | `KUBERNIX_SHELL`             |
 | `-e, --no-shell`          | Do not spawn an interactive shell after bootstrap                                   | `false`        | `KUBERNIX_NO_SHELL`          |
-| `-n, --nodes`             | The number of nodes to be registered                                                | `1`            | `KUBERNIX_NODES`             |
-| `-u, --container-runtime` | The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1` | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
+| `-n, --nodes`             | The number of nodes to be registered (`1` to `64`)                                  | `1`            | `KUBERNIX_NODES`             |
+| `-u, --container-runtime` | Container runtime for the node containers, only used in multinode root mode         | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
 | `-o, --overlay`           | Nix package overlay to be used                                                      |                | `KUBERNIX_OVERLAY`           |
 | `-d, --dockerfile`        | Custom Dockerfile for multi-node container image builds                             |                | `KUBERNIX_DOCKERFILE`        |
 | `-p, --packages`          | Additional Nix dependencies to be added to the environment                          |                | `KUBERNIX_PACKAGES`          |
@@ -318,11 +345,11 @@ up over the necessary cluster components.
 
 #### OCI Runtimes
 
-Both [crun][31] and [runc][32] are registered as runtime handlers named `crun`
+Both [crun][5] and [runc][6] are registered as runtime handlers named `crun`
 and `runc` for CRI-O as well as containerd, each with its own state directory
 (`<cri>/<node>/crun` and `<cri>/<node>/runc`). The `--oci-runtime` option
 selects the handler used for pods without a runtime class, while pods can
-select the other one via a [RuntimeClass][33]:
+select the other one via a [RuntimeClass][7]:
 
 ```yaml
 apiVersion: node.k8s.io/v1
@@ -338,70 +365,83 @@ node, multinode and rootless mode. The container runtime used for the node
 containers in multinode mode (`--container-runtime`) is not affected by this
 option.
 
-[31]: https://github.com/containers/crun
-[32]: https://github.com/opencontainers/runc
-[33]: https://kubernetes.io/docs/concepts/containers/runtime-class
+[5]: https://github.com/containers/crun
+[6]: https://github.com/opencontainers/runc
+[7]: https://kubernetes.io/docs/concepts/containers/runtime-class
 
 #### Multinode Support
 
 It is possible to spawn multiple worker nodes, too. To do this, simply adjust
-the `-n, --nodes` command line argument as well as your preferred container
-runtime via `-u, --container-runtime`. The default runtime is [podman][30],
-but every other Docker drop-in replacement should work out of the box.
+the `-n, --nodes` command line argument. Every node gets its own CRI runtime
+and kubelet. In root mode, they run inside containers of a base image, which
+KuberNix builds from the Nix environment, or from a custom Dockerfile passed
+via `-d, --dockerfile`. The container runtime can be selected via
+`-u, --container-runtime`. The default runtime is [podman][8], but other Docker
+compatible runtimes should work as well.
 
-[30]: https://github.com/containers/podman
+[8]: https://github.com/containers/podman
 
 #### Overlays
 
-Overlays provide a method to extend and change Nix derivations. This means, that
-we’re able to change dependencies during the cluster bootstrapping process. For
-example, we can exchange the used CRI-O version to use a local checkout by
-writing this simple `overlay.nix`:
+Overlays provide a method to extend and change Nix derivations. This means
+that we’re able to change dependencies during the cluster bootstrapping
+process. For example, we can build CRI-O from a fork by writing this
+`overlay.nix`:
 
 ```nix
 self: super: {
-  cri-o = super.cri-o.overrideAttrs(old: {
-    src = ../path/to/go/src/github.com/cri-o/cri-o;
+  cri-o-unwrapped = super.cri-o-unwrapped.overrideAttrs (old: {
+    src = super.fetchFromGitHub {
+      owner = "my-user";
+      repo = "cri-o";
+      rev = "0123456789abcdef0123456789abcdef01234567";
+      hash = "sha256-…";
+    };
   });
 }
 ```
+
+The `cri-o` package only wraps `cri-o-unwrapped`, which contains the actual
+build. The overlay replaces the default one in the generated Nix environment,
+which is a flake evaluated in pure mode. This means that it cannot refer to
+local paths outside of it, so sources have to be fetched with a fixed hash.
 
 Now we can run KuberNix with the `--overlay, -o` command line argument:
 
 ```
 $ kubernix --overlay overlay.nix
-[INFO ] Nix environment not found, bootstrapping one
 [INFO ] Using custom overlay 'overlay.nix'
-these derivations will be built:
-  /nix/store/…-cri-o-1.37.2.drv
-  building '/nix/store/…-cri-o-1.37.2.drv'...
+these 2 derivations will be built:
+  /nix/store/…-cri-o-….drv
+  /nix/store/…-cri-o-wrapper-….drv
+building '/nix/store/…-cri-o-….drv'...
 ```
 
-Using this technique makes it easy for daily development of Kubernetes
-components, by simply changing it to local paths or trying out new versions.
+This makes it easy to try out patched or new versions of the cluster
+components.
 
 #### Additional Packages
 
 It is also possible to add additional packages to the KuberNix environment by
-specifying them via the `--packages, -p` command line parameter. This way you
-can easily utilize additional tools in a reproducible way. For example, when to
-comes to using always the same [Helm][20] version, you could simply run:
+specifying their nixpkgs attribute names via the `--packages, -p` command line
+parameter. This way you can use additional tools in a reproducible way. For
+example, to always use the same [Helm][9] version, run:
 
 ```
 $ kubernix -p kubernetes-helm
-[INFO ] Nix environment not found, bootstrapping one
-[INFO ] Bootstrapping cluster inside nix environment
+[INFO ] Bootstrapping cluster
 …
 > helm version
-version.BuildInfo{Version:"v4.3.1", ...}
+version.BuildInfo{Version:"v…", …}
 ```
 
-All available packages are listed on the [official Nix index][21].
+All available packages are listed on the [official Nix package search][10].
 
-[20]: https://helm.sh
-[21]: https://search.nixos.org/packages?channel=unstable
+[9]: https://helm.sh
+[10]: https://search.nixos.org/packages?channel=unstable
 
 ## Contributing
 
 You want to contribute to this project? Wow, thanks! So please just fork it and
-send me a pull request.
+send me a pull request. The `build` dev shell of the flake provides all tools
+needed for development, for example via `nix develop .#build`.

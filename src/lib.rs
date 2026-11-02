@@ -1,4 +1,45 @@
-//! # kubernix
+//! Kubernetes development cluster bootstrapping with Nix packages.
+//!
+//! This crate implements the `kubernix` binary, which bootstraps a local
+//! Kubernetes cluster for testing and development. All components (etcd,
+//! the Kubernetes binaries, CRI-O or containerd, crun and runc, the CNI
+//! plugins, etc.) come from a pinned Nix environment, so Nix with flakes
+//! enabled is the only real host dependency.
+//!
+//! The library mainly exists for the binary: [`Config`] holds the command
+//! line options (with the [`SubCommand`], [`LogFormat`], [`CriRuntime`] and
+//! [`OciRuntime`] option types), [`Logger`] is the log implementation and
+//! [`Kubernix`] runs the cluster based on the configuration.
+//!
+//! [`Kubernix::start`] works in these steps:
+//!
+//! 1. Write the configuration into the run root (`kubernix-run` by
+//!    default) and lock it, so that only one instance uses it. Then write
+//!    a Nix flake into it and re-execute the binary inside `nix develop`,
+//!    forwarding all options.
+//! 2. If not started as root, re-execute again inside `rootlesskit`, which
+//!    provides a user namespace where all components run as fake root
+//!    (rootless mode).
+//! 3. Prepare the system: load the required kernel modules (root mode
+//!    only) and set the network sysctls, which root mode skips inside a
+//!    container. With multiple nodes in root mode, build the node
+//!    container image. Then generate the certificates, kubeconfigs and the
+//!    encryption config, and start the components in boot phases: etcd,
+//!    the API server, the controllers together with the CRI runtimes and
+//!    kube-proxy, and finally the kubelets. Deploy the addons (CoreDNS)
+//!    afterwards.
+//! 4. Spawn an interactive shell, or wait for a termination signal with
+//!    `--no-shell`, and stop all components when it exits.
+//!
+//! With more than one node, every node gets its own CRI runtime and kubelet.
+//! In root mode, they run inside containers (podman by default), while in
+//! rootless mode they run as processes on the same host.
+//!
+//! [`Kubernix::new_shell`] spawns an additional shell for a running cluster,
+//! which enters the namespaces of the cluster via `nsenter` in rootless
+//! mode.
+//! See the [README](https://github.com/saschagrunert/kubernix) for usage
+//! details.
 #![deny(missing_docs)]
 
 mod apiserver;
@@ -110,7 +151,11 @@ pub struct Kubernix {
 }
 
 impl Kubernix {
-    /// Start kubernix by consuming the provided configuration
+    /// Start kubernix by consuming the provided configuration.
+    ///
+    /// Re-executes the binary inside the Nix environment (and inside
+    /// rootlesskit in rootless mode) if necessary, bootstraps the cluster
+    /// and blocks until the shell exits or a termination signal arrives.
     pub fn start(mut config: Config) -> Result<()> {
         Self::prepare_env(&mut config, true)?;
 

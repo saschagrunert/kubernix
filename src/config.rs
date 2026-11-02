@@ -153,7 +153,7 @@ pub struct Config {
         short = 'l',
         value_name = "LEVEL"
     )]
-    /// The logging level of the application
+    /// Logging verbosity (off, error, warn, info, debug or trace)
     log_level: LevelFilter,
 
     #[arg(
@@ -212,7 +212,7 @@ pub struct Config {
         value_name = "NODES",
         value_parser = clap::value_parser!(u8).range(1..=64),
     )]
-    /// The number of nodes to be registered
+    /// The number of nodes to be registered (1 to 64)
     nodes: u8,
 
     #[arg(
@@ -223,7 +223,7 @@ pub struct Config {
         short = 'u',
         value_name = "RUNTIME",
     )]
-    /// The container runtime to be used for the nodes, irrelevant if `nodes` equals to `1`
+    /// Container runtime for the node containers, only used in multinode root mode
     container_runtime: String,
 
     #[arg(
