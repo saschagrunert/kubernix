@@ -56,11 +56,11 @@ The following technology stack is currently being used:
 | kmod            | v31      |
 | kubectl         | v1.37.1  |
 | kubernetes      | v1.37.1  |
-| nss-cacert      | v3.126   |
+| nss-cacert      | v3.131.1 |
 | podman          | v5.8.9   |
 | rootlesskit     | v2.3.6   |
 | runc            | v1.5.2   |
-| slirp4netns     | v1.3.5   |
+| slirp4netns     | v1.3.6   |
 | socat           | v1.8.1.3 |
 | sysctl          | v4.0.7   |
 | util-linux      | v2.42.4  |
