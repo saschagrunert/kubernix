@@ -4,12 +4,9 @@
 //! execution, including conmon, crun, and storage driver configuration.
 
 use crate::{Config, system::System};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use log::LevelFilter;
-use std::{
-    fs::{self, create_dir_all},
-    path::{Path, PathBuf},
-};
+use std::path::Path;
 
 /// Podman-specific argument builder for container operations.
 pub struct Podman;
@@ -25,15 +22,6 @@ impl Podman {
 
     /// Retrieve the podman build args
     pub fn build_args(config: &Config, policy_json: &Path) -> Result<Vec<String>> {
-        // Prepare the CNI dir
-        let dir = Self::cni_dir(config);
-        create_dir_all(&dir).context("Unable to create podman CNI directory")?;
-        fs::write(
-            dir.join("87-podman-bridge.conflist"),
-            include_str!("assets/podman-bridge.json"),
-        )
-        .context("Unable to write podman bridge config")?;
-
         let mut args = Self::default_args(config)?;
         args.extend(vec![
             "build".into(),
@@ -62,17 +50,13 @@ impl Podman {
         }
         Ok(args)
     }
-
-    /// Retrieve the internal CNI directory
-    fn cni_dir(config: &Config) -> PathBuf {
-        config.root().join(Self::EXECUTABLE)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::tests::{test_config, test_config_wrong_root};
+    use crate::config::tests::test_config;
+    use std::path::PathBuf;
 
     #[test]
     fn is_configured_success() -> Result<()> {
@@ -87,14 +71,6 @@ mod tests {
         let c = test_config()?;
         let p = PathBuf::from("policy.json");
         Podman::build_args(&c, &p)?;
-        Ok(())
-    }
-
-    #[test]
-    fn build_args_failure() -> Result<()> {
-        let c = test_config_wrong_root()?;
-        let p = PathBuf::from("policy.json");
-        assert!(Podman::build_args(&c, &p).is_err());
         Ok(())
     }
 

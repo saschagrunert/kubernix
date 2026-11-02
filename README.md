@@ -182,6 +182,8 @@ etcd/
 kubeconfig/
 kubelet/
 kubernix.env
+kubernix.lock
+kubernix.pid
 kubernix.toml
 nix/
 pki/
@@ -210,7 +212,10 @@ If a component runs inside a node container, then its log file is named after
 the container runtime, for example `crio/node-1/podman.log`.
 
 If you want to spawn an additional shell session, simply run `kubernix shell`
-in the same directory as where the initial bootstrap happened.
+in the same directory as where the initial bootstrap happened. In rootless
+mode, the shell enters the namespaces of the running cluster via `nsenter`.
+Only one KuberNix instance can run per run directory, a second one fails to
+start and points to `kubernix shell` instead.
 
 ```
 $ kubernix shell
@@ -231,6 +236,12 @@ from the initial process:
 > exit
 [INFO ] Cleaning up
 ```
+
+The same happens on `SIGTERM` or `SIGHUP`, as well as on `SIGINT` (Ctrl+C)
+during the bootstrap or with `--no-shell`. KuberNix writes its PID to
+`kubernix.pid` in the run directory once the cluster is ready and removes it
+after the cleanup. With `--no-shell`, it also shuts the cluster down if one of
+its components dies.
 
 Please note that the directory where all the data is stored is not being
 removed after the exit of KuberNix. This means that you’re still able to
@@ -267,12 +278,18 @@ components. For example, etcd gets started via:
 
 The generated Nix environment in the `nix` directory is an exception: it gets
 regenerated if it differs from the one of the running KuberNix version, for
-example after an upgrade or when the content of the overlay changed. The
-multinode base image is tagged with a hash of its inputs
-(`kubernix:base-<hash>`), so it gets rebuilt as well. Old images can be removed
-via `podman rmi`. All other component configurations and the `kubernix.toml`
-are reused as they are, so remove the run root to pick up new defaults, like
-the `runc` runtime handler.
+example after an upgrade or when the content of the overlay changed. The same
+applies to the CRI runtime configurations and the `Dockerfile`, since they
+reference the Nix store paths. The multinode base image is tagged with a hash of
+its inputs (`kubernix:base-<hash>`), so it gets rebuilt as well, and the images
+of previous builds get removed afterwards.
+
+The `kubernix.toml` keeps the settings of the existing cluster. Options which
+shape the cluster (`--nodes`, `--cidr`, `--cri-runtime`, `--oci-runtime`,
+`--container-runtime` and the rootless mode) cannot be changed for an existing
+run directory, so remove it to apply different values. Other options like
+`--log-level`, `--shell` or `--packages` override the stored values if they are
+set on the command line or via the environment.
 
 ### Configuration
 

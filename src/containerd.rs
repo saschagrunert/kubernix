@@ -9,11 +9,12 @@ use crate::{
     Config,
     component::{ClusterContext, Component, Phase},
     config::OciRuntime,
-    container::Container,
+    container::{Container, NodeContainer},
     cri::{self, CriSocket, RuntimePaths},
     network::Network,
     node::Node,
     process::{Process, ProcessState, Stoppable},
+    write_if_changed,
 };
 use anyhow::{Context, Result};
 use std::{
@@ -55,6 +56,7 @@ impl Component for ContainerdComponent {
 pub struct Containerd {
     process: Process,
     socket: CriSocket,
+    container: Option<NodeContainer>,
     node_name: String,
 }
 
@@ -72,41 +74,39 @@ impl Containerd {
         let cni_conf_dir = dir.join("cni");
         let socket = Self::socket(config, network, node)?;
 
-        if !dir.exists() {
-            create_dir_all(&dir).context("Unable to create containerd directory")?;
-            create_dir_all(&cni_conf_dir).context("Unable to create containerd CNI directory")?;
+        // Always render the configuration, since it references the current
+        // Nix store paths.
+        create_dir_all(&cni_conf_dir).context("Unable to create containerd CNI directory")?;
 
-            // In rootless mode, kubelet sends oomScoreAdj via CRI, containerd
-            // passes it to the OCI spec, and both crun and runc fail writing
-            // /proc/self/oom_score_adj in a user namespace. Wrap each runtime
-            // to patch config.json before exec (strip oomScoreAdj, fix
-            // namespace config).
-            if config.is_rootless() {
-                for (runtime, path) in &paths.runtimes {
-                    let wrapper = Self::rootless_wrapper(&dir, *runtime);
-                    let script =
-                        include_str!("assets/oci-rootless.sh").replace("__RUNTIME_PATH__", path);
-                    fs::write(&wrapper, script)
-                        .with_context(|| format!("Unable to write {} rootless wrapper", runtime))?;
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::PermissionsExt;
-                        fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755))
-                            .with_context(|| {
-                                format!("Unable to set {} rootless wrapper permissions", runtime)
-                            })?;
-                    }
+        // In rootless mode, kubelet sends oomScoreAdj via CRI, containerd
+        // passes it to the OCI spec, and both crun and runc fail writing
+        // /proc/self/oom_score_adj in a user namespace. Wrap each runtime
+        // to patch config.json before exec (strip oomScoreAdj, fix
+        // namespace config).
+        if config.is_rootless() {
+            for (runtime, path) in &paths.runtimes {
+                let wrapper = Self::rootless_wrapper(&dir, *runtime);
+                let script =
+                    include_str!("assets/oci-rootless.sh").replace("__RUNTIME_PATH__", path);
+                write_if_changed(&wrapper, &script)
+                    .with_context(|| format!("Unable to write {} rootless wrapper", runtime))?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).with_context(
+                        || format!("Unable to set {} rootless wrapper permissions", runtime),
+                    )?;
                 }
             }
-
-            fs::write(
-                &config_file,
-                Self::render_config(config, &dir, &socket, &cni_conf_dir, &paths),
-            )
-            .context("Unable to write containerd config")?;
-
-            cri::write_cni_config(&cni_conf_dir, &node_name, node, network)?;
         }
+
+        write_if_changed(
+            &config_file,
+            &Self::render_config(config, &dir, &socket, &cni_conf_dir, &paths),
+        )
+        .context("Unable to write containerd config")?;
+
+        cri::write_cni_config(&cni_conf_dir, &node_name, node, network)?;
 
         // containerd-shim-runc-v2 hardcodes its socket path to /run/containerd/s/.
         // rootlesskit's --copy-up=/run creates an overlay that preserves
@@ -144,11 +144,13 @@ impl Containerd {
         } else {
             Process::start(&dir, "Containerd", CONTAINERD, args)?
         };
+        let container = Container::node(config, &node_name);
         process.wait_ready("containerd successfully booted")?;
 
         Ok(Box::new(Self {
             process,
             socket,
+            container,
             node_name,
         }))
     }
@@ -227,16 +229,24 @@ impl Containerd {
 
 impl Stoppable for Containerd {
     fn stop(&mut self) -> Result<()> {
-        cri::remove_all_containers("containerd", &self.socket, &self.node_name).with_context(
-            || {
+        // Always stop the process, even if the workloads cannot be removed,
+        // for example because containerd crashed.
+        let removed = cri::remove_all_containers("containerd", &self.socket, &self.node_name)
+            .with_context(|| {
                 format!(
                     "Unable to remove containerd containers on {}",
                     self.node_name,
                 )
-            },
-        )?;
+            });
+        let stopped = self.process.stop();
+        if let Some(container) = &mut self.container {
+            container.remove();
+        }
+        removed.and(stopped)
+    }
 
-        self.process.stop()
+    fn died(&mut self) -> bool {
+        self.process.died()
     }
 }
 

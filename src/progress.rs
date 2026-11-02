@@ -5,6 +5,7 @@
 //! weak reference through [`Progress::get`] to update or print alongside
 //! the bar without taking ownership.
 
+use crate::config::LogFormat;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use log::LevelFilter;
@@ -26,9 +27,10 @@ fn progress_bar() -> &'static Mutex<Option<Weak<ProgressBar>>> {
 
 impl Progress {
     /// Create a new global progress bar with the given number of steps.
-    /// Returns a no-op instance when the log level is below `Info`.
-    pub fn new(items: u64, level: LevelFilter) -> Progress {
-        if level < LevelFilter::Info {
+    /// Returns a no-op instance when the log level is below `Info` or the
+    /// log format is JSON, which would interleave with the bar.
+    pub fn new(items: u64, level: LevelFilter, format: LogFormat) -> Progress {
+        if level < LevelFilter::Info || format == LogFormat::Json {
             return Progress { inner: None };
         }
 
@@ -69,11 +71,30 @@ impl Progress {
     }
 
     /// Finish and remove the global progress bar.
-    pub fn reset(self) {
-        if let Some(p) = self.inner {
-            p.finish()
+    pub fn reset(mut self) {
+        if let Some(p) = self.inner.take() {
+            p.finish();
+            Self::unregister(&p);
         }
-        *progress_bar().lock().expect("progress bar mutex poisoned") = None;
+    }
+
+    /// Remove the bar from the global state if it is the active one.
+    fn unregister(p: &Arc<ProgressBar>) {
+        let mut global = progress_bar().lock().expect("progress bar mutex poisoned");
+        if global.as_ref().is_none_or(|w| w.ptr_eq(&Arc::downgrade(p))) {
+            *global = None;
+        }
+    }
+}
+
+impl Drop for Progress {
+    /// Clear an unfinished bar, for example on an early error, so that it
+    /// does not stay on screen above the error output.
+    fn drop(&mut self) {
+        if let Some(p) = self.inner.take() {
+            p.finish_and_clear();
+            Self::unregister(&p);
+        }
     }
 }
 
@@ -83,9 +104,21 @@ mod tests {
 
     #[test]
     fn progress_success() {
-        let p = Progress::new(10, LevelFilter::Info);
+        let p = Progress::new(10, LevelFilter::Info, LogFormat::Text);
         assert!(Progress::get().is_some());
         p.reset();
         assert!(Progress::get().is_none());
+
+        // Dropping an unfinished bar unregisters it as well
+        let p = Progress::new(10, LevelFilter::Info, LogFormat::Text);
+        assert!(Progress::get().is_some());
+        drop(p);
+        assert!(Progress::get().is_none());
+    }
+
+    #[test]
+    fn progress_disabled_for_json() {
+        let p = Progress::new(10, LevelFilter::Info, LogFormat::Json);
+        assert!(p.inner.is_none());
     }
 }

@@ -25,6 +25,7 @@ mod process;
 mod progress;
 mod proxy;
 mod scheduler;
+mod signals;
 mod system;
 
 pub use config::{Config, CriRuntime, LogFormat, OciRuntime, SubCommand};
@@ -61,24 +62,31 @@ use system::System;
 
 const ROOTLESS_ENV: &str = "KUBERNIX_ROOTLESS";
 
+/// The lock file in the root, held by the instance running the cluster.
+const LOCK_FILE: &str = "kubernix.lock";
+
+/// The PID file in the root, written once the cluster is up.
+const PID_FILE: &str = "kubernix.pid";
+
 /// The port the API server listens on.
 pub(crate) const API_SERVER_PORT: u16 = 6443;
 
 use ::nix::{
+    errno::Errno,
+    fcntl::{Flock, FlockArg},
     mount::{MntFlags, umount2},
-    unistd::getuid,
+    sys::signal::{Signal, kill},
+    unistd::{Pid, getuid},
 };
 use anyhow::{Context, Result, bail};
-use log::{debug, error, info, set_boxed_logger};
-use signal_hook::{
-    consts::signal::{SIGHUP, SIGINT, SIGTERM},
-    flag,
-};
+use log::{debug, error, info, set_boxed_logger, warn};
 use std::{
-    fs,
-    io::{BufRead, BufReader},
+    ffi::OsString,
+    fs::{self, File, OpenOptions},
+    io::{BufRead, BufReader, ErrorKind},
+    os::unix::{ffi::OsStringExt, process::CommandExt},
     path::{Path, PathBuf},
-    process::{Command, id},
+    process::{Child, Command, id},
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -94,14 +102,22 @@ pub struct Kubernix {
     config: Config,
     network: Network,
     kubectl: Kubectl,
-    processes: Stoppables,
-    system: System,
+    processes: Vec<Stoppables>,
+    // Dropped after the cleanup: restores the system state and releases
+    // the run directory.
+    _system: System,
+    _lock: Flock<File>,
 }
 
 impl Kubernix {
     /// Start kubernix by consuming the provided configuration
     pub fn start(mut config: Config) -> Result<()> {
-        Self::prepare_env(&mut config)?;
+        Self::prepare_env(&mut config, true)?;
+
+        // Fail early if another instance runs on the same root. Exec'ing
+        // into the next stage closes the lock file, so that stage takes the
+        // lock again.
+        let lock = Self::lock(&config)?;
 
         // Bootstrap if we're not inside a nix shell
         if Nix::is_active() {
@@ -110,7 +126,7 @@ impl Kubernix {
                 Network::warn_overlapping_route(config::SLIRP4NETNS_CIDR, "slirp4netns network")?;
                 return Self::reexec_rootless();
             }
-            Self::bootstrap_cluster(config)
+            Self::bootstrap_cluster(config, lock)
         } else {
             Nix::bootstrap(config)
         }
@@ -118,14 +134,8 @@ impl Kubernix {
 
     /// Spawn a new shell into the provided configuration environment.
     pub fn new_shell(mut config: Config) -> Result<()> {
-        Self::prepare_env(&mut config)?;
-
-        if config.is_rootless() && std::env::var(ROOTLESS_ENV).as_deref() != Ok("1") {
-            bail!(
-                "The cluster was started in rootless mode. \
-                 Run 'kubernix shell' from within the rootlesskit session."
-            )
-        }
+        Self::prepare_env(&mut config, false)?;
+        let pid = Self::running_pid(&config)?;
 
         info!(
             "Spawning new kubernix shell in: '{}'",
@@ -141,18 +151,38 @@ impl Kubernix {
         }
 
         let shell_cmd = format!(
-            ". '{}' && exec '{}'",
-            env_file.display(),
-            config.shell_ok()?
+            ". {} && exec {}",
+            Self::shell_escape(&env_file.display().to_string()),
+            Self::shell_escape(&config.shell_ok()?),
         );
-        Nix::run(&config, &["bash", "-c", &shell_cmd])?;
 
-        info!("Bye, leaving the Kubernix environment");
-        Ok(())
+        if config.is_rootless() && std::env::var(ROOTLESS_ENV).as_deref() != Ok("1") {
+            // Enter the namespaces of the rootlesskit session running the
+            // cluster.
+            let pid = pid.to_string();
+            Nix::exec(
+                &config,
+                &[
+                    "nsenter",
+                    "-t",
+                    &pid,
+                    "-U",
+                    "-m",
+                    "-n",
+                    "--preserve-credentials",
+                    "bash",
+                    "-c",
+                    &shell_cmd,
+                ],
+            )
+        } else {
+            Nix::exec(&config, &["bash", "-c", &shell_cmd])
+        }
     }
 
-    /// Prepare the environment based on the provided config
-    fn prepare_env(config: &mut Config) -> Result<()> {
+    /// Prepare the environment based on the provided config. A new run
+    /// directory gets only created if `bootstrap` is set.
+    fn prepare_env(config: &mut Config, bootstrap: bool) -> Result<()> {
         let env_rootless = std::env::var(ROOTLESS_ENV).as_deref() == Ok("1");
         let rootless = if !getuid().is_root() {
             true
@@ -165,19 +195,22 @@ impl Kubernix {
             false
         };
 
-        // Set rootless before config loading so try_load_file
-        // preserves it across the struct replacement.
+        // Set rootless before config loading so that it can be compared
+        // with the mode of the existing run directory.
         config.set_rootless(rootless);
 
         // Prepare the configuration
-        if config.root().exists() {
+        if config.root().exists() && (bootstrap || config.file_exists()) {
+            config.canonicalize_root()?;
             config.try_load_file()?;
             config.validate()?;
-        } else {
+        } else if bootstrap {
             config.validate()?;
+            config.canonicalize_root()?;
             config.to_file()?;
+        } else {
+            bail!("No kubernix cluster found in '{}'", config.root().display())
         }
-        config.canonicalize_root()?;
 
         // Setup the logger
         set_boxed_logger(Logger::new(config.log_level(), config.log_format()))
@@ -190,10 +223,117 @@ impl Kubernix {
         Ok(())
     }
 
+    /// Take the exclusive lock of the run directory, which fails if
+    /// another instance uses it.
+    fn lock(config: &Config) -> Result<Flock<File>> {
+        let path = config.root().join(LOCK_FILE);
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)
+            .with_context(|| format!("Unable to open lock file '{}'", path.display()))?;
+        match Flock::lock(file, FlockArg::LockExclusiveNonblock) {
+            Ok(lock) => Ok(lock),
+            Err((_, Errno::EWOULDBLOCK)) => {
+                let pid = fs::read_to_string(Self::pid_file(config))
+                    .map(|pid| format!(" (PID {})", pid.trim()))
+                    .unwrap_or_default();
+                bail!(
+                    "Another kubernix instance{} is already running in '{}', \
+                     use 'kubernix shell' to access it or a different root",
+                    pid,
+                    config.root().display(),
+                )
+            }
+            Err((_, e)) => Err(e).with_context(|| format!("Unable to lock '{}'", path.display())),
+        }
+    }
+
+    /// Retrieve the PID of the instance running the cluster, which fails
+    /// if no cluster is running or it is not ready yet.
+    fn running_pid(config: &Config) -> Result<i32> {
+        let root = config.root().display();
+        let running = File::open(config.root().join(LOCK_FILE)).is_ok_and(|file| {
+            matches!(
+                Flock::lock(file, FlockArg::LockSharedNonblock),
+                Err((_, Errno::EWOULDBLOCK))
+            )
+        });
+        if !running {
+            bail!("No running kubernix cluster found in '{}'", root)
+        }
+
+        let pid_file = Self::pid_file(config);
+        let pid: i32 = match fs::read_to_string(&pid_file) {
+            Ok(pid) => pid
+                .trim()
+                .parse()
+                .with_context(|| format!("Invalid PID file '{}'", pid_file.display()))?,
+            Err(e) if e.kind() == ErrorKind::NotFound => {
+                bail!("The kubernix cluster in '{}' is not ready yet", root)
+            }
+            Err(e) => {
+                return Err(e).with_context(|| format!("Unable to read '{}'", pid_file.display()));
+            }
+        };
+        match kill(Pid::from_raw(pid), None) {
+            Ok(()) | Err(Errno::EPERM) => Ok(pid),
+            Err(_) => bail!(
+                "The kubernix instance (PID {}) in '{}' is not running",
+                pid,
+                root
+            ),
+        }
+    }
+
     /// POSIX single-quote escaping: wraps in single quotes and escapes
     /// any embedded single quotes with the '\'' sequence.
     fn shell_escape(s: &str) -> String {
         format!("'{}'", s.replace('\'', "'\\''"))
+    }
+
+    /// Remove the shell quoting of a single word, the inverse of
+    /// `shell_escape`. Also supports double quotes and backslash escapes.
+    fn shell_unquote(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut chars = s.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '\'' => out.extend(chars.by_ref().take_while(|&c| c != '\'')),
+                '"' => {
+                    while let Some(c) = chars.next() {
+                        match c {
+                            '"' => break,
+                            '\\' => out.extend(chars.next()),
+                            c => out.push(c),
+                        }
+                    }
+                }
+                '\\' => out.extend(chars.next()),
+                c => out.push(c),
+            }
+        }
+        out
+    }
+
+    /// Shell snippet which moves all processes of the cgroup into a child
+    /// cgroup and enables the controllers for the children, since cgroup
+    /// v2's "no internal processes" rule forbids it otherwise.
+    fn cgroup_evacuate(cgroup: &str, child: &str) -> String {
+        format!(
+            concat!(
+                "mkdir -p \"{cg}/{child}\"; ",
+                "for p in $(cat \"{cg}/cgroup.procs\"); do ",
+                "echo $p >\"{cg}/{child}/cgroup.procs\" 2>/dev/null; done; ",
+                "for c in memory cpu pids io; do ",
+                "echo \"+$c\" >\"{cg}/cgroup.subtree_control\" 2>/dev/null; done; ",
+                "grep -q memory \"{cg}/cgroup.subtree_control\" 2>/dev/null ",
+                "|| echo 'WARNING: cgroup memory controller not delegated, pods may fail' >&2; ",
+            ),
+            cg = cgroup,
+            child = child,
+        )
     }
 
     /// Re-exec kubernix inside rootlesskit for rootless operation.
@@ -214,38 +354,24 @@ impl Kubernix {
         // Inside rootlesskit's cgroup namespace, evacuate processes from the
         // namespace root into a child and enable controllers, then exec.
         let rootlesskit_cmd = format!(
-            concat!(
-                "mount -t cgroup2 none /sys/fs/cgroup 2>/dev/null; ",
-                "mkdir -p /sys/fs/cgroup/kubernix; ",
-                "for p in $(cat /sys/fs/cgroup/cgroup.procs); do ",
-                "echo $p >/sys/fs/cgroup/kubernix/cgroup.procs 2>/dev/null; done; ",
-                "for c in memory cpu pids io; do ",
-                "echo \"+$c\" >/sys/fs/cgroup/cgroup.subtree_control 2>/dev/null; done; ",
-                "grep -q memory /sys/fs/cgroup/cgroup.subtree_control 2>/dev/null ",
-                "|| echo 'WARNING: cgroup memory controller not delegated, pods may fail' >&2; ",
-                "exec {} {}",
-            ),
-            kubernix_exe, kubernix_args,
+            "mount -t cgroup2 none /sys/fs/cgroup 2>/dev/null; {}exec {} {}",
+            Self::cgroup_evacuate("/sys/fs/cgroup", "kubernix"),
+            kubernix_exe,
+            kubernix_args,
         );
 
-        // Evacuate all processes from the scope's root cgroup into a child
-        // so we can enable controllers in subtree_control (cgroup v2's
-        // "no internal processes" rule forbids it otherwise). This must
-        // happen outside rootlesskit's cgroup namespace.
+        // Evacuate all processes from the scope's root cgroup into a child.
+        // This must happen outside rootlesskit's cgroup namespace.
         //
         // The user namespace needs to own its network namespace to set up
         // the pod network, so slirp4netns provides the connectivity and
         // only the API server port gets published to the host.
+        //
+        // rootlesskit forwards all signals to its child.
         let outer_cmd = format!(
             concat!(
                 "CGRP=/sys/fs/cgroup$(cat /proc/self/cgroup | cut -d: -f3); ",
-                "mkdir -p \"$CGRP/init\"; ",
-                "for p in $(cat \"$CGRP/cgroup.procs\"); do ",
-                "echo $p >\"$CGRP/init/cgroup.procs\" 2>/dev/null; done; ",
-                "for c in memory cpu pids io; do ",
-                "echo \"+$c\" >\"$CGRP/cgroup.subtree_control\" 2>/dev/null; done; ",
-                "grep -q memory \"$CGRP/cgroup.subtree_control\" 2>/dev/null ",
-                "|| echo 'WARNING: cgroup memory controller not delegated, pods may fail' >&2; ",
+                "{evacuate}",
                 "exec rootlesskit --net=slirp4netns --mtu=65520 --cidr={cidr} ",
                 "--disable-host-loopback --cgroupns ",
                 "--port-driver=builtin --publish=127.0.0.1:{port}:{port}/tcp ",
@@ -253,6 +379,7 @@ impl Kubernix {
                 "--copy-up=/var/lib --copy-up=/var/log --copy-up=/var/run ",
                 "bash -c {cmd}",
             ),
+            evacuate = Self::cgroup_evacuate("$CGRP", "init"),
             cidr = config::SLIRP4NETNS_CIDR,
             port = API_SERVER_PORT,
             cmd = Self::shell_escape(&rootlesskit_cmd),
@@ -271,23 +398,30 @@ impl Kubernix {
         ]);
         cmd.env(ROOTLESS_ENV, "1");
 
-        let status = cmd.status().context(
+        // Replace the process, so that signals reach the session directly.
+        // No Kubernix struct or other Drop-bearing resources exist yet,
+        // only the logger from prepare_env and the lock, which gets
+        // released.
+        Err(cmd.exec()).context(
             "Failed to start rootless session. \
              Rootless mode requires systemd-run (with an active user session) \
              and rootlesskit to be installed",
-        )?;
-
-        // No Kubernix struct or other Drop-bearing resources exist yet,
-        // only the logger from prepare_env.
-        std::process::exit(status.code().unwrap_or(1));
+        )
     }
 
-    /// Stop kubernix by cleaning up all running processes
+    /// Stop kubernix by cleaning up all running processes. The processes
+    /// of a phase get stopped in parallel.
     fn stop(&mut self) {
-        for x in &mut self.processes {
-            if let Err(e) = x.stop() {
-                debug!("{}", e)
-            }
+        for group in &mut self.processes {
+            thread::scope(|s| {
+                for process in group.iter_mut() {
+                    s.spawn(move || {
+                        if let Err(e) = process.stop() {
+                            warn!("{:#}", e)
+                        }
+                    });
+                }
+            });
         }
     }
 
@@ -297,7 +431,17 @@ impl Kubernix {
     }
 
     /// Bootstrap the whole cluster, which assumes to be inside a nix shell
-    fn bootstrap_cluster(config: Config) -> Result<()> {
+    fn bootstrap_cluster(config: Config, lock: Flock<File>) -> Result<()> {
+        // Abort into the regular cleanup on termination signals, the
+        // components do not receive terminal signals.
+        signals::register()?;
+
+        // Remove leftovers of a previous unclean exit
+        Self::remove_pid_file(&config);
+        if !config.is_rootless() {
+            Self::umount_below(config.root(), Duration::ZERO);
+        }
+
         // Setup the progress bar
         const BASE_STEPS: u64 = 15;
         let steps = if config.multi_node() && !config.is_rootless() {
@@ -305,23 +449,27 @@ impl Kubernix {
         } else {
             BASE_STEPS
         } + Self::processes(&config);
-        let p = Progress::new(steps, config.log_level());
+        let p = Progress::new(steps, config.log_level(), config.log_format());
         info!("Bootstrapping cluster");
 
         // Ensure that the system is prepared
         let system = System::setup(&config).context("Unable to setup system")?;
+        signals::check()?;
         Container::build(&config)?;
+        signals::check()?;
 
         // Setup the network
         let network = Network::new(&config)?;
 
         // Setup the public key infrastructure
         let pki = Pki::new(&config, &network)?;
+        signals::check()?;
 
         // Setup the configs
         let kubeconfig = KubeConfig::new(&config, &pki)?;
         let kubectl = Kubectl::new(kubeconfig.admin());
         let encryptionconfig = EncryptionConfig::new(&config)?;
+        signals::check()?;
 
         let ctx = ClusterContext {
             config: &config,
@@ -332,7 +480,7 @@ impl Kubernix {
             kubectl: &kubectl,
         };
 
-        let (processes, all_ok) = Self::register_components(&config).run(&ctx);
+        let (processes, failures) = Self::register_components(&config).run(&ctx);
 
         let spawn_shell = !config.no_shell();
         let addon_shutdown = Arc::new(AtomicBool::new(false));
@@ -343,31 +491,33 @@ impl Kubernix {
             network,
             kubectl,
             processes,
-            system,
+            _system: system,
+            _lock: lock,
         };
 
-        if all_ok {
-            if let Err(e) = kubernix.write_env_file() {
-                p.reset();
-                error!("Unable to write environment file: {}", e);
-                return Err(e);
-            }
-
-            kubernix.spawn_addons(addon_shutdown);
-            info!("Everything is up and running");
-            p.reset();
-
-            if spawn_shell {
-                kubernix.spawn_shell()?;
-            } else {
-                kubernix.wait()?;
-            }
-        } else {
-            p.reset();
-            bail!("Unable to start all processes")
+        // Clear the progress bar before the cleanup on errors
+        if !failures.is_empty() {
+            drop(p);
+            bail!("Unable to start all processes: {}", failures.join("; "))
+        }
+        if let Err(e) = kubernix.write_env_file() {
+            drop(p);
+            return Err(e);
         }
 
-        Ok(())
+        kubernix.spawn_addons(addon_shutdown);
+        if let Err(e) = kubernix.write_pid_file().and_then(|()| signals::check()) {
+            drop(p);
+            return Err(e);
+        }
+        info!("Everything is up and running");
+        p.reset();
+
+        if spawn_shell {
+            kubernix.spawn_shell()
+        } else {
+            kubernix.wait()
+        }
     }
 
     fn register_components(config: &Config) -> ComponentRegistry {
@@ -409,25 +559,18 @@ impl Kubernix {
         }));
     }
 
-    /// Wait until a termination signal occurs
-    fn wait(&self) -> Result<()> {
-        // Setup the signal handlers
-        let term = Arc::new(AtomicBool::new(false));
-        flag::register(SIGTERM, Arc::clone(&term))?;
-        flag::register(SIGINT, Arc::clone(&term))?;
-        flag::register(SIGHUP, Arc::clone(&term))?;
+    /// Wait until a termination signal occurs or a component dies
+    fn wait(&mut self) -> Result<()> {
         info!("Waiting for interrupt…");
-
-        // Write the pid file
-        let pid_file = self.config.root().join("kubernix.pid");
-        debug!("Writing pid file to: {}", pid_file.display());
-        fs::write(pid_file, id().to_string())?;
-
-        // Wait for the signals
-        while !term.load(Ordering::Relaxed) {
+        loop {
+            if signals::requested() {
+                return Ok(());
+            }
+            if self.processes.iter_mut().flatten().any(|p| p.died()) {
+                bail!("A cluster component died unexpectedly, shutting down")
+            }
             sleep(Duration::from_millis(100));
         }
-        Ok(())
     }
 
     /// Spawn a new interactive default system shell
@@ -438,25 +581,50 @@ impl Kubernix {
         let mut cmd = Command::new(self.config.shell_ok()?);
         cmd.current_dir(self.config.root());
         Self::apply_env_file(&Self::env_file(&self.config), &mut cmd)?;
-        cmd.status()?;
-        Ok(())
+        let mut child = cmd.spawn().context("Unable to spawn shell")?;
+
+        loop {
+            if child.try_wait()?.is_some() {
+                return Ok(());
+            }
+            // An interrupt from the terminal is meant for the shell, but
+            // SIGTERM and SIGHUP stop the cluster.
+            signals::clear_interrupt();
+            if signals::terminated() {
+                info!("Received termination signal, stopping the shell");
+                Self::kill_shell(&mut child);
+                return Ok(());
+            }
+            sleep(Duration::from_millis(100));
+        }
+    }
+
+    /// Stop the interactive shell, which may ignore SIGTERM but not SIGHUP.
+    fn kill_shell(child: &mut Child) {
+        if let Ok(pid) = i32::try_from(child.id()) {
+            let _ = kill(Pid::from_raw(pid), Signal::SIGHUP);
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if !matches!(child.try_wait(), Ok(None)) {
+                return;
+            }
+            sleep(Duration::from_millis(100));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
     }
 
     /// Parse the env file and apply its variables to a Command.
-    /// Handles `export KEY=VALUE` and `KEY=VALUE` formats, stripping
-    /// surrounding single or double quotes from values.
+    /// Handles `export KEY=VALUE` and `KEY=VALUE` formats, removing the
+    /// shell quoting of the values.
     fn apply_env_file(env_file: &Path, cmd: &mut Command) -> Result<()> {
         let content = fs::read_to_string(env_file)
             .with_context(|| format!("Unable to read env file '{}'", env_file.display()))?;
         for line in content.lines() {
             let line = line.strip_prefix("export ").unwrap_or(line);
             if let Some((key, value)) = line.split_once('=') {
-                let value = value
-                    .strip_prefix('"')
-                    .and_then(|v| v.strip_suffix('"'))
-                    .or_else(|| value.strip_prefix('\'').and_then(|v| v.strip_suffix('\'')))
-                    .unwrap_or(value);
-                cmd.env(key, value);
+                cmd.env(key, Self::shell_unquote(value));
             }
         }
         Ok(())
@@ -467,21 +635,54 @@ impl Kubernix {
         info!("Writing environment file");
         fs::write(
             Self::env_file(&self.config),
-            format!(
-                "export {}={}\nexport {}={}",
-                RUNTIME_ENV,
-                cri::cri_socket(&self.config, &self.network, 0)?.to_socket_string(),
-                "KUBECONFIG",
-                self.kubectl.kubeconfig().display(),
-            ),
+            Self::env_file_content(&[
+                (
+                    RUNTIME_ENV,
+                    cri::cri_socket(&self.config, &self.network, 0)?.to_socket_string(),
+                ),
+                (
+                    "KUBECONFIG",
+                    self.kubectl.kubeconfig().display().to_string(),
+                ),
+            ]),
         )
         .context("Unable to write environment file")?;
         Ok(())
     }
 
+    /// The env file content for the provided variables, with shell quoted
+    /// values.
+    fn env_file_content(vars: &[(&str, String)]) -> String {
+        vars.iter()
+            .map(|(key, value)| format!("export {}={}\n", key, Self::shell_escape(value)))
+            .collect()
+    }
+
     /// Retrieve the path to the env file
     fn env_file(config: &Config) -> PathBuf {
         config.root().join("kubernix.env")
+    }
+
+    /// Retrieve the path to the PID file
+    fn pid_file(config: &Config) -> PathBuf {
+        config.root().join(PID_FILE)
+    }
+
+    /// Write the PID file, which indicates that the cluster is ready
+    fn write_pid_file(&self) -> Result<()> {
+        let pid_file = Self::pid_file(&self.config);
+        debug!("Writing pid file to: {}", pid_file.display());
+        fs::write(pid_file, id().to_string()).context("Unable to write pid file")
+    }
+
+    /// Remove the PID file if it exists
+    fn remove_pid_file(config: &Config) {
+        let pid_file = Self::pid_file(config);
+        if let Err(e) = fs::remove_file(&pid_file)
+            && e.kind() != ErrorKind::NotFound
+        {
+            warn!("Unable to remove '{}': {}", pid_file.display(), e);
+        }
     }
 
     /// Remove all stale mounts
@@ -491,27 +692,7 @@ impl Kubernix {
             return;
         }
         debug!("Removing active mounts");
-        let now = Instant::now();
-        while now.elapsed().as_secs() < 15 {
-            match Self::read_mount_points(self.config.root()) {
-                Err(e) => {
-                    debug!("Unable to retrieve mounts: {}", e);
-                    sleep(Duration::from_secs(1));
-                }
-                Ok(mount_points) => {
-                    if mount_points.is_empty() {
-                        break;
-                    }
-                    for dest in &mount_points {
-                        debug!("Removing mount: {}", dest.display());
-                        if let Err(e) = umount2(dest, MntFlags::MNT_FORCE) {
-                            debug!("Unable to umount '{}': {}", dest.display(), e);
-                        }
-                    }
-                    sleep(Duration::from_millis(500));
-                }
-            };
-        }
+        Self::umount_below(self.config.root(), Duration::from_secs(15));
     }
 
     /// Remove CRI storage directories while still inside the user namespace.
@@ -529,16 +710,51 @@ impl Kubernix {
             if !dir.exists() {
                 continue;
             }
-            if let Ok(mounts) = Self::read_mount_points(&dir) {
-                for mp in &mounts {
-                    if let Err(e) = umount2(mp.as_path(), MntFlags::MNT_DETACH) {
-                        debug!("Unable to umount '{}': {}", mp.display(), e);
-                    }
-                }
-            }
+            Self::umount_below(&dir, Duration::ZERO);
             if let Err(e) = fs::remove_dir_all(&dir) {
                 debug!("Unable to remove '{}': {}", dir.display(), e);
             }
+        }
+    }
+
+    /// Unmount everything below the root, deepest first. Busy mounts get
+    /// retried until the timeout passed and are lazily detached afterwards.
+    fn umount_below(root: &Path, timeout: Duration) {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let mount_points = match Self::read_mount_points(root) {
+                Ok(mount_points) => mount_points,
+                Err(e) => {
+                    warn!("Unable to retrieve mounts: {:#}", e);
+                    return;
+                }
+            };
+            if mount_points.is_empty() {
+                return;
+            }
+            if Instant::now() >= deadline {
+                break;
+            }
+            for dest in &mount_points {
+                debug!("Removing mount: {}", dest.display());
+                if let Err(e) = umount2(dest, MntFlags::empty()) {
+                    debug!("Unable to umount '{}': {}", dest.display(), e);
+                }
+            }
+            sleep(Duration::from_millis(500));
+        }
+
+        for dest in Self::read_mount_points(root).unwrap_or_default() {
+            debug!("Detaching mount: {}", dest.display());
+            if let Err(e) = umount2(&dest, MntFlags::MNT_DETACH) {
+                debug!("Unable to detach '{}': {}", dest.display(), e);
+            }
+        }
+        for dest in Self::read_mount_points(root).unwrap_or_default() {
+            warn!(
+                "Unable to remove mount '{}', may need manual cleanup",
+                dest.display()
+            );
         }
     }
 
@@ -550,17 +766,52 @@ impl Kubernix {
         let mut points: Vec<PathBuf> = reader
             .lines()
             .map_while(Result::ok)
-            .filter_map(|line| line.split_whitespace().nth(1).map(PathBuf::from))
+            .filter_map(|line| {
+                line.split_whitespace()
+                    .nth(1)
+                    .map(Self::unescape_mount_path)
+            })
             .filter(|p| p.starts_with(root) && p != root)
             .collect();
         points.sort_by_key(|p| std::cmp::Reverse(p.components().count()));
         Ok(points)
     }
+
+    /// Decode the octal escapes of /proc/mounts paths, for example `\040`
+    /// for a space.
+    fn unescape_mount_path(path: &str) -> PathBuf {
+        let bytes = path.as_bytes();
+        let mut out = Vec::with_capacity(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            let escape = bytes.get(i + 1..i + 4).filter(|digits| {
+                bytes[i] == b'\\' && digits.iter().all(|d| (b'0'..=b'7').contains(d))
+            });
+            match escape {
+                Some(digits) => {
+                    let value = digits
+                        .iter()
+                        .fold(0u32, |acc, d| acc * 8 + u32::from(d - b'0'));
+                    out.push(u8::try_from(value).unwrap_or(b'?'));
+                    i += 4;
+                }
+                None => {
+                    out.push(bytes[i]);
+                    i += 1;
+                }
+            }
+        }
+        PathBuf::from(OsString::from_vec(out))
+    }
 }
 
 impl Drop for Kubernix {
     fn drop(&mut self) {
-        let p = Progress::new(Self::processes(&self.config), self.config.log_level());
+        let p = Progress::new(
+            Self::processes(&self.config),
+            self.config.log_level(),
+            self.config.log_format(),
+        );
 
         info!("Cleaning up");
 
@@ -582,7 +833,7 @@ impl Drop for Kubernix {
         self.umount();
         self.cleanup_rootless_storage();
         self.network.cleanup();
-        self.system.cleanup();
+        Self::remove_pid_file(&self.config);
         info!("Cleanup done");
 
         p.reset();
@@ -637,8 +888,142 @@ mod tests {
         writeln!(f, "QUOTED=\"hello world\"").unwrap();
         writeln!(f, "SINGLE='single'").unwrap();
 
+        writeln!(f, "ESCAPED='it'\\''s a /path with spaces'").unwrap();
+        writeln!(f).unwrap();
+
         let mut cmd = Command::new("echo");
         Kubernix::apply_env_file(&env_file, &mut cmd).unwrap();
+        assert_eq!(
+            envs(&cmd),
+            vec![
+                ("BAZ".into(), "qux".into()),
+                ("ESCAPED".into(), "it's a /path with spaces".into()),
+                ("FOO".into(), "bar".into()),
+                ("QUOTED".into(), "hello world".into()),
+                ("SINGLE".into(), "single".into()),
+            ]
+        );
+    }
+
+    fn envs(cmd: &Command) -> Vec<(String, String)> {
+        let mut envs: Vec<(String, String)> = cmd
+            .get_envs()
+            .map(|(k, v)| {
+                (
+                    k.to_string_lossy().into(),
+                    v.unwrap_or_default().to_string_lossy().into(),
+                )
+            })
+            .collect();
+        envs.sort();
+        envs
+    }
+
+    #[test]
+    fn env_file_roundtrip() {
+        let dir = tempdir().unwrap();
+        let env_file = dir.path().join("test.env");
+        let vars = [
+            ("KUBECONFIG", "/run dir/it's/admin.kubeconfig".to_string()),
+            ("PLAIN", "unix:///run/crio.sock".to_string()),
+        ];
+        fs::write(&env_file, Kubernix::env_file_content(&vars)).unwrap();
+
+        let mut cmd = Command::new("echo");
+        Kubernix::apply_env_file(&env_file, &mut cmd).unwrap();
+        let expected: Vec<(String, String)> = vars
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect();
+        assert_eq!(envs(&cmd), expected);
+
+        // The file is valid shell
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(format!(
+                ". '{}' && printf %s \"$KUBECONFIG\"",
+                env_file.display()
+            ))
+            .output()
+            .unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            "/run dir/it's/admin.kubeconfig"
+        );
+    }
+
+    #[test]
+    fn shell_unquote_inverts_escape() {
+        for s in [
+            "",
+            "plain",
+            "a b",
+            "it's",
+            "'''",
+            "\"quoted\"",
+            "back\\slash",
+        ] {
+            assert_eq!(Kubernix::shell_unquote(&Kubernix::shell_escape(s)), s);
+        }
+        assert_eq!(Kubernix::shell_unquote(r#""a \"b\"""#), r#"a "b""#);
+        assert_eq!(Kubernix::shell_unquote(r"a\ b"), "a b");
+    }
+
+    #[test]
+    fn cgroup_evacuate_snippet() {
+        let snippet = Kubernix::cgroup_evacuate("$CGRP", "init");
+        assert!(snippet.contains("mkdir -p \"$CGRP/init\"; "));
+        assert!(snippet.contains("echo $p >\"$CGRP/init/cgroup.procs\""));
+        assert!(snippet.contains(">\"$CGRP/cgroup.subtree_control\""));
+        assert!(snippet.ends_with("; "));
+    }
+
+    #[test]
+    fn unescape_mount_path_octal() {
+        assert_eq!(
+            Kubernix::unescape_mount_path(r"/run\040dir/a\011b\134c"),
+            PathBuf::from("/run dir/a\tb\\c")
+        );
+        assert_eq!(
+            Kubernix::unescape_mount_path(r"/plain\04"),
+            PathBuf::from(r"/plain\04")
+        );
+        assert_eq!(
+            Kubernix::unescape_mount_path(r"/no\999escape"),
+            PathBuf::from(r"/no\999escape")
+        );
+    }
+
+    #[test]
+    fn lock_is_exclusive() -> Result<()> {
+        let config = config::tests::test_config()?;
+        let lock = Kubernix::lock(&config)?;
+        let err = Kubernix::lock(&config)
+            .err()
+            .context("expected error")?
+            .to_string();
+        assert!(err.contains("already running"), "{}", err);
+        drop(lock);
+        Kubernix::lock(&config)?;
+        Ok(())
+    }
+
+    #[test]
+    fn running_pid_requires_running_instance() -> Result<()> {
+        let config = config::tests::test_config()?;
+        let err = Kubernix::running_pid(&config).unwrap_err().to_string();
+        assert!(err.contains("No running kubernix cluster"), "{}", err);
+
+        let _lock = Kubernix::lock(&config)?;
+        let err = Kubernix::running_pid(&config).unwrap_err().to_string();
+        assert!(err.contains("not ready yet"), "{}", err);
+
+        fs::write(Kubernix::pid_file(&config), id().to_string())?;
+        assert_eq!(Kubernix::running_pid(&config)?, i32::try_from(id())?);
+
+        Kubernix::remove_pid_file(&config);
+        assert!(!Kubernix::pid_file(&config).exists());
+        Ok(())
     }
 
     #[test]

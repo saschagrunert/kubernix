@@ -4,7 +4,7 @@
 //! components inside containers for multi-node setups. Each container
 //! shares the host network namespace and mounts the runtime root directory.
 
-use crate::{Config, nix::Nix, podman::Podman, process::Process, system::System};
+use crate::{Config, nix::Nix, podman::Podman, process::Process, system::System, write_if_changed};
 use anyhow::{Context, Result, bail};
 use log::{LevelFilter, debug, info, trace};
 use std::{
@@ -17,6 +17,9 @@ use std::{
 const IMAGE_PREFIX: &str = "kubernix:base";
 const DEFAULT_ROOT: &str = "kubernix";
 
+/// The base image of the default Dockerfile.
+const BASE_IMAGE: &str = "docker.io/nixos/nix:latest";
+
 /// Provides container image building and process execution for multi-node clusters.
 pub struct Container;
 
@@ -28,7 +31,7 @@ impl Container {
 
         // Write the policy file
         let policy_json = Self::policy_json(config);
-        fs::write(&policy_json, include_str!("assets/policy.json"))
+        write_if_changed(&policy_json, include_str!("assets/policy.json"))
             .context("Unable to write container signature policy")?;
 
         // Nothing needs to be done on single node or rootless runs
@@ -37,44 +40,37 @@ impl Container {
         }
 
         // Prepare the Dockerfile: use a custom one if provided, otherwise
-        // fall back to the embedded default.
-        let file = config.root().join("Dockerfile");
-        if !file.exists() {
-            if let Some(custom) = config.dockerfile() {
+        // fall back to the embedded default. It gets refreshed on every run,
+        // so that the image tag reflects the current content.
+        let dockerfile = match config.dockerfile() {
+            Some(custom) => {
                 debug!("Using custom Dockerfile '{}'", custom.display());
-                fs::copy(custom, &file).context("Unable to copy custom Dockerfile")?;
-            } else {
-                fs::write(
-                    &file,
-                    format!(
-                        include_str!("assets/Dockerfile"),
-                        nix = Nix::DIR,
-                        root = DEFAULT_ROOT
-                    ),
-                )
-                .context("Unable to write Dockerfile")?;
+                fs::read_to_string(custom).with_context(|| {
+                    format!("Unable to read custom Dockerfile '{}'", custom.display())
+                })?
             }
-        }
+            None => format!(
+                include_str!("assets/Dockerfile"),
+                base = BASE_IMAGE,
+                nix = Nix::DIR,
+                root = DEFAULT_ROOT
+            ),
+        };
+        write_if_changed(&config.root().join("Dockerfile"), &dockerfile)
+            .context("Unable to write Dockerfile")?;
 
         // Skip rebuild if the image for the current environment already
         // exists. The tag contains a hash of the build inputs, so a changed
         // Nix environment results in a new image.
         let image = Self::image(config)?;
-        if Self::image_exists(config, &image) {
+        let runtime_args = Self::runtime_args(config)?;
+        if Self::image_exists(config, &runtime_args, &image) {
             info!("Container image '{}' already exists, skipping build", image);
             return Ok(());
         }
 
         // Build the base container image
         info!("Building base container image '{}'", image);
-
-        // Exclude .git from the container build context since the
-        // runtime nix directory uses a standalone git repo that the
-        // container image does not need.
-        let dockerignore = config.root().join(".dockerignore");
-        if !dockerignore.exists() {
-            fs::write(&dockerignore, "nix/.git\n").context("Unable to write .dockerignore")?;
-        }
 
         // Prepare the arguments
         let mut args = if Podman::is_configured(config) {
@@ -103,6 +99,7 @@ impl Container {
         }
 
         info!("Container base image built");
+        Self::prune_images(config, &runtime_args, &image);
         Ok(())
     }
 
@@ -120,8 +117,10 @@ impl Container {
         container_name: &str,
         args: &[&str],
     ) -> Result<Process> {
+        let runtime_args = Self::runtime_args(config)?;
+
         // Cleanup possible containers
-        Self::remove(config, container_name);
+        Self::remove(config, &runtime_args, container_name);
 
         // Prepare the arguments
         let arg_hostname = &format!("--hostname={}", container_name);
@@ -139,10 +138,7 @@ impl Container {
         ];
 
         // Podman specific arguments
-        let podman_args = Podman::default_args(config)?;
-        if Podman::is_configured(config) {
-            args_vec.extend(podman_args.iter().map(String::as_str));
-        }
+        args_vec.extend(runtime_args.iter().map(String::as_str));
 
         // Mount /dev/mapper if available (requires privileges)
         let dev_mapper = PathBuf::from("/dev/mapper");
@@ -161,6 +157,20 @@ impl Container {
         Process::start(dir, identifier, config.container_runtime(), &args_vec)
     }
 
+    /// The handle of the node container for the provided node, if the
+    /// node runs inside a container.
+    pub fn node(config: &Config, container_name: &str) -> Option<NodeContainer> {
+        if !config.multi_node() || config.is_rootless() {
+            return None;
+        }
+        Some(NodeContainer {
+            runtime: config.container_runtime().into(),
+            runtime_args: Self::runtime_args(config).unwrap_or_default(),
+            name: container_name.into(),
+            removed: false,
+        })
+    }
+
     fn volume_arg<T: Display>(volume: T) -> String {
         format!("--volume={v}:{v}", v = volume)
     }
@@ -175,12 +185,8 @@ impl Container {
         args: &[&str],
     ) -> Result<Process> {
         // Prepare the args
-        let mut args_vec = vec![];
-
-        let podman_args = Podman::default_args(config)?;
-        if Podman::is_configured(config) {
-            args_vec.extend(podman_args.iter().map(String::as_str));
-        }
+        let runtime_args = Self::runtime_args(config)?;
+        let mut args_vec: Vec<&str> = runtime_args.iter().map(String::as_str).collect();
 
         let name = Self::prefixed_container_name(container_name);
         let flake_ref = format!("path:{}", DEFAULT_ROOT);
@@ -205,24 +211,43 @@ impl Container {
         Process::start(dir, identifier, config.container_runtime(), &args_vec)
     }
 
+    /// The arguments which apply to every container runtime command, only
+    /// podman has some.
+    fn runtime_args(config: &Config) -> Result<Vec<String>> {
+        if Podman::is_configured(config) {
+            Podman::default_args(config)
+        } else {
+            Ok(vec![])
+        }
+    }
+
     /// Remove the provided (maybe running) container.
     /// Failures are logged but not propagated since the container may not
     /// exist yet (first run).
-    fn remove(config: &Config, name: &str) {
+    fn remove(config: &Config, runtime_args: &[String], name: &str) {
         let prefixed = Self::prefixed_container_name(name);
-        match Command::new(config.container_runtime())
-            .arg("rm")
-            .arg("-f")
-            .arg(&prefixed)
+        Self::run_quietly(
+            config.container_runtime(),
+            runtime_args,
+            &["rm", "-f", &prefixed],
+        );
+    }
+
+    /// Run the container runtime, logging failures only, since they are
+    /// expected, for example if a container does not exist.
+    fn run_quietly(runtime: &str, runtime_args: &[String], args: &[&str]) {
+        match Command::new(runtime)
+            .args(runtime_args)
+            .args(args)
             .stderr(Stdio::null())
             .stdout(Stdio::null())
             .status()
         {
             Ok(status) if !status.success() => {
-                debug!("Container '{}' removal exited with {}", prefixed, status);
+                debug!("'{} {}' exited with {}", runtime, args.join(" "), status);
             }
             Err(e) => {
-                debug!("Failed to run container rm for '{}': {}", prefixed, e);
+                debug!("Failed to run '{} {}': {}", runtime, args.join(" "), e);
             }
             _ => {}
         }
@@ -237,8 +262,9 @@ impl Container {
         }
     }
 
-    /// The base image name, tagged with a hash of the Nix environment and
-    /// the Dockerfile, which are the inputs of the image build.
+    /// The base image name, tagged with a hash of the Nix environment, the
+    /// Dockerfile and its default base image, which are the inputs of the
+    /// image build.
     fn image(config: &Config) -> Result<String> {
         let nix_dir = config.root().join(Nix::DIR);
         let mut inputs = vec![];
@@ -253,6 +279,7 @@ impl Container {
             fs::read(&dockerfile)
                 .with_context(|| format!("Unable to read '{}'", dockerfile.display()))?,
         );
+        inputs.push(BASE_IMAGE.as_bytes().to_vec());
         Ok(Self::image_name(&inputs))
     }
 
@@ -271,13 +298,62 @@ impl Container {
 
     /// Check whether the base container image already exists.
     /// Uses `image inspect` which works for both podman and docker.
-    fn image_exists(config: &Config, image: &str) -> bool {
+    fn image_exists(config: &Config, runtime_args: &[String], image: &str) -> bool {
         Command::new(config.container_runtime())
+            .args(runtime_args)
             .args(["image", "inspect", image])
             .stderr(Stdio::null())
             .stdout(Stdio::null())
             .status()
             .is_ok_and(|s| s.success())
+    }
+
+    /// Remove the base images of previous builds. Images which are still
+    /// in use, for example by another run root, fail to be removed.
+    fn prune_images(config: &Config, runtime_args: &[String], image: &str) {
+        let output = match Command::new(config.container_runtime())
+            .args(runtime_args)
+            .args(["images", "--format", "{{.Repository}}:{{.Tag}}"])
+            .stderr(Stdio::null())
+            .output()
+        {
+            Ok(output) if output.status.success() => output,
+            Ok(output) => {
+                debug!("Unable to list container images: {}", output.status);
+                return;
+            }
+            Err(e) => {
+                debug!("Unable to list container images: {}", e);
+                return;
+            }
+        };
+        for old in Self::stale_images(&String::from_utf8_lossy(&output.stdout), image) {
+            debug!("Removing old container image '{}'", old);
+            Self::run_quietly(config.container_runtime(), runtime_args, &["rmi", &old]);
+        }
+    }
+
+    /// Filter the listed `repository:tag` images for base images other
+    /// than the provided one. Podman prefixes the repository with
+    /// `localhost/`.
+    fn stale_images(list: &str, image: &str) -> Vec<String> {
+        let (repo, prefix) = IMAGE_PREFIX.split_once(':').unwrap_or_default();
+        let current = image.rsplit_once(':').map(|(_, tag)| tag);
+        let mut images: Vec<String> = list
+            .lines()
+            .map(str::trim)
+            .filter(|line| {
+                line.rsplit_once(':').is_some_and(|(r, tag)| {
+                    (r == repo || r.ends_with(&format!("/{}", repo)))
+                        && tag.starts_with(prefix)
+                        && Some(tag) != current
+                })
+            })
+            .map(String::from)
+            .collect();
+        images.sort();
+        images.dedup();
+        images
     }
 
     /// Retrieve a prefixed container name
@@ -286,9 +362,45 @@ impl Container {
     }
 }
 
+/// A node container, which runs the CRI runtime of a node in multi-node
+/// mode. It gets removed when stopped or dropped.
+pub struct NodeContainer {
+    runtime: String,
+    runtime_args: Vec<String>,
+    name: String,
+    removed: bool,
+}
+
+impl NodeContainer {
+    /// Stop and remove the container. Stopping the container runtime
+    /// client is not sufficient, since the container keeps running if its
+    /// entrypoint does not handle the forwarded signal.
+    pub fn remove(&mut self) {
+        if self.removed {
+            return;
+        }
+        self.removed = true;
+        let name = Container::prefixed_container_name(&self.name);
+        debug!("Removing node container {}", name);
+        Container::run_quietly(
+            &self.runtime,
+            &self.runtime_args,
+            &["stop", "-t", "10", &name],
+        );
+        Container::run_quietly(&self.runtime, &self.runtime_args, &["rm", "-f", &name]);
+    }
+}
+
+impl Drop for NodeContainer {
+    fn drop(&mut self) {
+        self.remove();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
 
     #[test]
     fn prefixed_container_name_format() {
@@ -314,6 +426,52 @@ mod tests {
             a,
             Container::image_name(&[b"crund".to_vec(), b"f".to_vec()])
         );
+    }
+
+    #[test]
+    fn stale_images_filters_old_base_images() {
+        let list = "\
+            localhost/kubernix:base-0000000000000001\n\
+            localhost/kubernix:base-0000000000000002\n\
+            kubernix:base-0000000000000003\n\
+            kubernix:base-0000000000000003\n\
+            localhost/kubernix:latest\n\
+            docker.io/library/kubernix-other:base-1\n\
+            docker.io/nixos/nix:latest\n";
+        assert_eq!(
+            Container::stale_images(list, "kubernix:base-0000000000000002"),
+            vec![
+                "kubernix:base-0000000000000003",
+                "localhost/kubernix:base-0000000000000001",
+            ]
+        );
+        assert!(Container::stale_images("", "kubernix:base-1").is_empty());
+    }
+
+    #[test]
+    fn default_dockerfile_uses_base_image() {
+        let dockerfile = format!(
+            include_str!("assets/Dockerfile"),
+            base = BASE_IMAGE,
+            nix = Nix::DIR,
+            root = DEFAULT_ROOT
+        );
+        assert!(dockerfile.starts_with(&format!("FROM {}\n", BASE_IMAGE)));
+    }
+
+    #[test]
+    fn node_container_only_for_multi_node_root() -> Result<()> {
+        let mut c = crate::config::tests::test_config()?;
+        assert!(Container::node(&c, "node-0").is_none());
+        c = Config::parse_from(["kubernix", "--nodes=2", "--container-runtime=true"]);
+        c.set_rootless(true);
+        assert!(Container::node(&c, "node-0").is_none());
+        c.set_rootless(false);
+        let mut node = Container::node(&c, "node-0").context("missing node container")?;
+        assert_eq!(node.name, "node-0");
+        node.remove();
+        assert!(node.removed);
+        Ok(())
     }
 
     #[test]

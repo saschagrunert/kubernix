@@ -1,15 +1,19 @@
 //! Configuration related structures
 use crate::{podman::Podman, system::System};
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand as ClapSubcommand, ValueEnum, builder::styling};
+use clap::{
+    ArgMatches, CommandFactory, FromArgMatches, Parser, Subcommand as ClapSubcommand, ValueEnum,
+    builder::styling, parser::ValueSource,
+};
 use ipnetwork::Ipv4Network;
 use log::LevelFilter;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeSet,
     fmt,
     fs::{self, canonicalize, create_dir_all, read_to_string},
     net::Ipv4Addr,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf, absolute},
 };
 
 /// Network of slirp4netns, which rootlesskit uses in rootless mode.
@@ -260,9 +264,17 @@ pub struct Config {
     /// The default OCI runtime (crun or runc), both are registered as runtime handlers
     oci_runtime: OciRuntime,
 
+    /// Whether the run directory belongs to a rootless cluster, unset for
+    /// configuration files written by older versions
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[arg(skip)]
+    rootless: Option<bool>,
+
+    /// The ids of the arguments explicitly set on the command line or via
+    /// the environment
     #[serde(skip)]
     #[arg(skip)]
-    rootless: bool,
+    explicit: BTreeSet<String>,
 
     #[arg(
         default_value = "coredns",
@@ -355,12 +367,12 @@ impl Config {
 
     /// Whether the cluster is running in rootless (user namespace) mode.
     pub fn is_rootless(&self) -> bool {
-        self.rootless
+        self.rootless.unwrap_or_default()
     }
 
     /// Set rootless mode (auto-detected from UID at startup).
     pub fn set_rootless(&mut self, val: bool) {
-        self.rootless = val;
+        self.rootless = Some(val);
     }
 }
 
@@ -375,11 +387,43 @@ pub enum SubCommand {
 impl Config {
     /// Parse configuration from CLI arguments.
     pub fn from_args() -> Self {
-        let mut config = Self::parse();
+        let mut config =
+            Self::from_matches(&Self::command().get_matches()).unwrap_or_else(|e| e.exit());
         if config.shell.is_none() {
             config.shell = System::shell().ok();
         }
         config
+    }
+
+    /// Create the configuration from parsed arguments and remember which
+    /// of them have been set explicitly.
+    fn from_matches(matches: &ArgMatches) -> Result<Self, clap::Error> {
+        let mut config = Self::from_arg_matches(matches)?;
+        config.explicit = Self::command()
+            .get_arguments()
+            .map(|a| a.get_id().as_str())
+            .filter(|id| {
+                matches!(
+                    matches.value_source(id),
+                    Some(ValueSource::CommandLine | ValueSource::EnvVariable)
+                )
+            })
+            .map(String::from)
+            .collect();
+        config.overlay = config.overlay.map(Self::absolute);
+        config.dockerfile = config.dockerfile.map(Self::absolute);
+        Ok(config)
+    }
+
+    /// Make a path absolute, so that it does not depend on the working
+    /// directory once stored.
+    fn absolute(path: PathBuf) -> PathBuf {
+        absolute(&path).unwrap_or(path)
+    }
+
+    /// Returns true if the argument has been set explicitly.
+    fn is_explicit(&self, id: &str) -> bool {
+        self.explicit.contains(id)
     }
 }
 
@@ -406,25 +450,87 @@ impl Config {
         Ok(())
     }
 
-    /// Read the configuration from the internal set root path.
-    /// If not existing, write the current configuration to the path.
-    ///
-    /// The `rootless` field is preserved from the current instance
-    /// since it is marked `#[serde(skip)]` and not present in the file.
+    /// Returns true if the configuration file exists in the root path.
+    pub fn file_exists(&self) -> bool {
+        self.root().join(Self::FILENAME).exists()
+    }
+
+    /// Read the configuration from the internal set root path and merge
+    /// it into the current one. If not existing, write the current
+    /// configuration to the path.
     pub fn try_load_file(&mut self) -> Result<()> {
         let file = self.root().join(Self::FILENAME);
         if file.exists() {
-            let rootless = self.rootless;
-            *self = toml::from_str(&read_to_string(&file).with_context(|| {
+            let stored = toml::from_str(&read_to_string(&file).with_context(|| {
                 format!(
                     "Unable to read expected configuration file '{}'",
                     file.display(),
                 )
             })?)
             .with_context(|| format!("Unable to load config file '{}'", file.display()))?;
-            self.rootless = rootless;
+            self.merge(stored)?;
         } else {
             self.to_file()?;
+        }
+        Ok(())
+    }
+
+    /// Merge the stored configuration of an existing run directory.
+    ///
+    /// Settings which shape the cluster have to match the stored ones,
+    /// since the existing cluster state depends on them. The other settings
+    /// are taken from the stored configuration, unless they have been set
+    /// explicitly. The root and the rootless mode are never taken from the
+    /// stored configuration.
+    fn merge(&mut self, mut stored: Config) -> Result<()> {
+        let mode = |rootless| if rootless { "rootless" } else { "root" };
+        if let Some(rootless) = stored.rootless
+            && rootless != self.is_rootless()
+        {
+            bail!(
+                "The run directory '{}' belongs to a {} cluster and cannot be used in {} mode, \
+                 use a different root or remove the run directory",
+                self.root().display(),
+                mode(rootless),
+                mode(self.is_rootless()),
+            )
+        }
+
+        stored.overlay = stored.overlay.map(Self::absolute);
+        stored.dockerfile = stored.dockerfile.map(Self::absolute);
+
+        macro_rules! cluster {
+            ($($field:ident),*) => {$(
+                if self.is_explicit(stringify!($field)) && self.$field != stored.$field {
+                    bail!(
+                        "The {} setting {} differs from the existing cluster ({}) in '{}', \
+                         remove the run directory to change it",
+                        stringify!($field).replace('_', "-"),
+                        serde_json::to_string(&self.$field).unwrap_or_default(),
+                        serde_json::to_string(&stored.$field).unwrap_or_default(),
+                        self.root().display(),
+                    )
+                }
+                self.$field = stored.$field;
+            )*};
+        }
+        cluster!(nodes, cidr, cri_runtime, oci_runtime, container_runtime);
+
+        macro_rules! overridable {
+            ($($field:ident),*) => {$(
+                if !self.is_explicit(stringify!($field)) {
+                    self.$field = stored.$field;
+                }
+            )*};
+        }
+        // The Nix environment gets regenerated if its inputs change
+        overridable!(log_level, log_format, addons, dockerfile, overlay, packages);
+
+        // The shell options conflict with each other, so they are only
+        // taken together.
+        if !self.is_explicit("shell") && !self.is_explicit("no_shell") {
+            self.shell = stored.shell.or(self.shell.take());
+            self.no_shell = stored.no_shell;
         }
         Ok(())
     }
@@ -568,8 +674,9 @@ packages = []
 root = "root"
             "#,
         )?;
+        let root = c.root.clone();
         c.try_load_file()?;
-        assert_eq!(c.root(), Path::new("root"));
+        assert_eq!(c.root(), root);
         assert_eq!(c.log_level(), LevelFilter::Debug);
         assert_eq!(c.log_format(), LogFormat::Text);
         assert_eq!(&c.cidr().to_string(), "1.1.1.1/16");
@@ -754,11 +861,11 @@ root = "root"
     }
 
     #[test]
-    fn rootless_not_serialized() -> Result<()> {
+    fn rootless_serialized() -> Result<()> {
         let mut c = test_config()?;
+        assert!(!toml::to_string(&c)?.contains("rootless"));
         c.set_rootless(true);
-        let toml = toml::to_string(&c).unwrap();
-        assert!(!toml.contains("rootless"));
+        assert!(toml::to_string(&c)?.contains("rootless = true"));
         Ok(())
     }
 
@@ -773,5 +880,133 @@ root = "root"
         c.try_load_file()?;
         assert!(c.is_rootless());
         Ok(())
+    }
+
+    /// Parse the arguments like `from_args` and use a new root, which
+    /// contains the configuration of a previous run with `stored_args`.
+    fn existing(stored_args: &[&str], args: &[&str]) -> Result<Config> {
+        let root = tempdir()?.keep();
+        let parse = |args: &[&str]| -> Result<Config> {
+            let matches = Config::command().try_get_matches_from(
+                ["kubernix", "--root", root.to_str().context("invalid root")?]
+                    .iter()
+                    .chain(args),
+            )?;
+            Ok(Config::from_matches(&matches)?)
+        };
+        parse(stored_args)?.to_file()?;
+        let mut c = parse(args)?;
+        c.try_load_file()?;
+        Ok(c)
+    }
+
+    #[test]
+    fn from_matches_explicit() -> Result<()> {
+        let matches = Config::command().try_get_matches_from(["kubernix", "--nodes=2"])?;
+        let c = Config::from_matches(&matches)?;
+        assert!(c.is_explicit("nodes"));
+        assert!(!c.is_explicit("cidr"));
+        assert!(!c.is_explicit("root"));
+        Ok(())
+    }
+
+    #[test]
+    fn from_matches_explicit_env() -> Result<()> {
+        temp_env::with_var("KUBERNIX_LOG_LEVEL", Some("debug"), || -> Result<()> {
+            let matches = Config::command().try_get_matches_from(["kubernix"])?;
+            let c = Config::from_matches(&matches)?;
+            assert!(c.is_explicit("log_level"));
+            assert_eq!(c.log_level(), LevelFilter::Debug);
+            Ok(())
+        })
+    }
+
+    #[test]
+    fn merge_keeps_stored_cluster_settings() -> Result<()> {
+        let c = existing(&["--nodes=2", "--cri-runtime=containerd"], &[])?;
+        assert_eq!(c.nodes(), 2);
+        assert_eq!(c.cri_runtime(), CriRuntime::Containerd);
+        Ok(())
+    }
+
+    #[test]
+    fn merge_accepts_equal_cluster_settings() -> Result<()> {
+        let c = existing(&["--nodes=2"], &["--nodes=2", "--oci-runtime=crun"])?;
+        assert_eq!(c.nodes(), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn merge_rejects_different_cluster_settings() -> Result<()> {
+        for (stored, args, name) in [
+            (&["--nodes=2"][..], &["--nodes=3"][..], "nodes"),
+            (&[], &["--cidr=10.20.0.0/16"], "cidr"),
+            (&[], &["--cri-runtime=containerd"], "cri-runtime"),
+            (
+                &["--oci-runtime=runc"],
+                &["--oci-runtime=crun"],
+                "oci-runtime",
+            ),
+        ] {
+            let err = existing(stored, args)
+                .err()
+                .context("expected error")?
+                .to_string();
+            assert!(err.contains(&format!("The {} setting", name)), "{}", err);
+            assert!(err.contains("remove the run directory"), "{}", err);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn merge_overrides_explicit_settings() -> Result<()> {
+        let stored = ["--log-level=debug", "--log-format=json", "--no-shell"];
+        let c = existing(&stored, &[])?;
+        assert_eq!(c.log_level(), LevelFilter::Debug);
+        assert_eq!(c.log_format(), LogFormat::Json);
+        assert!(c.no_shell());
+
+        let c = existing(&stored, &["--log-level=warn", "--shell=sh"])?;
+        assert_eq!(c.log_level(), LevelFilter::Warn);
+        assert_eq!(c.log_format(), LogFormat::Json);
+        assert_eq!(c.shell(), Some("sh"));
+        assert!(!c.no_shell());
+        Ok(())
+    }
+
+    #[test]
+    fn merge_overrides_nix_environment() -> Result<()> {
+        let stored = ["--packages=hello"];
+        let c = existing(&stored, &[])?;
+        assert_eq!(c.packages(), ["hello"]);
+
+        let c = existing(&stored, &["--packages", "hello", "kubernetes-helm"])?;
+        assert_eq!(c.packages(), ["hello", "kubernetes-helm"]);
+        Ok(())
+    }
+
+    #[test]
+    fn merge_ignores_stored_root() -> Result<()> {
+        let mut c = test_config()?;
+        let root = c.root.clone();
+        let mut stored = test_config()?;
+        stored.root = PathBuf::from("relative");
+        c.merge(stored)?;
+        assert_eq!(c.root(), root);
+        Ok(())
+    }
+
+    #[test]
+    fn merge_rejects_rootless_mismatch() -> Result<()> {
+        let mut stored = test_config()?;
+        stored.set_rootless(true);
+        let mut c = test_config()?;
+        c.set_rootless(false);
+        let err = c.merge(stored.clone()).unwrap_err().to_string();
+        assert!(err.contains("belongs to a rootless cluster"), "{}", err);
+
+        // Configurations of older versions do not contain the mode
+        stored.rootless = None;
+        c.merge(stored)
     }
 }

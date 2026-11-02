@@ -4,11 +4,11 @@
 //! watches it for unexpected exits, waits for readiness based on log
 //! output patterns, and handles graceful shutdown via SIGTERM.
 
-use crate::system::System;
+use crate::{signals, system::System};
 use anyhow::{Context, Result, bail};
-use crossbeam_channel::{Receiver, Sender, bounded};
 use log::{debug, error, info};
 use nix::{
+    errno::Errno,
     sys::signal::{Signal, kill},
     unistd::Pid,
 };
@@ -19,6 +19,7 @@ use std::{
     os::unix::process::CommandExt,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::mpsc::{Receiver, SyncSender, sync_channel},
     thread::{JoinHandle, sleep, spawn},
     time::{Duration, Instant},
 };
@@ -27,7 +28,7 @@ use std::{
 pub struct Process {
     command: String,
     died: Receiver<()>,
-    kill: Sender<()>,
+    kill: SyncSender<()>,
     log_file: PathBuf,
     name: String,
     pid: u32,
@@ -39,10 +40,13 @@ pub struct Process {
 pub trait Stoppable {
     /// Stop the process
     fn stop(&mut self) -> Result<()>;
+
+    /// Returns true if the process exited without being stopped
+    fn died(&mut self) -> bool;
 }
 
 /// A running process handle that can be stopped during cluster shutdown.
-pub type Started = Box<dyn Stoppable + Send + Sync>;
+pub type Started = Box<dyn Stoppable + Send>;
 
 /// Ordered collection of running processes, stopped in reverse order during cleanup.
 pub type Stoppables = Vec<Started>;
@@ -58,6 +62,10 @@ macro_rules! stoppable {
         impl $crate::process::Stoppable for $ty {
             fn stop(&mut self) -> anyhow::Result<()> {
                 self.process.stop()
+            }
+
+            fn died(&mut self) -> bool {
+                self.process.died()
             }
         }
     };
@@ -118,8 +126,8 @@ impl Process {
             .with_context(|| format!("Unable to start process '{}' ({})", identifier, command))?;
 
         // Start the watcher thread
-        let (kill, killed) = bounded(1);
-        let (dead, died) = bounded(1);
+        let (kill, killed) = sync_channel(1);
+        let (dead, died) = sync_channel(1);
         let c = command.to_owned();
         let n = identifier.to_owned();
         let pid = child.id();
@@ -165,26 +173,34 @@ impl Process {
         let mut line = String::new();
 
         while now.elapsed().as_secs() < self.readiness_timeout {
-            line.clear();
-            reader.read_line(&mut line)?;
-
-            if line.is_empty() {
-                if self.died.try_recv().is_ok() {
-                    bail!(
-                        "{} ({}) died before becoming ready",
-                        self.name,
-                        self.command
-                    )
-                }
-                sleep(Duration::from_millis(10));
-                continue;
-            }
-
-            if line.contains(pattern) {
+            // A line without a trailing newline is incomplete, keep it and
+            // append the rest of it on the next read.
+            let read = reader.read_line(&mut line)?;
+            if read > 0 && line.contains(pattern) {
                 info!("{} is ready", self.name);
                 debug!("Found pattern '{}' in line '{}'", pattern, line.trim());
                 return Ok(());
             }
+            if line.ends_with('\n') {
+                line.clear();
+                continue;
+            }
+
+            if self.died.try_recv().is_ok() {
+                bail!(
+                    "{} ({}) died before becoming ready",
+                    self.name,
+                    self.command
+                )
+            }
+            if signals::requested() {
+                bail!(
+                    "Interrupted while waiting for {} ({}) to become ready",
+                    self.name,
+                    self.command
+                )
+            }
+            sleep(Duration::from_millis(10));
         }
 
         // Dump log before stopping so the file is still intact
@@ -219,55 +235,53 @@ impl Stoppable for Process {
     fn stop(&mut self) -> Result<()> {
         debug!("Stopping process {} (via {})", self.name, self.command);
 
-        // Indicate that this shutdown is intended
-        self.kill.send(()).with_context(|| {
-            format!(
-                "Unable to send kill signal to process {} (via {})",
-                self.name, self.command,
-            )
-        })?;
+        // Indicate that this shutdown is intended. This fails if the
+        // process already died and the watcher is gone, which is fine since
+        // its descendants still have to be stopped.
+        let _ = self.kill.try_send(());
 
         let pid = i32::try_from(self.pid)
             .with_context(|| format!("PID {} exceeds i32 range", self.pid))?;
         let pgid = Pid::from_raw(-pid);
 
-        kill(pgid, Signal::SIGTERM).with_context(|| {
-            format!(
-                "Unable to send SIGTERM to process group of {} (via {})",
-                self.name, self.command,
-            )
-        })?;
+        match kill(pgid, Signal::SIGTERM) {
+            Ok(()) | Err(Errno::ESRCH) => {}
+            Err(e) => {
+                return Err(e).with_context(|| {
+                    format!(
+                        "Unable to send SIGTERM to process group of {} (via {})",
+                        self.name, self.command,
+                    )
+                });
+            }
+        }
 
         if let Some(handle) = self.watch.take() {
             let deadline = Instant::now() + Duration::from_secs(10);
             while !handle.is_finished() && Instant::now() < deadline {
                 sleep(Duration::from_millis(100));
             }
-            if handle.is_finished() {
-                if handle.join().is_err() {
-                    bail!(
-                        "Unable to stop process {} (via {})",
-                        self.name,
-                        self.command,
-                    );
-                }
-            } else {
+            if !handle.is_finished() {
                 debug!(
                     "Process {} (via {}) did not exit after SIGTERM, sending SIGKILL",
                     self.name, self.command,
                 );
                 let _ = kill(pgid, Signal::SIGKILL);
-                if handle.join().is_err() {
-                    bail!(
-                        "Unable to stop process {} (via {})",
-                        self.name,
-                        self.command,
-                    );
-                }
+            }
+            if handle.join().is_err() {
+                bail!(
+                    "Unable to stop process {} (via {})",
+                    self.name,
+                    self.command
+                );
             }
         }
         debug!("Process {} (via {}) stopped", self.name, self.command);
         Ok(())
+    }
+
+    fn died(&mut self) -> bool {
+        self.watch.is_some() && self.died.try_recv().is_ok()
     }
 }
 
@@ -325,10 +339,39 @@ mod tests {
     }
 
     #[test]
+    fn wait_ready_partial_line() -> Result<()> {
+        let d = tempdir()?;
+        let mut p = Process::start(
+            d.path(),
+            "",
+            "sh",
+            &["-c", "printf rea; sleep 0.5; printf 'dy\\n'; sleep 5"],
+        )?;
+        p.readiness_timeout = 3;
+        p.wait_ready("ready")?;
+        p.stop()?;
+        Ok(())
+    }
+
+    #[test]
     fn stop_success() -> Result<()> {
         let d = tempdir()?;
         let mut p = Process::start(d.path(), "", "sleep", &["500"])?;
+        assert!(!p.died());
         p.stop()?;
+        Ok(())
+    }
+
+    #[test]
+    fn stop_after_death() -> Result<()> {
+        let d = tempdir()?;
+        let mut p = Process::start(d.path(), "", "true", &[])?;
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !p.died() && Instant::now() < deadline {
+            sleep(Duration::from_millis(10));
+        }
+        p.stop()?;
+        assert!(p.watch.is_none());
         Ok(())
     }
 }
