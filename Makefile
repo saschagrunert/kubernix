@@ -159,8 +159,16 @@ lint-shellcheck: ## Lint the shell scripts via shellcheck.
 lint-vex: ## Validate the OpenVEX document.
 	jq -e -f hack/lint-vex.jq .openvex/kubernix.openvex.json >/dev/null
 
+.PHONY: lint-markdown
+lint-markdown: ## Lint the Markdown files via markdownlint.
+	markdownlint-cli2 "**/*.md"
+
+.PHONY: lint-prettier
+lint-prettier: ## Check the formatting of the Markdown, YAML and JSON files via prettier.
+	prettier --check .
+
 .PHONY: lint
-lint: lint-clippy lint-rustfmt lint-audit lint-deny lint-dependencies lint-shellcheck lint-vex ## Run all linters.
+lint: lint-clippy lint-rustfmt lint-audit lint-deny lint-dependencies lint-shellcheck lint-vex lint-markdown lint-prettier ## Run all linters.
 
 ##@ Run targets:
 

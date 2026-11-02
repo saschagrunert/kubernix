@@ -29,8 +29,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// The README section which explains how to fix the rootless prerequisites.
-pub const TROUBLESHOOTING: &str = "https://github.com/saschagrunert/kubernix#troubleshooting";
+/// The documentation which explains how to fix the rootless prerequisites,
+/// at the release of this version, so that moving it does not break the
+/// link.
+pub const TROUBLESHOOTING: &str = concat!(
+    "https://github.com/saschagrunert/kubernix/blob/v",
+    env!("CARGO_PKG_VERSION"),
+    "/docs/troubleshooting.md"
+);
 
 /// The cgroup controllers which the components need, in the order of the
 /// delegation.

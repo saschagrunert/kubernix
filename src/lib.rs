@@ -9,8 +9,8 @@
 //! The library target only exists to share the implementation with the
 //! binary and is not a public API: its items are hidden and may change in
 //! any release. Semantic versioning covers the command line interface and
-//! the other interfaces listed in the "Stability" section of the
-//! [README](https://github.com/saschagrunert/kubernix#stability).
+//! the other interfaces listed in the
+//! [stability documentation](https://github.com/saschagrunert/kubernix/blob/main/docs/stability.md).
 //!
 //! Internally, `Config` holds the command line options, `Logger` is the log
 //! implementation and `Kubernix` runs the cluster based on the
@@ -56,8 +56,8 @@
 //! `Kubernix::stop_cluster` stops the running instance (`kubernix stop`)
 //! and `Kubernix::status` prints its state (`kubernix status`).
 //!
-//! See the [README](https://github.com/saschagrunert/kubernix) for usage
-//! details.
+//! See the [usage documentation](https://github.com/saschagrunert/kubernix/blob/main/docs/usage.md)
+//! for details.
 #![deny(missing_docs)]
 
 mod apiserver;

@@ -1,0 +1,11 @@
+config:
+  MD013:
+    code_blocks: false
+    tables: false
+  # The examples prefix commands with a prompt, also without output.
+  MD014: false
+  MD033:
+    allowed_elements: [a, img, picture, source]
+  # The README starts with the logo.
+  MD041: false
+gitignore: true

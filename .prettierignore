@@ -1,0 +1,6 @@
+# Prettier ignores the files of .gitignore as well.
+flake.lock
+# Written by vexctl, which expands every array.
+.openvex/
+# Templates with placeholders, rendered by kubernix.
+src/assets/

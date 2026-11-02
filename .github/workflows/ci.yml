@@ -33,7 +33,8 @@ jobs:
       - lint-clippy
       - lint-deny
       - lint-dependencies
-      - lint-readme-versions
+      - lint-generated
+      - lint-markdown
       - lint-rustfmt
       - lint-shellcheck
       - lint-vex
@@ -284,21 +285,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: make lint-dependencies
 
-  # The nixpkgs bumps of dependabot do not regenerate the table, so it gets
-  # committed to their pull requests instead.
-  lint-readme-versions:
-    name: lint / readme versions
+  # Regenerates the README versions table and formats the files via prettier
+  # from the nixpkgs of flake.lock. The nixpkgs bumps of dependabot do neither,
+  # so the changes get committed to their pull requests instead.
+  lint-generated:
+    name: lint / readme versions and formatting
     runs-on: ubuntu-latest
     env:
-      COMMIT_README: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && startsWith(github.head_ref, 'dependabot/nix/') }}
+      COMMIT_CHANGES: ${{ github.event.pull_request.user.login == 'dependabot[bot]' && startsWith(github.head_ref, 'dependabot/nix/') }}
     permissions:
       contents: write
     steps:
-      # A rerun after the merge finds the branch deleted. Its README got
+      # A rerun after the merge finds the branch deleted. Its files got
       # checked or updated before, so there is nothing left to do.
       - name: Resolve the branch to update
         id: branch
-        if: env.COMMIT_README == 'true'
+        if: env.COMMIT_CHANGES == 'true'
         env:
           HEAD_REF: ${{ github.head_ref }}
         run: |
@@ -325,16 +327,30 @@ jobs:
         if: steps.branch.outputs.skip != 'true'
       - if: steps.branch.outputs.skip != 'true'
         run: make update-readme
-      - if: env.COMMIT_README == 'true' && steps.branch.outputs.skip != 'true'
+      - if: steps.branch.outputs.skip != 'true'
+        run: nix shell --inputs-from . nixpkgs#prettier -c prettier --write .
+      - if: env.COMMIT_CHANGES == 'true' && steps.branch.outputs.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet README.md; then
-            git commit -m "Update the README versions" README.md
+          if ! git diff --quiet; then
+            git commit -am "Update the README versions and formatting"
             git push
           fi
       - if: steps.branch.outputs.skip != 'true'
-        run: git diff --exit-code README.md
+        run: git diff --exit-code
+
+  lint-markdown:
+    name: lint / markdown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+      - run: nix shell --inputs-from . nixpkgs#markdownlint-cli2 -c make lint-markdown
 
   lint-shellcheck:
     name: lint / shellcheck
@@ -770,7 +786,7 @@ jobs:
           wait "$KUBERNIX_PID" || rc=$?
           echo "kubernix exited with $rc after SIGTERM"
           # An aborted bootstrap exits with 1, a cluster which came up before
-          # the signal with 0 (see the exit codes in the README). Anything
+          # the signal with 0 (see the exit codes in docs/stability.md). Anything
           # else, like 101 of a panic, is a failure.
           if grep -q 'Everything is up and running' "$RUNNER_TEMP/abort.log"; then
             echo "::warning::The cluster came up before the abort"
