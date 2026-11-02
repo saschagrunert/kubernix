@@ -79,11 +79,7 @@ impl Crio {
         let node_name = Node::name(config, network, node);
 
         let paths = RuntimePaths::resolve(config)?;
-        let conmon = if config.multi_node() && !config.is_rootless() {
-            String::new()
-        } else {
-            System::find_executable("conmon")?.display().to_string()
-        };
+        let conmon = System::find_executable("conmon")?.display().to_string();
 
         let dir = Self::path(config, network, node);
         let config_dir = dir.join("crio.conf.d");
@@ -111,13 +107,9 @@ impl Crio {
         let args: &[&str] = &[&config_dir_arg];
 
         let mut process = if config.multi_node() && !config.is_rootless() {
-            // Run inside a container, resolve CNI plugin dir from $PATH at runtime
+            // Run inside a container
             let identifier = format!("CRI-O {}", node_name);
-            let plugin_dir_arg =
-                r#"--cni-plugin-dir=$(dirname $(which loopback || echo loopback_not_found))"#
-                    .to_string();
-            let container_args: &[&str] = &[&config_dir_arg, &plugin_dir_arg];
-            Container::start(config, &dir, &identifier, CRIO, &node_name, container_args)?
+            Container::start(config, &dir, &identifier, CRIO, &node_name, args)?
         } else {
             Process::start(&dir, "CRI-O", CRIO, args)?
         };
@@ -145,17 +137,10 @@ impl Crio {
         conmon: &str,
         paths: &RuntimePaths,
     ) -> String {
-        // CRI-O validates runtime_path with stat; empty lets it resolve the
-        // handler name from $PATH inside the node container.
         let runtimes = paths
             .runtimes
             .iter()
             .map(|(runtime, path)| {
-                let path = if config.multi_node() && !config.is_rootless() {
-                    ""
-                } else {
-                    path.as_str()
-                };
                 format!(
                     "[crio.runtime.runtimes.{name}]\n\
                      runtime_path = \"{path}\"\n\
@@ -336,15 +321,6 @@ mod tests {
             Some("runc")
         );
         assert!(v["crio"]["runtime"]["runtimes"].get("crun").is_some());
-        Ok(())
-    }
-
-    #[test]
-    fn render_config_multi_node_resolves_from_path() -> Result<()> {
-        let v = render(&Config::parse_from(["kubernix", "--nodes=2"]))?;
-        let runtimes = &v["crio"]["runtime"]["runtimes"];
-        assert_eq!(runtimes["crun"]["runtime_path"].as_str(), Some(""));
-        assert_eq!(runtimes["runc"]["runtime_path"].as_str(), Some(""));
         Ok(())
     }
 

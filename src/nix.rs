@@ -3,17 +3,20 @@
 //! Manages the `nix develop` shell that provides all runtime
 //! dependencies (etcd, kubernetes, CRI runtimes, etc.) at pinned
 //! versions. Re-executes the kubernix binary inside the Nix shell,
-//! forwarding all CLI options.
+//! forwarding all CLI options. The evaluated environment gets cached in a
+//! Nix profile, which avoids evaluating the flake on every start and keeps
+//! its store paths from being garbage collected.
 
-use crate::{Config, config::Addon, system::System};
+use crate::{Config, config::Addon, content_hash, system::System};
+use ::nix::fcntl::{Flock, FlockArg};
 use anyhow::{Context, Result, bail};
 use log::{debug, info};
 use std::{
     env::{current_exe, var},
-    fs::{self, create_dir_all},
+    fs::{self, File, OpenOptions, create_dir_all},
     os::unix::process::CommandExt,
-    path::Path,
-    process::Command,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
 };
 
 /// Handles Nix shell bootstrapping and command execution.
@@ -26,6 +29,14 @@ impl Nix {
     /// Files of the generated Nix environment.
     pub const FILES: [&'static str; 4] = ["flake.nix", "flake.lock", "packages.nix", "overlay.nix"];
     const NIX_ENV: &'static str = "IN_NIX";
+
+    /// The directory of the cached environment. It cannot be part of the
+    /// Nix directory, since the flake consists of all files in there.
+    const PROFILE_DIR: &'static str = "nix-profile";
+
+    /// The lock file which serializes the creation of the cached
+    /// environment.
+    const PROFILE_LOCK: &'static str = "nix-profile.lock";
 
     /// The `.dockerignore` content of older versions.
     const DOCKERIGNORE: &'static str = "nix/.git\n";
@@ -128,14 +139,13 @@ impl Nix {
     /// Each element in `args` is passed as a separate OS argument to
     /// `nix develop --command`, avoiding shell interpretation.
     pub fn exec(config: &Config, args: &[&str]) -> Result<()> {
-        let nix_dir = config.root().join(Self::DIR);
-        let flake_ref = format!("path:{}", nix_dir.display());
+        let nix = System::find_executable("nix")?;
+        let profile = Self::profile(config, &nix)?;
 
-        let mut cmd = Command::new(System::find_executable("nix")?);
+        let mut cmd = Command::new(&nix);
         cmd.env(Nix::NIX_ENV, "true")
             .arg("develop")
-            .arg(&flake_ref)
-            .arg("--no-update-lock-file")
+            .arg(&profile)
             .arg("--log-format")
             .arg("raw")
             .arg("--command");
@@ -143,6 +153,114 @@ impl Nix {
             cmd.arg(arg);
         }
         Err(cmd.exec()).context("Unable to run nix develop")
+    }
+
+    /// The cached environment of the Nix directory, which gets created if it
+    /// does not exist or is unusable. Its path contains a hash of the
+    /// environment files, so a changed environment results in a new one.
+    /// The profile is a garbage collector root for the store paths of the
+    /// environment.
+    fn profile(config: &Config, nix: &Path) -> Result<PathBuf> {
+        let profile = Self::profile_path(config.root())?;
+        if Self::is_usable(&profile) {
+            debug!("Using cached Nix environment '{}'", profile.display());
+            return Ok(profile);
+        }
+
+        // A new shell may race with the start of the cluster. The lock of
+        // the run directory cannot be used for that, since the running
+        // cluster holds it.
+        let _lock = Self::lock_profile(config.root())?;
+        if Self::is_usable(&profile) {
+            return Ok(profile);
+        }
+        if profile.symlink_metadata().is_ok() {
+            info!("Cached Nix environment is unusable, recreating it");
+        }
+
+        // Remove the profiles of previous environments, which allows the
+        // garbage collector to remove their store paths.
+        let dir = config.root().join(Self::PROFILE_DIR);
+        if dir.exists() {
+            fs::remove_dir_all(&dir)
+                .with_context(|| format!("Unable to remove '{}'", dir.display()))?;
+        }
+        create_dir_all(&dir).with_context(|| format!("Unable to create '{}'", dir.display()))?;
+
+        info!("Evaluating the Nix environment");
+        let nix_dir = config.root().join(Self::DIR);
+        let status = Command::new(nix)
+            .arg("print-dev-env")
+            .arg("--profile")
+            .arg(&profile)
+            .arg(format!("path:{}", nix_dir.display()))
+            .arg("--no-update-lock-file")
+            .arg("--log-format")
+            .arg("raw")
+            .stdout(Stdio::null())
+            .status()
+            .context("Unable to run nix print-dev-env")?;
+        if !status.success() {
+            bail!("Unable to evaluate the Nix environment (exit: {})", status);
+        }
+        if !Self::is_usable(&profile) {
+            bail!(
+                "Created Nix environment '{}' is unusable",
+                profile.display()
+            );
+        }
+        Ok(profile)
+    }
+
+    /// Check whether `nix develop` is able to enter the provided profile:
+    /// it has to point to the JSON of a development environment, whose
+    /// `PATH` entries in the Nix store exist.
+    fn is_usable(profile: &Path) -> bool {
+        let Ok(content) = fs::read(profile) else {
+            return false;
+        };
+        let Ok(env) = serde_json::from_slice::<serde_json::Value>(&content) else {
+            return false;
+        };
+        env["variables"]["PATH"]["value"]
+            .as_str()
+            .is_some_and(|path| {
+                path.split(':')
+                    .filter(|dir| dir.starts_with("/nix/store/"))
+                    .all(|dir| Path::new(dir).exists())
+            })
+    }
+
+    /// Take the exclusive lock for creating the cached environment, which
+    /// waits for other instances creating it.
+    fn lock_profile(root: &Path) -> Result<Flock<File>> {
+        let path = root.join(Self::PROFILE_LOCK);
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)
+            .with_context(|| format!("Unable to open lock file '{}'", path.display()))?;
+        Flock::lock(file, FlockArg::LockExclusive)
+            .map_err(|(_, e)| e)
+            .with_context(|| format!("Unable to lock '{}'", path.display()))
+    }
+
+    /// The path of the cached environment for the current files of the Nix
+    /// directory.
+    fn profile_path(root: &Path) -> Result<PathBuf> {
+        let nix_dir = root.join(Self::DIR);
+        let mut inputs = vec![];
+        for file in Self::FILES {
+            let path = nix_dir.join(file);
+            inputs.push(
+                fs::read(&path).with_context(|| format!("Unable to read '{}'", path.display()))?,
+            );
+        }
+        let inputs: Vec<&[u8]> = inputs.iter().map(Vec::as_slice).collect();
+        Ok(root
+            .join(Self::PROFILE_DIR)
+            .join(format!("{:016x}", content_hash(&inputs))))
     }
 
     /// Render all files of the Nix environment as (file name, content).
@@ -273,6 +391,63 @@ mod tests {
         fs::remove_file(dir.join("a.nix"))?;
         assert!(Nix::write_files(&dir, &changed)?);
         assert!(dir.join("a.nix").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn profile_path_depends_on_files() -> Result<()> {
+        let root = tempdir()?;
+        let dir = root.path().join(Nix::DIR);
+        let files: Vec<(&str, String)> = Nix::FILES
+            .iter()
+            .map(|name| (*name, format!("{} content", name)))
+            .collect();
+        Nix::write_files(&dir, &files)?;
+        let profile = Nix::profile_path(root.path())?;
+        assert!(profile.starts_with(root.path().join(Nix::PROFILE_DIR)));
+        assert_eq!(profile, Nix::profile_path(root.path())?);
+
+        fs::write(dir.join("overlay.nix"), "changed")?;
+        assert_ne!(profile, Nix::profile_path(root.path())?);
+
+        fs::remove_file(dir.join("flake.lock"))?;
+        assert!(Nix::profile_path(root.path()).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn is_usable_checks_environment() -> Result<()> {
+        let dir = tempdir()?;
+        let profile = dir.path().join("profile");
+        assert!(!Nix::is_usable(&profile));
+
+        fs::write(&profile, "no json")?;
+        assert!(!Nix::is_usable(&profile));
+
+        fs::write(&profile, r#"{"variables": {}}"#)?;
+        assert!(!Nix::is_usable(&profile));
+
+        let env = |path: &str| {
+            format!(
+                r#"{{"variables": {{"PATH": {{"type": "exported", "value": "{}"}}}}}}"#,
+                path
+            )
+        };
+        fs::write(&profile, env("/usr/bin:/bin"))?;
+        assert!(Nix::is_usable(&profile));
+
+        fs::write(&profile, env("/nix/store/0000-missing/bin:/bin"))?;
+        assert!(!Nix::is_usable(&profile));
+        Ok(())
+    }
+
+    #[test]
+    fn lock_profile_creates_lock_file() -> Result<()> {
+        let root = tempdir()?;
+        let lock = Nix::lock_profile(root.path())?;
+        assert!(root.path().join(Nix::PROFILE_LOCK).exists());
+        drop(lock);
+        Nix::lock_profile(root.path())?;
         Ok(())
     }
 

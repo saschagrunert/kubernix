@@ -19,13 +19,14 @@
 //! 1. Write the configuration into the run root (`kubernix-run` by
 //!    default) and lock it, so that only one instance uses it. Then write
 //!    a Nix flake into it and re-execute the binary inside `nix develop`,
-//!    forwarding all options.
+//!    forwarding all options. The evaluated environment is cached as a Nix
+//!    profile, which is re-entered as long as the flake files are unchanged.
 //! 2. If not started as root, re-execute again inside `rootlesskit`, which
 //!    provides a user namespace where all components run as fake root
 //!    (rootless mode).
 //! 3. Prepare the system: load the required kernel modules (root mode
 //!    only) and set the network sysctls, which root mode skips inside a
-//!    container. With multiple nodes in root mode, build the node
+//!    container. With multiple nodes in root mode, prepare the node
 //!    container image. Then generate the certificates, kubeconfigs and the
 //!    encryption config, and start the components in boot phases: etcd,
 //!    the API server, the controllers together with the CRI runtimes and
@@ -35,9 +36,10 @@
 //!    `--no-shell`, and stop all components when it exits.
 //!
 //! With more than one node, every node gets its own CRI runtime and kubelet.
-//! In root mode, they run inside containers (podman by default), while in
-//! rootless mode they run as processes inside the rootlesskit namespaces,
-//! every kubelet in its own mount namespace.
+//! In root mode, they run inside containers (podman by default), which
+//! mount the Nix store of the host read-only, while in rootless mode they
+//! run as processes inside the rootlesskit namespaces, every kubelet in its
+//! own mount namespace.
 //!
 //! `Kubernix::new_shell` spawns an additional shell for a running cluster,
 //! which enters the namespaces of the cluster via `nsenter` in rootless
@@ -92,6 +94,19 @@ pub(crate) fn write_if_changed(path: &std::path::Path, content: &str) -> anyhow:
     std::fs::write(path, content)
         .with_context(|| format!("Unable to write '{}'", path.display()))?;
     Ok(())
+}
+
+/// A hash of the provided inputs, used to detect changed content. FNV-1a,
+/// stable across Rust versions and platforms.
+pub(crate) fn content_hash(inputs: &[&[u8]]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for input in inputs {
+        for byte in (input.len() as u64).to_le_bytes().iter().chain(*input) {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    hash
 }
 
 use crate::nix::Nix;
@@ -942,6 +957,14 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::tempdir;
+
+    #[test]
+    fn content_hash_depends_on_inputs() {
+        let a = content_hash(&[b"crun", b"df"]);
+        assert_eq!(a, content_hash(&[b"crun", b"df"]));
+        assert_ne!(a, content_hash(&[b"crun runc", b"df"]));
+        assert_ne!(a, content_hash(&[b"crund", b"f"]));
+    }
 
     #[test]
     fn write_if_changed_creates_new_file() {

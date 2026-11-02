@@ -20,11 +20,16 @@ impl Podman {
         config.container_runtime() == Self::EXECUTABLE
     }
 
-    /// Retrieve the podman build args
-    pub fn build_args(config: &Config, policy_json: &Path) -> Result<Vec<String>> {
+    /// Retrieve the podman args for a command which verifies image
+    /// signatures, like `build` or `import`.
+    pub fn signature_args(
+        config: &Config,
+        command: &str,
+        policy_json: &Path,
+    ) -> Result<Vec<String>> {
         let mut args = Self::default_args(config)?;
         args.extend(vec![
-            "build".into(),
+            command.into(),
             format!("--signature-policy={}", policy_json.display()),
         ]);
 
@@ -67,10 +72,10 @@ mod tests {
 
     #[test]
     #[ignore = "requires conmon in $PATH"]
-    fn build_args_success() -> Result<()> {
+    fn signature_args_success() -> Result<()> {
         let c = test_config()?;
         let p = PathBuf::from("policy.json");
-        Podman::build_args(&c, &p)?;
+        Podman::signature_args(&c, "build", &p)?;
         Ok(())
     }
 
