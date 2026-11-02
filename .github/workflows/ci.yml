@@ -325,8 +325,6 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install cfssl
-        run: contrib/install-cfssl
       - run: cargo test --lib
 
   test-unit:
@@ -345,8 +343,6 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install cfssl
-        run: contrib/install-cfssl
       - name: Generate code coverage
         run: cargo llvm-cov --lib --lcov --output-path lcov.info
       - name: Upload Results

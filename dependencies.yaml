@@ -1,11 +1,5 @@
 ---
 dependencies:
-  - name: cfssl
-    version: 1.7.1
-    refPaths:
-      - path: contrib/install-cfssl
-        match: CFSSL_VERSION=
-
   - name: zeitgeist
     version: 0.8.0
     refPaths:

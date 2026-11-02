@@ -111,6 +111,28 @@ pub(crate) fn content_hash(inputs: &[&[u8]]) -> u64 {
     hash
 }
 
+/// Write `content` to `path`, which only its owner can read, for example
+/// because it contains a private key.
+pub(crate) fn write_private(path: &std::path::Path, content: &[u8]) -> anyhow::Result<()> {
+    use std::{
+        fs::{OpenOptions, Permissions},
+        io::Write,
+        os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    };
+    OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)
+        .and_then(|mut f| {
+            // The mode only applies to newly created files
+            f.set_permissions(Permissions::from_mode(0o600))?;
+            f.write_all(content)
+        })
+        .with_context(|| format!("Unable to write '{}'", path.display()))
+}
+
 use crate::nix::Nix;
 use component::{ClusterContext, ComponentRegistry};
 use container::Container;

@@ -1,7 +1,7 @@
 //! Kubectl command wrapper.
 //!
 //! Provides a typed interface around the `kubectl` binary for applying
-//! manifests, configuring kubeconfig files, and waiting for pod readiness.
+//! manifests and waiting for pod readiness.
 
 use crate::process::READINESS_TIMEOUT;
 use anyhow::{Context, Result, bail};
@@ -65,14 +65,6 @@ impl Kubectl {
             bail!("kubectl command failed");
         }
         Ok(output)
-    }
-
-    /// Run kubectl config
-    pub fn config(&self, args: &[&str]) -> Result<()> {
-        let mut final_args = vec!["config"];
-        final_args.extend(args);
-        self.execute(&final_args)?;
-        Ok(())
     }
 
     /// Run kubectl apply

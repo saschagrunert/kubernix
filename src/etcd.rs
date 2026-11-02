@@ -93,7 +93,7 @@ mod tests {
         assert_eq!(c.phase(), Phase::Infrastructure);
     }
 
-    /// Integration test: requires etcd and cfssl binaries in $PATH.
+    /// Integration test: requires the etcd binary in $PATH.
     /// Run with: cargo test -- --ignored
     #[test]
     #[ignore]

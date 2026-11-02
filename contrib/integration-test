@@ -199,6 +199,88 @@ fi
 echo "Service and external networks are reachable"
 kubectl delete pod service-test --wait=false
 
+if [ "$EXPECTED_NODES" -ge 2 ]; then
+  echo "Asserting pods on different nodes reach each other without NAT..."
+  read -r SERVER_NODE CLIENT_NODE _ <<<"$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}')"
+  # The server responds with the source address of the request, which is
+  # the client pod IP if the traffic between the nodes is not masqueraded.
+  kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cross-node-server
+spec:
+  nodeName: $SERVER_NODE
+  containers:
+    - name: busybox
+      image: registry.k8s.io/e2e-test-images/busybox:1.36.1-1
+      command:
+        - sh
+        - -c
+        - |
+          mkdir -p /www/cgi-bin
+          printf '#!/bin/sh\necho Content-Type: text/plain\necho\necho "\$REMOTE_ADDR"\n' >/www/cgi-bin/ip
+          chmod +x /www/cgi-bin/ip
+          exec httpd -f -p 0.0.0.0:8080 -h /www
+      readinessProbe:
+        tcpSocket:
+          port: 8080
+        periodSeconds: 2
+EOF
+  if ! kubectl wait --for=condition=Ready pod/cross-node-server --timeout=120s; then
+    kubectl describe pod cross-node-server || true
+    exit 1
+  fi
+  SERVER_IP=$(kubectl get pod cross-node-server -o jsonpath='{.status.podIP}')
+  kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cross-node-client
+spec:
+  nodeName: $CLIENT_NODE
+  restartPolicy: Never
+  containers:
+    - name: busybox
+      image: registry.k8s.io/e2e-test-images/busybox:1.36.1-1
+      env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      command:
+        - sh
+        - -c
+        - |
+          for _ in 1 2 3 4 5; do
+            if SOURCE=\$(wget -qO- -T 5 http://$SERVER_IP:8080/cgi-bin/ip); then
+              echo "\$POD_IP \$SOURCE"
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
+EOF
+  PHASE=""
+  for _ in $(seq 60); do
+    PHASE=$(kubectl get pod cross-node-client -o jsonpath='{.status.phase}' || true)
+    [[ "$PHASE" = Succeeded || "$PHASE" = Failed ]] && break
+    sleep 2
+  done
+  # The client prints its own pod IP and the source address the server saw
+  read -r CLIENT_IP SOURCE_IP _ <<<"$(kubectl logs cross-node-client || true)"
+  if [ "$PHASE" != Succeeded ] || [ -z "$CLIENT_IP" ] || [ "$SOURCE_IP" != "$CLIENT_IP" ]; then
+    echo "FAIL: client pod $CLIENT_IP on $CLIENT_NODE reached server pod $SERVER_IP on $SERVER_NODE" \
+      "from '$SOURCE_IP' (client phase '$PHASE')"
+    kubectl get pods -o wide || true
+    kubectl describe pod cross-node-client || true
+    kubectl logs cross-node-server || true
+    exit 1
+  fi
+  echo "Pod $CLIENT_IP on $CLIENT_NODE reached pod $SERVER_IP on $SERVER_NODE without NAT"
+  kubectl delete pod cross-node-server cross-node-client --wait=false
+fi
+
 echo "Asserting a pod with RuntimeClass $OTHER_OCI_RUNTIME uses it..."
 kubectl apply -f - <<EOF
 apiVersion: node.k8s.io/v1

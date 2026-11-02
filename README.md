@@ -42,7 +42,6 @@ The following technology stack is currently being used:
 
 | Application     | Version  |
 | --------------- | -------- |
-| cfssl           | v1.6.5   |
 | cni-plugins     | v1.9.1   |
 | conmon          | v2.2.1   |
 | conntrack-tools | v1.4.9   |
