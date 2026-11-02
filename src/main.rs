@@ -1,27 +1,33 @@
 use anyhow::Result;
-use kubernix::{Config, Kubernix, Logger};
+use kubernix::{Config, EXIT_NOT_RUNNING, Kubernix, Logger, SubCommand};
 use std::process::exit;
 
 pub fn main() {
-    if let Err(e) = run() {
-        let chain: Vec<String> = e.chain().map(|x| x.to_string()).collect();
-        Logger::error(&chain[0]);
-        for (i, cause) in chain.iter().enumerate().skip(1) {
-            Logger::error(&format!("  {}: {}", i, cause));
+    match run() {
+        Ok(code) => exit(code),
+        Err(e) => {
+            let chain: Vec<String> = e.chain().map(|x| x.to_string()).collect();
+            Logger::error(&chain[0]);
+            for (i, cause) in chain.iter().enumerate().skip(1) {
+                Logger::error(&format!("  {}: {}", i, cause));
+            }
+            exit(1);
         }
-        exit(1);
     }
 }
 
-fn run() -> Result<()> {
+/// Run kubernix and return the exit code.
+fn run() -> Result<i32> {
     // Parse CLI arguments
     let config = Config::from_args();
 
-    if config.subcommand().is_some() {
-        // Spawn only a new shell
-        Kubernix::new_shell(config)
-    } else {
+    let running = match config.subcommand() {
         // Bootstrap the cluster
-        Kubernix::start(config)
-    }
+        None => Kubernix::start(config).map(|()| true)?,
+        // Spawn only a new shell or run a command in it
+        Some(SubCommand::Shell { .. }) => Kubernix::new_shell(config).map(|()| true)?,
+        Some(SubCommand::Stop { .. }) => Kubernix::stop_cluster(config)?,
+        Some(SubCommand::Status { .. }) => Kubernix::status(config)?,
+    };
+    Ok(if running { 0 } else { EXIT_NOT_RUNNING })
 }

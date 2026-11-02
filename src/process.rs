@@ -16,13 +16,17 @@ use nix::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     ffi::{CStr, CString},
     fs::{self, File, create_dir_all},
     io::{BufRead, BufReader},
     os::unix::{ffi::OsStrExt, process::CommandExt},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::mpsc::{Receiver, SyncSender, sync_channel},
+    sync::{
+        Mutex,
+        mpsc::{Receiver, SyncSender, sync_channel},
+    },
     thread::{JoinHandle, sleep, spawn},
     time::{Duration, Instant},
 };
@@ -59,6 +63,105 @@ pub type ProcessState = Result<Started>;
 
 /// Default timeout in seconds for process readiness and pod polling.
 pub const READINESS_TIMEOUT: u64 = 120;
+
+/// The process groups of all started processes which have not been
+/// stopped yet, with the start time of their leader.
+static GROUPS: Mutex<BTreeMap<i32, Option<u64>>> = Mutex::new(BTreeMap::new());
+
+/// The process groups of all running processes, with the start time of
+/// their leader.
+pub fn running_groups() -> Vec<(i32, Option<u64>)> {
+    GROUPS
+        .lock()
+        .map(|g| g.iter().map(|(pid, start)| (*pid, *start)).collect())
+        .unwrap_or_default()
+}
+
+/// Kill the provided process groups immediately. A group is skipped if
+/// the PID of its leader belongs to a process with another start time,
+/// since the leader exited and its PID got reused. Without a leader, the
+/// PID cannot be reused as long as the group has members.
+pub fn kill_groups(groups: &[(i32, Option<u64>)]) {
+    for (pid, start) in groups {
+        if let (Some(start), Some(stat)) = (start, ProcStat::read(*pid))
+            && stat.start_time != *start
+        {
+            debug!("Skipping process group {}, its PID got reused", pid);
+            continue;
+        }
+        debug!("Killing process group {}", pid);
+        let _ = kill(Pid::from_raw(-pid), Signal::SIGKILL);
+    }
+}
+
+/// Kill the process groups of all running processes immediately, for
+/// example to force quit during the cleanup.
+pub fn kill_all() {
+    kill_groups(&running_groups());
+}
+
+fn set_running(pid: i32, running: bool) {
+    if let Ok(mut groups) = GROUPS.lock() {
+        if running {
+            groups.insert(pid, ProcStat::read(pid).map(|s| s.start_time));
+        } else {
+            groups.remove(&pid);
+        }
+    }
+}
+
+/// The fields of `/proc/<pid>/stat` used by kubernix.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ProcStat {
+    /// The process state, for example `R`, `S` or `Z` for a zombie
+    pub state: char,
+    /// The PID of the parent process
+    pub ppid: i32,
+    /// The start time after boot in clock ticks
+    pub start_time: u64,
+}
+
+impl ProcStat {
+    /// Read the stat of the process, if it exists.
+    pub fn read(pid: i32) -> Option<Self> {
+        Self::parse(&fs::read_to_string(format!("/proc/{}/stat", pid)).ok()?)
+    }
+
+    /// Parse the content of `/proc/<pid>/stat`. The command name may
+    /// contain spaces and parentheses, so the fields start after the last
+    /// closing parenthesis.
+    fn parse(content: &str) -> Option<Self> {
+        let mut fields = content.get(content.rfind(')')? + 1..)?.split_whitespace();
+        let state = fields.next()?.chars().next()?;
+        let ppid = fields.next()?.parse().ok()?;
+        // The start time is field 22, the parent PID field 4
+        let start_time = fields.nth(17)?.parse().ok()?;
+        Some(Self {
+            state,
+            ppid,
+            start_time,
+        })
+    }
+
+    /// Returns true if the process exists and is not a zombie.
+    pub fn alive(pid: i32) -> bool {
+        Self::read(pid).is_some_and(|s| s.state != 'Z')
+    }
+
+    /// Returns true if `ancestor` is a parent or grandparent (and so on) of
+    /// the current process.
+    pub fn is_ancestor(ancestor: i32) -> bool {
+        let mut pid = i32::try_from(std::process::id()).unwrap_or_default();
+        while pid > 1 {
+            match Self::read(pid) {
+                Some(stat) if stat.ppid == ancestor => return true,
+                Some(stat) => pid = stat.ppid,
+                None => return false,
+            }
+        }
+        false
+    }
+}
 
 macro_rules! stoppable {
     ($ty:ty) => {
@@ -171,6 +274,9 @@ impl Process {
         let c = command.to_owned();
         let n = identifier.to_owned();
         let pid = child.id();
+        if let Ok(pid) = i32::try_from(pid) {
+            set_running(pid, true);
+        }
         let lf = log_file.clone();
         let watch = spawn(move || {
             // Wait for the process to exit
@@ -308,7 +414,9 @@ impl Stoppable for Process {
                 );
                 let _ = kill(pgid, Signal::SIGKILL);
             }
-            if handle.join().is_err() {
+            let joined = handle.join();
+            set_running(pid, false);
+            if joined.is_err() {
                 bail!(
                     "Unable to stop process {} (via {})",
                     self.name,
@@ -427,6 +535,67 @@ mod tests {
         let mut p = Process::start(d.path(), "", "sleep", &["500"])?;
         assert!(!p.died());
         p.stop()?;
+        Ok(())
+    }
+
+    #[test]
+    fn running_groups_tracks_processes() -> Result<()> {
+        let tracked = |pid| running_groups().iter().any(|(p, _)| *p == pid);
+        let d = tempdir()?;
+        let mut p = Process::start(d.path(), "", "sleep", &["500"])?;
+        let pid = i32::try_from(p.pid)?;
+        let start = ProcStat::read(pid).context("no stat")?.start_time;
+        assert!(running_groups().contains(&(pid, Some(start))));
+
+        // A different start time means that the PID got reused
+        kill_groups(&[(pid, Some(start + 1))]);
+        sleep(Duration::from_millis(200));
+        assert!(!p.died());
+
+        kill_groups(&[(pid, Some(start))]);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !p.died() {
+            assert!(Instant::now() < deadline, "process group not killed");
+            sleep(Duration::from_millis(10));
+        }
+        assert!(tracked(pid));
+
+        p.stop()?;
+        assert!(!tracked(pid));
+        Ok(())
+    }
+
+    #[test]
+    fn proc_stat_parse() {
+        let stat = "42 (a) b (c)) S 1 42 42 0 -1 4194560 100 0 0 0 0 0 0 0 20 0 1 0 12345 \
+                    8192 100 18446744073709551615";
+        assert_eq!(
+            ProcStat::parse(stat),
+            Some(ProcStat {
+                state: 'S',
+                ppid: 1,
+                start_time: 12345
+            })
+        );
+        assert_eq!(ProcStat::parse("42 (a) Z"), None);
+        assert_eq!(ProcStat::parse("garbage"), None);
+    }
+
+    #[test]
+    fn proc_stat_alive() {
+        assert!(ProcStat::alive(
+            i32::try_from(std::process::id()).unwrap_or_default()
+        ));
+        assert!(!ProcStat::alive(i32::MAX));
+    }
+
+    #[test]
+    fn proc_stat_is_ancestor() -> Result<()> {
+        let pid = i32::try_from(std::process::id())?;
+        let parent = ProcStat::read(pid).context("no stat")?.ppid;
+        assert!(ProcStat::is_ancestor(parent));
+        assert!(!ProcStat::is_ancestor(pid));
+        assert!(!ProcStat::is_ancestor(i32::MAX));
         Ok(())
     }
 

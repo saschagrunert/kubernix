@@ -57,6 +57,12 @@ pub fn clear_interrupt() {
     flags().interrupt.store(false, Ordering::Relaxed);
 }
 
+/// Forget all received signals, for example once the cleanup started.
+pub fn reset() {
+    flags().terminate.store(false, Ordering::Relaxed);
+    clear_interrupt();
+}
+
 /// Fail if a termination signal has been received.
 pub fn check() -> Result<()> {
     if requested() {

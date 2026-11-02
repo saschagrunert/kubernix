@@ -81,6 +81,9 @@ assert_runtime() {
 }
 
 echo "Asserting all nodes are Ready..."
+# Nodes may still be NotReady for a moment after registering. The count
+# below fails on a timeout or a wrong number of nodes.
+kubectl wait --for=condition=Ready nodes --all --timeout=120s || true
 READY_COUNT=$(kubectl get nodes -o go-template='{{range .items}}{{range .status.conditions}}{{if eq .type "Ready"}}{{if eq .status "True"}}x{{end}}{{end}}{{end}}{{end}}' | wc -c)
 if [ "$READY_COUNT" -ne "$EXPECTED_NODES" ]; then
   echo "FAIL: expected $EXPECTED_NODES ready nodes, got $READY_COUNT"

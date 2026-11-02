@@ -391,11 +391,47 @@ impl Config {
 }
 
 /// Possible subcommands
-#[derive(Clone, ClapSubcommand, Deserialize, Serialize)]
+#[derive(Clone, ClapSubcommand, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub enum SubCommand {
-    /// Spawn an additional shell session
+    /// Spawn an additional shell session, or run a command in it
     #[command(name = "shell")]
-    Shell,
+    Shell {
+        #[arg(last = true, value_name = "COMMAND")]
+        /// The command to run instead of an interactive shell, after `--`
+        command: Vec<String>,
+    },
+
+    /// Stop the running cluster
+    #[command(name = "stop")]
+    Stop {
+        #[arg(
+            default_value = "180",
+            long = "timeout",
+            short = 't',
+            value_name = "SECONDS"
+        )]
+        /// The time to wait for the cleanup to finish
+        timeout: u64,
+    },
+
+    /// Show the status of the cluster
+    #[command(name = "status")]
+    Status {
+        #[arg(default_value = "text", long = "output", value_name = "FORMAT")]
+        /// The output format
+        output: OutputFormat,
+    },
+}
+
+/// Output format of `kubernix status`.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum OutputFormat {
+    /// Human-readable text (default)
+    #[default]
+    Text,
+    /// Machine-readable JSON
+    Json,
 }
 
 impl Config {
@@ -601,19 +637,33 @@ impl Config {
     /// since the existing cluster state depends on them. The other settings
     /// are taken from the stored configuration, unless they have been set
     /// explicitly. The root and the rootless mode are never taken from the
-    /// stored configuration.
+    /// stored configuration, except that `stop` and `status` can be used by
+    /// other users on a root cluster.
     fn merge(&mut self, mut stored: Config) -> Result<()> {
         let mode = |rootless| if rootless { "rootless" } else { "root" };
         if let Some(rootless) = stored.rootless
             && rootless != self.is_rootless()
         {
-            bail!(
-                "The run directory '{}' belongs to a {} cluster and cannot be used in {} mode, \
-                 use a different root or remove the run directory",
-                self.root().display(),
-                mode(rootless),
-                mode(self.is_rootless()),
-            )
+            match &self.subcommand {
+                // Reading the state of a root cluster works for other users
+                // as well, and stopping it fails with the sudo command if
+                // it runs.
+                Some(SubCommand::Stop { .. } | SubCommand::Status { .. }) if !rootless => {
+                    self.rootless = Some(false);
+                }
+                Some(SubCommand::Shell { .. }) if !rootless => bail!(
+                    "The kubernix cluster in '{}' runs as root, use '{}' to access it",
+                    self.root().display(),
+                    Self::sudo_command_line(),
+                ),
+                _ => bail!(
+                    "The run directory '{}' belongs to a {} cluster and cannot be used in {} mode, \
+                     use a different root or remove the run directory",
+                    self.root().display(),
+                    mode(rootless),
+                    mode(self.is_rootless()),
+                ),
+            }
         }
 
         stored.overlay = stored.overlay.map(Self::absolute);
@@ -653,6 +703,24 @@ impl Config {
             self.no_shell = stored.no_shell;
         }
         Ok(())
+    }
+
+    /// The command which runs the current kubernix command line as root.
+    pub(crate) fn sudo_command_line() -> String {
+        Self::sudo_command(
+            &std::env::current_exe().unwrap_or_else(|_| "kubernix".into()),
+            &std::env::args().skip(1).collect::<Vec<_>>(),
+        )
+    }
+
+    /// The command which runs kubernix with the provided arguments as
+    /// root, keeping the environment and the `PATH` to find Nix.
+    fn sudo_command(exe: &Path, args: &[String]) -> String {
+        let args: Vec<String> = std::iter::once(exe.display().to_string())
+            .chain(args.iter().cloned())
+            .map(|a| crate::Kubernix::shell_escape(&a))
+            .collect();
+        format!("sudo -E env \"PATH=$PATH\" {}", args.join(" "))
     }
 
     /// Validate option combinations which are not supported.
@@ -1286,5 +1354,90 @@ root = "root"
         // Configurations of older versions do not contain the mode
         stored.rootless = None;
         c.merge(stored)
+    }
+
+    #[test]
+    fn merge_suggests_sudo_for_root_cluster() -> Result<()> {
+        let mut stored = test_config()?;
+        stored.set_rootless(false);
+        let mut c = test_config()?;
+        c.set_rootless(true);
+        let err = c.merge(stored.clone()).unwrap_err().to_string();
+        assert!(err.contains("belongs to a root cluster"), "{}", err);
+
+        c.subcommand = Some(SubCommand::Shell { command: vec![] });
+        let err = c.merge(stored.clone()).unwrap_err().to_string();
+        assert!(err.contains("runs as root, use 'sudo -E env"), "{}", err);
+
+        // Stop and status work on the root cluster, for example to report
+        // that it is stopped
+        for subcommand in [
+            SubCommand::Stop { timeout: 1 },
+            SubCommand::Status {
+                output: OutputFormat::Text,
+            },
+        ] {
+            c.set_rootless(true);
+            c.subcommand = Some(subcommand);
+            c.merge(stored.clone())?;
+            assert!(!c.is_rootless());
+        }
+
+        // A rootless cluster cannot be used as root
+        stored.set_rootless(true);
+        c.set_rootless(false);
+        let err = c.merge(stored).unwrap_err().to_string();
+        assert!(err.contains("belongs to a rootless cluster"), "{}", err);
+        Ok(())
+    }
+
+    #[test]
+    fn sudo_command_escapes_args() {
+        let args = ["shell", "--", "sh", "-c", "echo 'hi'"].map(String::from);
+        assert_eq!(
+            Config::sudo_command(Path::new("/bin/kubernix"), &args),
+            r#"sudo -E env "PATH=$PATH" '/bin/kubernix' 'shell' '--' 'sh' '-c' 'echo '\''hi'\'''"#
+        );
+    }
+
+    #[test]
+    fn subcommands_from_args() -> Result<()> {
+        let parse = |args: &[&str]| -> Result<Option<SubCommand>> {
+            Ok(Config::try_parse_from(args)?.subcommand)
+        };
+        assert_eq!(parse(&["kubernix"])?, None);
+        assert_eq!(
+            parse(&["kubernix", "shell"])?,
+            Some(SubCommand::Shell { command: vec![] })
+        );
+        assert_eq!(
+            parse(&["kubernix", "shell", "--", "kubectl", "get", "-o", "wide"])?,
+            Some(SubCommand::Shell {
+                command: ["kubectl", "get", "-o", "wide"].map(String::from).into()
+            })
+        );
+        assert!(parse(&["kubernix", "shell", "kubectl"]).is_err());
+        assert_eq!(
+            parse(&["kubernix", "stop"])?,
+            Some(SubCommand::Stop { timeout: 180 })
+        );
+        assert_eq!(
+            parse(&["kubernix", "stop", "--timeout=5", "--root=/tmp"])?,
+            Some(SubCommand::Stop { timeout: 5 })
+        );
+        assert_eq!(
+            parse(&["kubernix", "status"])?,
+            Some(SubCommand::Status {
+                output: OutputFormat::Text
+            })
+        );
+        assert_eq!(
+            parse(&["kubernix", "status", "--output", "json"])?,
+            Some(SubCommand::Status {
+                output: OutputFormat::Json
+            })
+        );
+        assert!(parse(&["kubernix", "status", "--output", "yaml"]).is_err());
+        Ok(())
     }
 }
