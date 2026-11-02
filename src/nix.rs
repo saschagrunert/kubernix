@@ -20,6 +20,7 @@ use std::{
 pub struct Nix;
 
 impl Nix {
+    /// Directory of the generated Nix environment inside the run root.
     pub const DIR: &'static str = "nix";
 
     /// Files of the generated Nix environment.

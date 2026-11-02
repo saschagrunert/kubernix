@@ -1,8 +1,9 @@
 //! Multi-node container management.
 //!
 //! Handles building the base container image and running cluster
-//! components inside containers for multi-node setups. Each container
-//! shares the host network namespace and mounts the runtime root directory.
+//! components inside containers for multi-node setups in root mode. Each
+//! container shares the host network namespace and mounts the runtime root
+//! directory.
 
 use crate::{Config, nix::Nix, podman::Podman, process::Process, system::System, write_if_changed};
 use anyhow::{Context, Result, bail};

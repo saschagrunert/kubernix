@@ -1,8 +1,9 @@
 //! CRI-O container runtime component.
 //!
 //! Manages CRI-O instances that provide the container runtime interface
-//! for kubelet. In multi-node mode, each CRI-O instance runs inside its
-//! own container with an isolated CNI network configuration.
+//! for kubelet. Each node gets its own instance with a separate CNI
+//! network configuration. In multi-node root mode, each instance runs
+//! inside its own node container.
 
 use crate::{
     Config,

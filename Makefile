@@ -54,7 +54,7 @@ help: ## Display this help.
 ##@ Nix targets:
 
 .PHONY: nix-update
-nix-update: ## Update pinned nixpkgs to latest nixpkgs-unstable.
+nix-update: ## Update the pinned nixpkgs to the latest nixpkgs-unstable and the README versions.
 	nix flake update nixpkgs
 	$(MAKE) update-readme
 
@@ -148,12 +148,12 @@ lint: lint-clippy lint-rustfmt lint-audit lint-deny lint-dependencies lint-shell
 ##@ Run targets:
 
 .PHONY: run
-run: build-release ## Run kubernix rootless, or as root with SUDO="sudo -E".
+run: build-release ## Run kubernix rootless, or as root with SUDO="sudo -E", pass options via ARGS.
 	$(check_root_owned)
 	$(KUBERNIX)
 
 .PHONY: shell
-shell: build-release ## Run kubernix with a shell.
+shell: build-release ## Spawn an additional shell for a running kubernix cluster.
 	$(check_root_owned)
 	$(KUBERNIX) shell
 
@@ -178,4 +178,4 @@ test-coverage: ## Generate local LCOV coverage report (requires cargo-llvm-cov).
 	cargo llvm-cov --lib --lcov --output-path lcov.info
 
 .PHONY: test
-test: test-unit ## Run all tests.
+test: test-unit ## Run the unit tests (integration tests run in CI).

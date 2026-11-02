@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Install cfssl and cfssljson into /usr/local/bin after verifying them against
+# the release checksums. The unit tests need them outside of the Nix
+# environment. Usage: install-cfssl [<version>]
 set -euo pipefail
 
 # cfssl version

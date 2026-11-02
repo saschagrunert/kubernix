@@ -14,6 +14,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Encryption-at-rest configuration file for the API server.
 #[must_use]
 pub struct EncryptionConfig {
     path: PathBuf,

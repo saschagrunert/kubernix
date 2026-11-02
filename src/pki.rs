@@ -1,8 +1,9 @@
 //! Public key infrastructure (PKI) for cluster TLS.
 //!
 //! Generates a self-signed CA and per-component certificates using
-//! `cfssl`/`cfssljson`. Certificates cover the API server, kubelet
-//! nodes, controller-manager, scheduler, proxy, and service accounts.
+//! `cfssl`/`cfssljson`. Certificates cover the admin user, API server,
+//! etcd, kubelet nodes, controller-manager, scheduler, proxy, and service
+//! accounts.
 
 use crate::{Config, kubeconfig::KubeConfig, network::Network, node::Node};
 use anyhow::{Context, Result, bail};
@@ -59,7 +60,7 @@ impl Pki {
         &self.etcd
     }
 
-    /// Per-node kubelet identities (system:node:<name>).
+    /// Per-node kubelet identities (`system:node:<name>`).
     pub fn kubelets(&self) -> &[Identity] {
         &self.kubelets
     }
