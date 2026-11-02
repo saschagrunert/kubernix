@@ -6,6 +6,7 @@
 use crate::{Config, node::Node};
 use anyhow::{Context, Result, bail};
 use log::{debug, info, warn};
+use nix::mount::{MsFlags, mount};
 use std::{
     env::{split_paths, var, var_os},
     fmt::Display,
@@ -24,61 +25,90 @@ impl System {
     /// Host paths recreated inside the rootlesskit mount namespace, because
     /// the copy-up keeps them owned by the host root and not writable.
     /// `/var/lib/cni` holds the CNI result cache of CRI-O and containerd,
-    /// which is not configurable, and `/run/netns` the pod network
-    /// namespaces of containerd.
+    /// which is not configurable, `/run/netns` the pod network namespaces
+    /// of containerd and `/run/containerd` the shim sockets.
     const ROOTLESS_DIRS: &'static [&'static str] = &[
         "/var/lib/kubelet",
         "/var/lib/crio",
         "/var/lib/cni",
         "/var/lib/containers",
         "/var/cache/containers",
-        "/var/log/pods",
         "/var/log/containers",
         "/var/log/crio",
         "/run/lock",
         "/run/containers",
+        "/run/containerd",
         "/run/netns",
     ];
+
+    /// The kubelet device plugin directory, which does not follow `--root-dir`.
+    pub const DEVICE_PLUGINS_DIR: &'static str = "/var/lib/kubelet/device-plugins";
+
+    /// Prepare the rootless mount namespace for one kubelet per node.
+    ///
+    /// Every kubelet binds its socket in `DEVICE_PLUGINS_DIR`, so each one
+    /// runs in its own mount namespace with a node directory mounted over
+    /// it. The kubelet directory of the run root gets shared propagation, so
+    /// that the volume mounts of the kubelets are still visible to the CRI
+    /// runtime, while the device plugin directory becomes a private mount
+    /// point, so that the node directories mounted over it stay within their
+    /// namespace.
+    fn isolate_device_plugins_dir(kubelet_dir: &Path) -> Result<()> {
+        let none = None::<&str>;
+        for (dir, propagation) in [
+            (kubelet_dir, MsFlags::MS_SHARED),
+            (Path::new(Self::DEVICE_PLUGINS_DIR), MsFlags::MS_PRIVATE),
+        ] {
+            fs::create_dir_all(dir)
+                .with_context(|| format!("Unable to create {}", dir.display()))?;
+            mount(Some(dir), dir, none, MsFlags::MS_BIND, none)
+                .with_context(|| format!("Unable to bind mount {}", dir.display()))?;
+            mount(none, dir, none, propagation, none).with_context(|| {
+                format!("Unable to change the propagation of {}", dir.display())
+            })?;
+        }
+        Ok(())
+    }
 
     /// Create a new system
     pub fn setup(config: &Config) -> Result<Self> {
         if config.is_rootless() {
-            let in_userns = Self::in_user_namespace();
-            if !in_userns {
-                warn!(
-                    "Rootless mode but not inside a user namespace, \
-                     skipping directory setup"
-                );
+            // The rootless re-exec always enters a user namespace, the
+            // kubelets and CRI runtimes rely on the setup below.
+            if !Self::in_user_namespace() {
+                bail!("Rootless mode requires to run inside a user namespace")
+            }
+            // Inside rootlesskit, pre-existing host directories under the
+            // copy-up overlay retain host root ownership (mapped to nobody
+            // in the user namespace) and are not writable. Recreate paths
+            // that kubernix components write to under rootlesskit copy-ups.
+            // When adding a new component that writes to a host path under
+            // /var or /run, add the path to ROOTLESS_DIRS.
+            for dir in Self::ROOTLESS_DIRS {
+                let path = PathBuf::from(dir);
+                if (path.exists() || path.is_symlink())
+                    && let Err(e) = fs::remove_dir_all(&path)
+                {
+                    warn!("Unable to remove '{}': {}", dir, e);
+                }
+                fs::create_dir_all(&path)
+                    .with_context(|| format!("Unable to create rootless directory '{}'", dir))?;
+            }
+            if config.multi_node() {
+                Self::isolate_device_plugins_dir(&config.root().join("kubelet"))?;
             } else {
-                // Inside rootlesskit, pre-existing host directories under the
-                // copy-up overlay retain host root ownership (mapped to nobody
-                // in the user namespace) and are not writable. Recreate paths
-                // that kubernix components write to under rootlesskit copy-ups.
-                // When adding a new component that writes to a host path under
-                // /var or /run, add the path to ROOTLESS_DIRS.
-                for dir in Self::ROOTLESS_DIRS {
-                    let path = PathBuf::from(dir);
-                    if (path.exists() || path.is_symlink())
-                        && let Err(e) = fs::remove_dir_all(&path)
-                    {
-                        warn!("Unable to remove '{}': {}", dir, e);
-                    }
-                    fs::create_dir_all(&path).with_context(|| {
-                        format!("Unable to create rootless directory '{}'", dir)
-                    })?;
-                }
-                fs::create_dir_all("/var/lib/kubelet/device-plugins")
-                    .context("Unable to create /var/lib/kubelet/device-plugins")?;
+                fs::create_dir_all(Self::DEVICE_PLUGINS_DIR)
+                    .with_context(|| format!("Unable to create {}", Self::DEVICE_PLUGINS_DIR))?;
+            }
 
-                // On NixOS, /etc/hosts is a symlink into the read-only nix
-                // store. Replace it with a regular file so multi-node can
-                // write host entries.
-                let hosts_path = Self::hosts();
-                if hosts_path.is_symlink() {
-                    let content = read_to_string(&hosts_path).unwrap_or_default();
-                    fs::remove_file(&hosts_path).context("Unable to remove hosts symlink")?;
-                    fs::write(&hosts_path, content).context("Unable to write hosts file")?;
-                }
+            // On NixOS, /etc/hosts is a symlink into the read-only nix
+            // store. Replace it with a regular file so multi-node can
+            // write host entries.
+            let hosts_path = Self::hosts();
+            if hosts_path.is_symlink() {
+                let content = read_to_string(&hosts_path).unwrap_or_default();
+                fs::remove_file(&hosts_path).context("Unable to remove hosts symlink")?;
+                fs::write(&hosts_path, content).context("Unable to write hosts file")?;
             }
 
             // Kernel modules cannot be loaded from the user namespace.

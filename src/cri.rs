@@ -131,6 +131,18 @@ fn ipam_data_dir(cni_conf_dir: &Path) -> PathBuf {
     cni_conf_dir.join("networks")
 }
 
+/// Remove the IP allocations of the host-local IPAM plugin. Every rootless
+/// run gets a new network namespace, so the allocations of a former run are
+/// stale, and after an unclean stop nothing else would release them.
+pub fn reset_ipam_data(cni_conf_dir: &Path) -> Result<()> {
+    let dir = ipam_data_dir(cni_conf_dir);
+    if dir.exists() {
+        fs::remove_dir_all(&dir)
+            .with_context(|| format!("Unable to remove IPAM data '{}'", dir.display()))?;
+    }
+    Ok(())
+}
+
 /// Write the CNI bridge network configuration for a node.
 pub fn write_cni_config(
     cni_conf_dir: &Path,
@@ -267,6 +279,19 @@ mod tests {
         let socket = CriSocket::new("/run/crio.sock".into())?;
         assert_eq!(socket.to_socket_string(), "unix:///run/crio.sock");
         assert_eq!(socket.to_string(), "/run/crio.sock");
+        Ok(())
+    }
+
+    #[test]
+    fn reset_ipam_data_removes_allocations() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        reset_ipam_data(dir.path())?;
+        let ipam = ipam_data_dir(dir.path()).join("kubernix");
+        std::fs::create_dir_all(&ipam)?;
+        std::fs::write(ipam.join("10.10.128.2"), "id")?;
+        reset_ipam_data(dir.path())?;
+        assert!(!ipam_data_dir(dir.path()).exists());
+        assert!(dir.path().exists());
         Ok(())
     }
 

@@ -33,7 +33,8 @@
 //!
 //! With more than one node, every node gets its own CRI runtime and kubelet.
 //! In root mode, they run inside containers (podman by default), while in
-//! rootless mode they run as processes on the same host.
+//! rootless mode they run as processes inside the rootlesskit namespaces,
+//! every kubelet in its own mount namespace.
 //!
 //! [`Kubernix::new_shell`] spawns an additional shell for a running cluster,
 //! which enters the namespaces of the cluster via `nsenter` in rootless
@@ -95,6 +96,7 @@ use cri::RUNTIME_ENV;
 use encryptionconfig::EncryptionConfig;
 use kubeconfig::KubeConfig;
 use kubectl::Kubectl;
+use kubelet::Kubelet;
 use network::Network;
 use pki::Pki;
 use process::Stoppables;
@@ -433,6 +435,7 @@ impl Kubernix {
         let mut cmd = Command::new("systemd-run");
         cmd.args([
             "--user",
+            "--quiet",
             "--scope",
             "-p",
             "Delegate=yes",
@@ -489,22 +492,27 @@ impl Kubernix {
 
         // Setup the progress bar
         const BASE_STEPS: u64 = 15;
-        let steps = if config.multi_node() && !config.is_rootless() {
+        let addon_steps = config.addons().iter().filter(|a| *a == "coredns").count() as u64;
+        let steps = if config.multi_node() {
             u64::from(config.nodes()) * 2 + BASE_STEPS
         } else {
             BASE_STEPS
-        } + Self::processes(&config);
+        } + addon_steps
+            + Self::processes(&config);
         let p = Progress::new(steps, config.log_level(), config.log_format());
         info!("Bootstrapping cluster");
+
+        // Setup the network and fail early on unusable socket paths
+        let network = Network::new(&config)?;
+        for node in 0..config.nodes() {
+            Kubelet::validate_paths(&config, &network, node)?;
+        }
 
         // Ensure that the system is prepared
         let system = System::setup(&config).context("Unable to setup system")?;
         signals::check()?;
         Container::build(&config)?;
         signals::check()?;
-
-        // Setup the network
-        let network = Network::new(&config)?;
 
         // Setup the public key infrastructure
         let pki = Pki::new(&config, &network)?;
@@ -590,6 +598,11 @@ impl Kubernix {
         let addon_config = self.config.clone();
         let addon_network = self.network.clone();
         let addon_kubeconfig = self.kubectl.kubeconfig().to_path_buf();
+        // Log before spawning, the interactive shell may own the terminal
+        // while the addons get deployed
+        if addon_config.addons().iter().any(|a| a == "coredns") {
+            info!("Deploying CoreDNS in the background");
+        }
         self.addon_thread = Some(thread::spawn(move || {
             let kubectl = Kubectl::new(&addon_kubeconfig);
             if addon_shutdown.load(Ordering::Relaxed) {
@@ -756,8 +769,30 @@ impl Kubernix {
                 continue;
             }
             Self::umount_below(&dir, Duration::ZERO);
-            if let Err(e) = fs::remove_dir_all(&dir) {
-                debug!("Unable to remove '{}': {}", dir.display(), e);
+            Self::remove_rootless_storage(&dir);
+        }
+    }
+
+    /// Remove the storage and state directories of all nodes below the CRI
+    /// directory, but keep the logs and configs of the nodes. Only the
+    /// storage contains files of unmapped users, which cannot be removed
+    /// from outside of the user namespace.
+    fn remove_rootless_storage(dir: &Path) {
+        let Ok(nodes) = fs::read_dir(dir) else {
+            return;
+        };
+        for node in nodes.flatten().map(|x| x.path()) {
+            for storage in Self::ROOTLESS_STORAGE_DIRS
+                .iter()
+                .copied()
+                .chain(OciRuntime::ALL.iter().map(|x| x.name()))
+            {
+                let path = node.join(storage);
+                if path.exists()
+                    && let Err(e) = fs::remove_dir_all(&path)
+                {
+                    debug!("Unable to remove '{}': {}", path.display(), e);
+                }
             }
         }
     }
@@ -802,6 +837,10 @@ impl Kubernix {
             );
         }
     }
+
+    /// The CRI storage and state directories of a node, removed on rootless
+    /// shutdown in addition to the OCI runtime state directories.
+    const ROOTLESS_STORAGE_DIRS: &[&str] = &["containers", "root", "state"];
 
     /// Read mount points from /proc/mounts filtered by the given root path,
     /// sorted deepest-first for safe unmounting.
@@ -921,6 +960,30 @@ mod tests {
         fs::write(&path, "old").unwrap();
         write_if_changed(&path, "new").unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "new");
+    }
+
+    #[test]
+    fn remove_rootless_storage_keeps_logs_and_configs() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let node = dir.path().join("node-0");
+        for storage in [
+            "containers/storage",
+            "root",
+            "state",
+            "crun",
+            "runc",
+            "crio.conf.d",
+        ] {
+            fs::create_dir_all(node.join(storage))?;
+        }
+        fs::write(node.join("crio.log"), "log")?;
+        Kubernix::remove_rootless_storage(dir.path());
+        let mut left = fs::read_dir(&node)?
+            .map(|x| Ok(x?.file_name().to_string_lossy().into_owned()))
+            .collect::<Result<Vec<_>>>()?;
+        left.sort();
+        assert_eq!(left, ["crio.conf.d", "crio.log"]);
+        Ok(())
     }
 
     #[test]
