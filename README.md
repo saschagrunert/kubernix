@@ -382,22 +382,29 @@ $ vexctl add --in-place .openvex/kubernix.openvex.json \
 KuberNix can be configured via command line arguments or environment
 variables:
 
-| CLI argument              | Description                                                                         | Default        | Environment Variable         |
-| ------------------------- | ----------------------------------------------------------------------------------- | -------------- | ---------------------------- |
-| `-r, --root`              | Path where all the runtime data is stored                                           | `kubernix-run` | `KUBERNIX_ROOT`              |
-| `-l, --log-level`         | Logging verbosity (`off`, `error`, `warn`, `info`, `debug` or `trace`)              | `info`         | `KUBERNIX_LOG_LEVEL`         |
-| `-f, --log-format`        | Log output format (`text` or `json`)                                                | `text`         | `KUBERNIX_LOG_FORMAT`        |
-| `-c, --cidr`              | CIDR used for the cluster network                                                   | `10.10.0.0/16` | `KUBERNIX_CIDR`              |
-| `-s, --shell`             | The shell executable to be used                                                     | `$SHELL`/`sh`  | `KUBERNIX_SHELL`             |
-| `-e, --no-shell`          | Do not spawn an interactive shell after bootstrap                                   | `false`        | `KUBERNIX_NO_SHELL`          |
-| `-n, --nodes`             | The number of nodes to be registered (`1` to `64`)                                  | `1`            | `KUBERNIX_NODES`             |
-| `-u, --container-runtime` | Container runtime for the node containers, only used in multinode root mode         | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
-| `-o, --overlay`           | Nix package overlay to be used                                                      |                | `KUBERNIX_OVERLAY`           |
-| `-d, --dockerfile`        | Custom Dockerfile for multi-node container image builds                             |                | `KUBERNIX_DOCKERFILE`        |
-| `-p, --packages`          | Additional Nix dependencies to be added to the environment, comma separated         |                | `KUBERNIX_PACKAGES`          |
-| `--cri-runtime`           | CRI runtime to use (`crio` or `containerd`)                                         | `crio`         | `KUBERNIX_CRI_RUNTIME`       |
-| `--oci-runtime`           | Default OCI runtime (`crun` or `runc`)                                              | `crun`         | `KUBERNIX_OCI_RUNTIME`       |
-| `-a, --addons`            | Cluster addons to deploy, comma separated (available: coredns)                      | `coredns`      | `KUBERNIX_ADDONS`            |
+| CLI argument          | Description                                                                 | Default        | Environment Variable         |
+| --------------------- | --------------------------------------------------------------------------- | -------------- | ---------------------------- |
+| `-r, --root`          | Path where all the runtime data is stored                                   | `kubernix-run` | `KUBERNIX_ROOT`              |
+| `-l, --log-level`     | Logging verbosity (`off`, `error`, `warn`, `info`, `debug` or `trace`)      | `info`         | `KUBERNIX_LOG_LEVEL`         |
+| `--log-format`        | Log output format (`text` or `json`)                                        | `text`         | `KUBERNIX_LOG_FORMAT`        |
+| `-c, --cidr`          | CIDR used for the cluster network                                           | `10.10.0.0/16` | `KUBERNIX_CIDR`              |
+| `-s, --shell`         | The shell executable to be used                                             | `$SHELL`/`sh`  | `KUBERNIX_SHELL`             |
+| `--no-shell`          | Do not spawn an interactive shell after bootstrap                           | `false`        | `KUBERNIX_NO_SHELL`          |
+| `-n, --nodes`         | The number of nodes to be registered (`1` to `64`)                          | `1`            | `KUBERNIX_NODES`             |
+| `--container-runtime` | Container runtime for the node containers, only used in multinode root mode | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
+| `-o, --overlay`       | Nix package overlay to be used                                              |                | `KUBERNIX_OVERLAY`           |
+| `-d, --dockerfile`    | Custom Dockerfile for multi-node container image builds                     |                | `KUBERNIX_DOCKERFILE`        |
+| `-p, --packages`      | Additional Nix packages to be added to the environment, comma separated     |                | `KUBERNIX_PACKAGES`          |
+| `--cri-runtime`       | CRI runtime to use (`crio` or `containerd`)                                 | `crio`         | `KUBERNIX_CRI_RUNTIME`       |
+| `--oci-runtime`       | Default OCI runtime (`crun` or `runc`)                                      | `crun`         | `KUBERNIX_OCI_RUNTIME`       |
+| `-a, --addons`        | Cluster addons to deploy, comma separated (`coredns`), `none` disables all  | `coredns`      | `KUBERNIX_ADDONS`            |
+
+Options which take a list accept comma separated values and can be repeated,
+for example `--packages=kubernetes-helm,jq` or `-p kubernetes-helm -p jq`. The
+same applies to their environment variables, like
+`KUBERNIX_PACKAGES=kubernetes-helm,jq`. Boolean environment variables like
+`KUBERNIX_NO_SHELL` take `true` or `false`. The `--root` option can also be
+given after the `shell` subcommand.
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
@@ -437,7 +444,7 @@ and kubelet. In rootless mode, they run as processes in the same user and
 network namespace. In root mode, they run inside containers of a base image,
 which KuberNix builds from the Nix environment, or from a custom Dockerfile
 passed via `-d, --dockerfile`. The container runtime can be selected via
-`-u, --container-runtime`. The default runtime is [podman][8], but other Docker
+`--container-runtime`. The default runtime is [podman][8], but other Docker
 compatible runtimes should work as well.
 
 [8]: https://github.com/containers/podman
@@ -502,6 +509,98 @@ available packages are listed on the [official Nix package search][10].
 
 [9]: https://helm.sh
 [10]: https://search.nixos.org/packages?channel=unstable
+
+### Stability
+
+Starting with version 1.0, KuberNix follows [semantic versioning][11] for the
+interfaces listed below. Breaking changes to them require a new major version,
+while minor versions may add new options, subcommands, environment variables,
+log fields or files.
+
+[11]: https://semver.org
+
+#### Command Line
+
+- The subcommands, the long option names and the short options in the
+  [configuration table](#configuration), as well as their value formats.
+- The environment variables of the options (`KUBERNIX_*`), which take the same
+  values as the options.
+- The `-e`, `-f` and `-u` short options of earlier versions keep working as
+  hidden aliases of `--no-shell`, `--log-format` and `--container-runtime`, but
+  are no longer documented. The same applies to `--addons` without a value,
+  which equals `--addons none`, and to multiple space separated values after
+  `--packages`.
+
+The versions of the bundled packages (see [What is inside](#what-is-inside))
+are not part of the stable interface and get updated in any release.
+
+#### Exit Codes
+
+| Code | Meaning                                                                                              |
+| ---- | ---------------------------------------------------------------------------------------------------- |
+| `0`  | Success, for example after the interactive shell exited or on `SIGTERM` with `--no-shell`            |
+| `1`  | Any error, including a failed bootstrap, a dying component with `--no-shell` or an aborted bootstrap |
+| `2`  | Command line arguments or environment variables which cannot be parsed                               |
+
+`kubernix shell` replaces itself with the spawned shell, so it returns the exit
+code of the shell once the shell started. Subcommands may define further exit
+codes, which are documented together with them.
+
+#### Environment File
+
+The `kubernix.env` file in the run directory can be sourced by any POSIX shell.
+Every line has the format `export KEY='value'`, where the value uses POSIX
+single quoting. It contains at least these variables:
+
+- `KUBECONFIG`: the path to the admin kubeconfig.
+- `CONTAINER_RUNTIME_ENDPOINT`: the CRI socket of the first node, as
+  `unix://<path>`.
+
+#### JSON Logs
+
+With `--log-format=json`, KuberNix writes one JSON object per line to stderr
+with the following fields:
+
+- `level`: one of `error`, `warn`, `info`, `debug` or `trace`.
+- `message`: the log message, which is meant for humans and may change.
+- `target`: the source of the message, which is meant for debugging and may
+  change.
+
+Consumers should ignore unknown fields. The error which terminates KuberNix and
+its causes are always written as plain text lines (`[ERROR] …`), since they may
+occur before the logger is set up. Command line arguments and environment variables
+which cannot be parsed (exit code `2`) are reported in the format of the argument
+parser instead.
+
+#### Run Directory
+
+The run directory (`--root`) keeps these files at stable locations:
+
+- `kubernix.toml`: the configuration of the cluster, see below.
+- `kubernix.env`: the environment file described above.
+- `kubeconfig/admin.kubeconfig`: the kubeconfig of the cluster admin.
+- `kubernix.pid`: the PID of the running KuberNix instance, written once the
+  cluster is ready and removed after the cleanup.
+- The component log files listed in [Shell Environment](#shell-environment).
+
+All other files, like the PKI, the component configurations and the generated
+Nix environment, are internal and may change in any release.
+
+The `kubernix.toml` contains a `version` field, which is the format version of
+the run directory. A run directory without it has version 0. KuberNix uses run
+directories of the same version as is, migrates those of older versions in
+place if possible, and otherwise refuses them with an error asking to remove
+the run directory. It also refuses run directories created by a newer
+KuberNix, starting with 1.0: earlier versions ignore the `version` field and
+use any run directory, which is harmless for version 1 since it shares the
+format of version 0. The other fields of the file are not part of the stable
+interface.
+
+#### Library
+
+The `kubernix` crate only exists to build the command line tool. Its library
+target is not a public API, is hidden from the documentation and is not covered
+by semantic versioning.
 
 ## Contributing
 

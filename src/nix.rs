@@ -5,7 +5,7 @@
 //! versions. Re-executes the kubernix binary inside the Nix shell,
 //! forwarding all CLI options.
 
-use crate::{Config, system::System};
+use crate::{Config, config::Addon, system::System};
 use anyhow::{Context, Result, bail};
 use log::{debug, info};
 use std::{
@@ -94,14 +94,9 @@ impl Nix {
             args.push(pkg.as_str());
         }
 
-        for addon in config.addons() {
-            args.push("--addons");
-            args.push(addon.as_str());
-        }
-        if config.addons().is_empty() {
-            // Explicitly disable the default addons
-            args.push("--addons");
-        }
+        let addons = Self::addons_arg(config.addons());
+        args.push("--addons");
+        args.push(addons.as_str());
 
         if config.no_shell() {
             args.push("--no-shell");
@@ -111,6 +106,19 @@ impl Nix {
         }
 
         Self::exec(&config, &args)
+    }
+
+    /// The `--addons` value for the addons, `none` explicitly disables the
+    /// default addons.
+    fn addons_arg(addons: &[Addon]) -> String {
+        if addons.is_empty() {
+            return Addon::None.to_string();
+        }
+        addons
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
     }
 
     /// Replace the current process by a command inside the nix develop
@@ -244,6 +252,12 @@ impl Nix {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn addons_arg() {
+        assert_eq!(Nix::addons_arg(&[]), "none");
+        assert_eq!(Nix::addons_arg(&[Addon::Coredns]), "coredns");
+    }
 
     #[test]
     fn write_files_only_on_change() -> Result<()> {
