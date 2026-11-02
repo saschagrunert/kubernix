@@ -142,8 +142,12 @@ SHELL_SCRIPTS := \
 lint-shellcheck: ## Lint the shell scripts via shellcheck.
 	shellcheck $(SHELL_SCRIPTS)
 
+.PHONY: lint-vex
+lint-vex: ## Validate the OpenVEX document.
+	jq -e -f hack/lint-vex.jq .openvex/kubernix.openvex.json >/dev/null
+
 .PHONY: lint
-lint: lint-clippy lint-rustfmt lint-audit lint-deny lint-dependencies lint-shellcheck ## Run all linters.
+lint: lint-clippy lint-rustfmt lint-audit lint-deny lint-dependencies lint-shellcheck lint-vex ## Run all linters.
 
 ##@ Run targets:
 

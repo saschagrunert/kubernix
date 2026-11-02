@@ -1,0 +1,9 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://raw.githubusercontent.com/saschagrunert/kubernix/main/.openvex/kubernix.openvex.json",
+  "author": "Sascha Grunert <mail@saschagrunert.de>",
+  "role": "Project maintainer",
+  "timestamp": "2026-11-02T00:00:00Z",
+  "version": 1,
+  "statements": []
+}
