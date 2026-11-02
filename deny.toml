@@ -15,12 +15,9 @@ allow = [
 [bans]
 multiple-versions = "deny"
 wildcards = "allow"
-skip = [
-    { crate = "syn@2", reason = "proc-macro ecosystem transitioning from syn 2 to 3" },
-]
 
 [sources]
-unknown-registry = "warn"
-unknown-git = "warn"
+unknown-registry = "deny"
+unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = []

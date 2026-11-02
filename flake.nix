@@ -33,7 +33,6 @@
             buildInputs = runtimePackages ++ (
               with pkgs;
               [
-                cargo-llvm-cov
                 binutils
                 clippy
                 coreutils
@@ -45,6 +44,7 @@
                 rustc
                 cargo
                 rustfmt
+                shellcheck
               ]
             );
           };

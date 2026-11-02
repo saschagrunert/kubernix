@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # cfssl version
-CFSSL_VERSION=1.6.5
+CFSSL_VERSION=1.7.1
 
 VERSION="${1:-$CFSSL_VERSION}"
 ARCH=$(uname -m)
@@ -13,6 +13,16 @@ case "$ARCH" in
 esac
 BASE_URL="https://github.com/cloudflare/cfssl/releases/download/v${VERSION}"
 
-curl -sLo /usr/local/bin/cfssl "${BASE_URL}/cfssl_${VERSION}_linux_${ARCH}"
-curl -sLo /usr/local/bin/cfssljson "${BASE_URL}/cfssljson_${VERSION}_linux_${ARCH}"
-chmod +x /usr/local/bin/cfssl /usr/local/bin/cfssljson
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+CHECKSUMS="cfssl_${VERSION}_checksums.txt"
+curl -fsSLo "$TMP_DIR/$CHECKSUMS" "${BASE_URL}/${CHECKSUMS}"
+
+for BIN in cfssl cfssljson; do
+  FILE="${BIN}_${VERSION}_linux_${ARCH}"
+  curl -fsSLo "$TMP_DIR/$FILE" "${BASE_URL}/${FILE}"
+  # Fails as well if the checksums file has no entry for the binary
+  (cd "$TMP_DIR" && awk -v f="$FILE" '$2 == f' "$CHECKSUMS" | sha256sum -c --strict -)
+  install -m 0755 "$TMP_DIR/$FILE" "/usr/local/bin/$BIN"
+done
