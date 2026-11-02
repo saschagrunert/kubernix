@@ -1,36 +1,36 @@
 version: 2
 updates:
-- package-ecosystem: cargo
-  directory: "/"
-  schedule:
-    interval: weekly
-  open-pull-requests-limit: 10
-  allow:
-  - dependency-type: direct
-  - dependency-type: indirect
-  # Minor bumps of 0.x crates are breaking, so only group patch updates.
-  groups:
-    cargo:
-      patterns:
-      - "*"
-      update-types:
-      - patch
-  cooldown:
-    default-days: 7
-- package-ecosystem: github-actions
-  directory: "/"
-  schedule:
-    interval: weekly
-  open-pull-requests-limit: 10
-  groups:
-    github-actions:
-      patterns:
-      - "*"
-  cooldown:
-    default-days: 7
-- package-ecosystem: nix
-  directory: "/"
-  schedule:
-    interval: weekly
-  cooldown:
-    default-days: 7
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    allow:
+      - dependency-type: direct
+      - dependency-type: indirect
+    # Minor bumps of 0.x crates are breaking, so only group patch updates.
+    groups:
+      cargo:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+    cooldown:
+      default-days: 7
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: nix
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

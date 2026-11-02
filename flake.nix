@@ -39,7 +39,9 @@
                 curl
                 gcc
                 git
+                markdownlint-cli2
                 nix-prefetch-git
+                prettier
                 procps
                 rustc
                 cargo
