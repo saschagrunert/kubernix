@@ -204,7 +204,7 @@ impl ComponentRegistry {
         for result in results {
             match result {
                 Ok(p) => group.push(p),
-                Err(e) if e.downcast_ref::<Canceled>().is_some() => debug!("{:#}", e),
+                Err(e) if e.is::<Canceled>() => debug!("{:#}", e),
                 Err(e) => failures.push(format!("{:#}", e)),
             }
         }

@@ -1169,7 +1169,11 @@ impl Kubernix {
         }
 
         kubernix.spawn_addons(addon_shutdown);
-        if let Err(e) = kubernix.write_pid_file().and_then(|()| signals::check()) {
+        if let Err(e) = kubernix
+            .wait_default_service_account()
+            .and_then(|()| kubernix.write_pid_file())
+            .and_then(|()| signals::check())
+        {
             drop(p);
             return Err(e);
         }
@@ -1203,6 +1207,14 @@ impl Kubernix {
         }
         registry.register(Box::new(proxy::ProxyComponent));
         registry
+    }
+
+    /// Wait for the default service account, which pods need, and fail
+    /// right away if a component died meanwhile.
+    fn wait_default_service_account(&mut self) -> Result<()> {
+        let processes = &mut self.processes;
+        self.kubectl
+            .wait_default_service_account(|| processes.iter_mut().flatten().any(|p| p.died()))
     }
 
     fn spawn_addons(&mut self, addon_shutdown: Arc<AtomicBool>) {

@@ -377,7 +377,7 @@ pub fn run_cancelable(
     });
     untrack(pid);
     if canceled {
-        bail!("Canceled")
+        return Err(Canceled.into());
     }
     let output = output?;
     // A failed command may not read all of its input
@@ -444,14 +444,14 @@ pub fn canceled() -> bool {
     })
 }
 
-/// The error of a component which stopped waiting for its readiness,
-/// since another component of the boot phase failed.
+/// The error of a wait or command which got canceled, by a termination
+/// signal or since another component of the boot phase failed.
 #[derive(Debug)]
 pub struct Canceled;
 
 impl fmt::Display for Canceled {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "another component failed")
+        write!(f, "canceled")
     }
 }
 
@@ -1083,7 +1083,7 @@ mod tests {
         set_cancel(Arc::clone(&flag));
         let err = p.wait_ready("never").unwrap_err();
         flag.store(false, Ordering::SeqCst);
-        assert!(err.downcast_ref::<Canceled>().is_some(), "{:#}", err);
+        assert!(err.is::<Canceled>(), "{:#}", err);
         p.stop()?;
         Ok(())
     }
@@ -1269,7 +1269,7 @@ mod tests {
             start.elapsed() > Duration::from_millis(200)
         })
         .unwrap_err();
-        assert_eq!(err.to_string(), "Canceled");
+        assert!(err.is::<Canceled>(), "{:#}", err);
         assert!(start.elapsed() < Duration::from_secs(5));
     }
 
