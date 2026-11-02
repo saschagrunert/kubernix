@@ -32,7 +32,7 @@ declare -A EXCLUDE=(
 SYSTEM="$(nix eval --raw --impure --expr 'builtins.currentSystem')"
 
 # Query nix for all package versions from the devShell
-VERSIONS=$(nix eval --json ".#devShells.${SYSTEM}.default.buildInputs" \
+VERSIONS=$(nix eval --json "${ROOT_DIR}#devShells.${SYSTEM}.default.buildInputs" \
     --apply 'builtins.map (p: { name = p.pname or p.name; version = let v = p.version or ""; in if v == "" then "unknown" else v; })')
 
 # Apply name mapping and exclusions, then sort by display name
@@ -40,7 +40,7 @@ ROWS=$(while IFS=$'\t' read -r name version; do
     [[ -n "${EXCLUDE[$name]:-}" ]] && continue
     display_name="${NAME_MAP[$name]:-$name}"
     printf '%s\tv%s\n' "$display_name" "$version"
-done < <(echo "$VERSIONS" | jq -r '.[] | [.name, .version] | @tsv') | sort)
+done < <(echo "$VERSIONS" | jq -r '.[] | [.name, .version] | @tsv') | LC_ALL=C sort)
 
 if [[ -z "$ROWS" ]]; then
     echo "error: no packages found in devShell" >&2

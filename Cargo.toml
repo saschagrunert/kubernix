@@ -13,10 +13,6 @@ keywords = ["kubernetes", "nix", "nix-flakes", "crio", "containerd"]
 readme = "README.md"
 repository = "https://github.com/saschagrunert/kubernix"
 
-[[bin]]
-name = "kubernix"
-path = "src/main.rs"
-
 [dependencies]
 anyhow = "1.0.102"
 base64 = "0.23.0"
@@ -37,3 +33,6 @@ toml = "1.1.2"
 [dev-dependencies]
 temp-env = "0.3.6"
 tempfile = "3.27.0"
+
+[profile.release]
+strip = true

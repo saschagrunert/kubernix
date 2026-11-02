@@ -46,19 +46,33 @@ in_runtime_root() {
   return 1
 }
 
-# Assert that the container is run by the expected OCI runtime only.
+# Assert that the container of the first pod matching the selector is run by
+# the expected OCI runtime only. The container ID is read again on every
+# attempt, because a restarted container gets a new one.
 assert_runtime() {
-  local what=$1 id=$2 expected=$3 other=$4
+  local what=$1 expected=$2 other=$3 id="" found=""
+  shift 3
+  for _ in $(seq 30); do
+    id=$(container_id "$@")
+    if [ -n "$id" ]; then
+      # Being tracked by the other runtime is a definitive failure.
+      if in_runtime_root "$other" "$id"; then
+        echo "FAIL: $what container $id found in the $other state directory"
+        exit 1
+      fi
+      if in_runtime_root "$expected" "$id"; then
+        found=1
+        break
+      fi
+    fi
+    sleep 1
+  done
   if [ -z "$id" ]; then
     echo "FAIL: no container ID found for $what"
     exit 1
   fi
-  if ! in_runtime_root "$expected" "$id"; then
+  if [ -z "$found" ]; then
     echo "FAIL: $what container $id not found in the $expected state directory"
-    exit 1
-  fi
-  if in_runtime_root "$other" "$id"; then
-    echo "FAIL: $what container $id found in the $other state directory"
     exit 1
   fi
   echo "$what container $id uses $expected"
@@ -112,8 +126,8 @@ EOF
 echo "Privileged pods are admitted"
 
 echo "Asserting CoreDNS uses the default OCI runtime $OCI_RUNTIME..."
-assert_runtime CoreDNS "$(container_id -n kube-system -l k8s-app=coredns)" \
-  "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME"
+assert_runtime CoreDNS "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME" \
+  -n kube-system -l k8s-app=coredns
 
 # Run a test pod and wait until it is ready. The optional argument is the
 # runtime class name.
@@ -146,8 +160,8 @@ if [[ "$POD_IP" != "$POD_IP_PREFIX"* ]]; then
   exit 1
 fi
 echo "Pod got IP $POD_IP"
-assert_runtime "Default runtime test pod" "$(container_id -l app=default-runtime-test)" \
-  "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME"
+assert_runtime "Default runtime test pod" "$OCI_RUNTIME" "$OTHER_OCI_RUNTIME" \
+  -l app=default-runtime-test
 kubectl delete pod default-runtime-test --wait=false
 
 echo "Asserting a pod can reach a ClusterIP Service and external networks by DNS name..."
@@ -192,8 +206,8 @@ metadata:
 handler: $OTHER_OCI_RUNTIME
 EOF
 run_pod runtime-class-test "$OTHER_OCI_RUNTIME"
-assert_runtime "RuntimeClass $OTHER_OCI_RUNTIME pod" \
-  "$(container_id -l app=runtime-class-test)" "$OTHER_OCI_RUNTIME" "$OCI_RUNTIME"
+assert_runtime "RuntimeClass $OTHER_OCI_RUNTIME pod" "$OTHER_OCI_RUNTIME" "$OCI_RUNTIME" \
+  -l app=runtime-class-test
 kubectl delete pod runtime-class-test --wait=false
 
 echo "All assertions passed"
