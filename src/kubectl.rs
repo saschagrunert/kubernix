@@ -106,44 +106,40 @@ impl Kubectl {
     /// is set.
     pub fn wait_ready(&self, name: &str, shutdown: &AtomicBool) -> Result<()> {
         debug!("Waiting for {} to be ready", name);
-        let now = Instant::now();
-        while now.elapsed().as_secs() < READINESS_TIMEOUT {
-            if shutdown.load(Ordering::Relaxed) {
-                bail!("Shutdown requested while waiting for {}", name)
-            }
-            let output = self.execute_cancelable(
-                &[
-                    "wait",
-                    "--for=condition=Ready",
-                    "pod",
-                    "-n=kube-system",
-                    &format!("-l=k8s-app={}", name),
-                    "--timeout=5s",
-                    "--request-timeout=5s",
-                ],
-                || shutdown.load(Ordering::Relaxed),
-            );
-            match output {
-                Ok(_) => {
-                    debug!("{} ready", name);
-                    return Ok(());
-                }
-                Err(e) => {
-                    debug!(
-                        "{} not ready yet ({}/{}s): {}",
-                        name,
-                        now.elapsed().as_secs(),
-                        READINESS_TIMEOUT,
-                        e,
-                    );
-                }
-            }
-            let retry = Instant::now() + Duration::from_secs(2);
-            while Instant::now() < retry && !shutdown.load(Ordering::Relaxed) {
-                sleep(SHUTDOWN_POLL_INTERVAL);
-            }
-        }
-        bail!("Unable to wait for {} pod", name)
+        let cancel = || shutdown.load(Ordering::Relaxed);
+        let label = format!("-l=k8s-app={}", name);
+        wait_for(
+            name,
+            Duration::from_secs(READINESS_TIMEOUT),
+            Duration::from_secs(2),
+            cancel,
+            || false,
+            || {
+                self.execute_cancelable(
+                    &[
+                        "wait",
+                        "--for=condition=Ready",
+                        "pod",
+                        "-n=kube-system",
+                        &label,
+                        "--timeout=5s",
+                        "--request-timeout=5s",
+                    ],
+                    cancel,
+                )
+                .map(|_| true)
+            },
+        )
+        .map_err(|e| {
+            let msg = if e.is::<process::Canceled>() {
+                format!("Shutdown requested while waiting for {}", name)
+            } else {
+                format!("Unable to wait for {} pod", name)
+            };
+            e.context(msg)
+        })?;
+        debug!("{} ready", name);
+        Ok(())
     }
 
     /// Wait until the API server reports readiness via `/readyz`, which
@@ -152,10 +148,12 @@ impl Kubectl {
     pub fn wait_api_ready(&self) -> Result<()> {
         debug!("Waiting for the API server /readyz endpoint");
         let cancel = startup_canceled();
-        poll(
+        wait_for(
+            "the API server",
             Duration::from_secs(READINESS_TIMEOUT),
             Duration::from_secs(1),
             &cancel,
+            || false,
             || {
                 let output = self.execute_cancelable(
                     &["get", "--raw=/readyz", "--request-timeout=5s"],
@@ -177,6 +175,7 @@ impl Kubectl {
         debug!("Waiting for the default service account");
         let cancel = signals::requested;
         wait_for(
+            "the default service account",
             Duration::from_secs(READINESS_TIMEOUT),
             Duration::from_secs(1),
             cancel,
@@ -197,12 +196,12 @@ impl Kubectl {
             },
         )
         .map_err(|e| {
-            let msg = if e.is::<process::Canceled>() {
-                "Interrupted while waiting for the default service account"
+            if e.is::<process::Canceled>() {
+                // Only a termination signal cancels this wait
+                signals::check().err().unwrap_or(e)
             } else {
-                "The default service account did not get created"
-            };
-            e.context(msg)
+                e.context("The default service account did not get created")
+            }
         })?;
         debug!("The default service account exists");
         Ok(())
@@ -218,22 +217,14 @@ fn startup_canceled() -> impl Fn() -> bool + Sync {
     move || signals::requested() || flag.as_ref().is_some_and(|f| f.load(Ordering::SeqCst))
 }
 
-/// Run `check` every `interval` until it returns true or `timeout` elapsed,
-/// see `wait_for`.
-fn poll<C, F>(timeout: Duration, interval: Duration, cancel: C, check: F) -> Result<()>
-where
-    C: Fn() -> bool,
-    F: FnMut() -> Result<bool>,
-{
-    wait_for(timeout, interval, cancel, || false, check)
-}
-
-/// Run `check` every `interval` until it returns true or `timeout` elapsed.
-/// It fails with `process::Canceled` if `cancel` returns true or `check`
-/// got canceled, so that the boot phase does not count it as a failure,
-/// and fails right away if `died` returns true. Errors of `check` are
-/// treated as not ready yet, the last one is part of the failure.
+/// Run `check` every `interval` until it returns true, which means `what`
+/// is ready, or `timeout` elapsed. It fails with `process::Canceled` if
+/// `cancel` returns true or `check` got canceled, so that the boot phase
+/// does not count it as a failure, and fails right away if `died` returns
+/// true. Errors of `check` are treated as not ready yet and get logged,
+/// the last one is part of the failure.
 fn wait_for<C, D, F>(
+    what: &str,
     timeout: Duration,
     interval: Duration,
     cancel: C,
@@ -256,14 +247,23 @@ where
             return Err(process::Canceled.into());
         }
         if died() {
-            return Err(failure(last_error, "A component died".into()));
+            return Err(failure(
+                last_error,
+                "A cluster component died unexpectedly".into(),
+            ));
         }
         match check() {
             Ok(true) => return Ok(()),
             Ok(false) => last_error = None,
             Err(e) if e.is::<process::Canceled>() => return Err(e),
             Err(e) => {
-                trace!("Not ready yet: {:#}", e);
+                debug!(
+                    "{} not ready yet ({}/{}s): {:#}",
+                    what,
+                    start.elapsed().as_secs(),
+                    timeout.as_secs(),
+                    e,
+                );
                 last_error = Some(e);
             }
         }
@@ -306,6 +306,7 @@ mod tests {
     fn wait_for_fails_once_a_component_died() {
         let checks = std::cell::Cell::new(0);
         let err = wait_for(
+            "test",
             Duration::from_secs(60),
             Duration::from_millis(1),
             || false,
@@ -316,7 +317,10 @@ mod tests {
             },
         )
         .unwrap_err();
-        assert_eq!(format!("{:#}", err), "A component died: not found");
+        assert_eq!(
+            format!("{:#}", err),
+            "A cluster component died unexpectedly: not found"
+        );
         assert_eq!(checks.get(), 2);
     }
 
@@ -324,6 +328,7 @@ mod tests {
     fn wait_for_stops_on_canceled_check() {
         let mut checks = 0;
         let err = wait_for(
+            "test",
             Duration::from_secs(60),
             Duration::from_millis(1),
             || false,
@@ -373,11 +378,13 @@ mod tests {
     }
 
     #[test]
-    fn poll_success_after_retries() -> Result<()> {
+    fn wait_for_success_after_retries() -> Result<()> {
         let mut calls = 0;
-        poll(
+        wait_for(
+            "test",
             Duration::from_secs(5),
             Duration::ZERO,
+            || false,
             || false,
             || {
                 calls += 1;
@@ -393,10 +400,12 @@ mod tests {
     }
 
     #[test]
-    fn poll_timeout_contains_last_error() {
-        let err = poll(
+    fn wait_for_timeout_contains_last_error() {
+        let err = wait_for(
+            "test",
             Duration::ZERO,
             Duration::ZERO,
+            || false,
             || false,
             || bail!("not healthy"),
         )
@@ -407,18 +416,28 @@ mod tests {
     }
 
     #[test]
-    fn poll_timeout_without_error() {
-        let err = poll(Duration::ZERO, Duration::ZERO, || false, || Ok(false)).unwrap_err();
+    fn wait_for_timeout_without_error() {
+        let err = wait_for(
+            "test",
+            Duration::ZERO,
+            Duration::ZERO,
+            || false,
+            || false,
+            || Ok(false),
+        )
+        .unwrap_err();
         assert_eq!(err.to_string(), "Timed out after 0s");
     }
 
     #[test]
-    fn poll_stops_on_cancel() {
+    fn wait_for_stops_on_cancel() {
         let start = Instant::now();
-        let err = poll(
+        let err = wait_for(
+            "test",
             Duration::from_secs(30),
             Duration::from_secs(10),
             || start.elapsed() > Duration::from_millis(200),
+            || false,
             || Ok(false),
         )
         .unwrap_err();

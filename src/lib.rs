@@ -1214,7 +1214,12 @@ impl Kubernix {
     fn wait_default_service_account(&mut self) -> Result<()> {
         let processes = &mut self.processes;
         self.kubectl
-            .wait_default_service_account(|| processes.iter_mut().flatten().any(|p| p.died()))
+            .wait_default_service_account(|| Self::any_died(processes))
+    }
+
+    /// Whether a started process died unexpectedly.
+    fn any_died(processes: &mut [Stoppables]) -> bool {
+        processes.iter_mut().flatten().any(|p| p.died())
     }
 
     fn spawn_addons(&mut self, addon_shutdown: Arc<AtomicBool>) {
@@ -1236,7 +1241,7 @@ impl Kubernix {
                     CoreDns::apply(&addon_config, &addon_network, &kubectl, &addon_shutdown)
                 && !addon_shutdown.load(Ordering::Relaxed)
             {
-                error!("Failed to deploy CoreDNS addon: {}", e);
+                error!("Failed to deploy CoreDNS addon: {:#}", e);
             }
         }));
     }
@@ -1248,7 +1253,7 @@ impl Kubernix {
             if signals::requested() {
                 return Ok(());
             }
-            if self.processes.iter_mut().flatten().any(|p| p.died()) {
+            if Self::any_died(&mut self.processes) {
                 bail!("A cluster component died unexpectedly, shutting down")
             }
             sleep(Duration::from_millis(100));
@@ -1290,7 +1295,7 @@ impl Kubernix {
                 Self::kill_shell(child);
                 return Ok(());
             }
-            if !died && self.processes.iter_mut().flatten().any(|p| p.died()) {
+            if !died && Self::any_died(&mut self.processes) {
                 died = true;
                 warn!(
                     "A cluster component died unexpectedly, the cluster may not work \
