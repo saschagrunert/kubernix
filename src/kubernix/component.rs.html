@@ -204,7 +204,7 @@
 <a href=#204 id=204 data-nosnippet>204</a>        <span class="kw">for </span>result <span class="kw">in </span>results {
 <a href=#205 id=205 data-nosnippet>205</a>            <span class="kw">match </span>result {
 <a href=#206 id=206 data-nosnippet>206</a>                <span class="prelude-val">Ok</span>(p) =&gt; group.push(p),
-<a href=#207 id=207 data-nosnippet>207</a>                <span class="prelude-val">Err</span>(e) <span class="kw">if </span>e.downcast_ref::&lt;Canceled&gt;().is_some() =&gt; <span class="macro">debug!</span>(<span class="string">"{:#}"</span>, e),
+<a href=#207 id=207 data-nosnippet>207</a>                <span class="prelude-val">Err</span>(e) <span class="kw">if </span>e.is::&lt;Canceled&gt;() =&gt; <span class="macro">debug!</span>(<span class="string">"{:#}"</span>, e),
 <a href=#208 id=208 data-nosnippet>208</a>                <span class="prelude-val">Err</span>(e) =&gt; failures.push(<span class="macro">format!</span>(<span class="string">"{:#}"</span>, e)),
 <a href=#209 id=209 data-nosnippet>209</a>            }
 <a href=#210 id=210 data-nosnippet>210</a>        }
