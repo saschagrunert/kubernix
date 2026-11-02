@@ -1,19 +1,27 @@
 //! System preparation and host utilities.
 //!
-//! Handles kernel module loading, sysctl configuration, hosts file
+//! Handles kernel module loading, sysctl configuration, the host state
+//! of the cluster in root mode (see `HostState`), hosts file
 //! management, executable lookup in `$PATH`, and container detection.
 
-use crate::{Config, crio, node::Node};
+use crate::{
+    Config, crio,
+    hoststate::{self, HOST_STATE_FILE, HostState, PROC_SYS},
+    node::Node,
+    process,
+    proxy::Proxy,
+    rootless::Rootless,
+};
 use anyhow::{Context, Result, bail};
 use log::{debug, info, warn};
 use nix::mount::{MsFlags, mount};
 use std::{
     env::{split_paths, var, var_os},
+    ffi::OsStr,
     fmt::Display,
     fs::{self, read_to_string},
     net::Ipv4Addr,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 /// Manages host-level system preparation and cleanup.
@@ -22,6 +30,8 @@ pub struct System {
     hosts: Option<PathBuf>,
     /// Comment which marks the hosts file lines of the run root.
     hosts_tag: String,
+    /// The locked host state in root mode, restored on cleanup.
+    host_state: Option<HostState>,
 }
 
 impl System {
@@ -30,7 +40,7 @@ impl System {
     /// `/var/lib/cni` holds the CNI result cache of CRI-O and containerd,
     /// which is not configurable, `/run/netns` the pod network namespaces
     /// of containerd, `/run/containerd` the shim sockets and `/run/kubernix`
-    /// the attach sockets of CRI-O.
+    /// the temporary version files and exec PID files of CRI-O.
     const ROOTLESS_DIRS: &'static [&'static str] = &[
         "/var/lib/kubelet",
         "/var/lib/crio",
@@ -43,7 +53,7 @@ impl System {
         "/run/containers",
         "/run/containerd",
         "/run/netns",
-        crio::ATTACH_SOCKET_BASE,
+        crio::RUN_BASE,
     ];
 
     /// The kubelet device plugin directory, which does not follow `--root-dir`.
@@ -118,14 +128,48 @@ impl System {
 
             // Kernel modules cannot be loaded from the user namespace.
             Self::enable_network_sysctls(true)?;
-        } else if !Self::in_container()? {
-            for module in &["overlay", "br_netfilter", "ip_conntrack"] {
-                Self::modprobe(module)?;
-            }
-            Self::enable_network_sysctls(false)?;
-        } else {
-            info!("Skipping modprobe and sysctl (containerized)");
+            Rootless::warn_missing_controllers();
         }
+
+        // The state of the user namespace of rootlesskit gets removed with
+        // it, while root mode restores the sysctls and removes the rules of
+        // kube-proxy when the cluster stops. The lock of the host state
+        // keeps other clusters in root mode from changing the host, like
+        // removing the bridges, until then, also before the components
+        // listen on their ports.
+        let host_state = if config.is_rootless() {
+            None
+        } else {
+            let state = match HostState::acquire(Path::new(HOST_STATE_FILE), Path::new(PROC_SYS)) {
+                Ok(Some(state)) => Some(state),
+                Ok(None) => bail!(
+                    "Another cluster in root mode is running, starting or stopping, \
+                     see `kubernix status --root <dir>`"
+                ),
+                Err(e) => {
+                    warn!(
+                        "{:#}, the sysctls and kube-proxy rules will not be restored",
+                        e
+                    );
+                    None
+                }
+            };
+            let save = || state.as_ref().map_or(Ok(()), HostState::save);
+            // Neither works in a user namespace, like a rootless container
+            if Self::in_container()? || Self::in_user_namespace() {
+                info!("Skipping modprobe and sysctl (containerized)");
+            } else {
+                // Save the sysctls before loading the modules, and the ones
+                // which the modules add afterwards
+                save()?;
+                for module in &["overlay", "br_netfilter", "ip_conntrack"] {
+                    Self::modprobe(module)?;
+                }
+                save()?;
+                Self::enable_network_sysctls(false)?;
+            }
+            state
+        };
 
         // Remove the entries of a former run of the same root which did not
         // clean up, other roots may belong to running clusters
@@ -136,13 +180,16 @@ impl System {
         }
 
         let hosts = if config.multi_node() {
-            // Try to write the hostnames, which does not work on every system
+            // Try to write the hostnames, which does not work on every
+            // system, like on NixOS in root mode, where the hosts file is
+            // a link into the Nix store. The API server reaches the
+            // kubelets via their node IP anyway.
             let entries = (0..config.nodes())
                 .map(|x| format!("{} {}", Ipv4Addr::LOCALHOST, Node::raw(x)))
                 .collect::<Vec<_>>();
             match Self::add_hosts_entries(&hosts_file, &hosts_tag, &entries) {
                 Err(e) => {
-                    debug!("{:#}. The nodes may be not reachable", e);
+                    warn!("{:#}, the node names do not resolve on the host", e);
                     None
                 }
                 _ => Some(hosts_file),
@@ -151,12 +198,16 @@ impl System {
             None
         };
 
-        Ok(Self { hosts, hosts_tag })
+        Ok(Self {
+            hosts,
+            hosts_tag,
+            host_state,
+        })
     }
 
     /// Returns true if running inside a user namespace (uid 0 maps to
     /// a non-zero host UID). Used to guard destructive host path cleanup
-    /// and to validate the KUBERNIX_ROOTLESS env var at startup.
+    /// and to detect root inside a user namespace at startup.
     ///
     /// This function is intentionally side-effect-free (no logging)
     /// because it may be called before the logger is initialized.
@@ -206,7 +257,8 @@ impl System {
         }
     }
 
-    /// Restore the initial system state
+    /// Restore the initial system state. The components are stopped
+    /// already, so the rules of kube-proxy can be removed.
     fn cleanup(&mut self) {
         if let Some(hosts) = self.hosts.take()
             && let Err(e) = Self::remove_hosts_entries(&hosts, &self.hosts_tag)
@@ -215,6 +267,9 @@ impl System {
                 "Unable to restore hosts file, may need manual cleanup: {:#}",
                 e
             );
+        }
+        if let Some(mut state) = self.host_state.take() {
+            state.release(Proxy::cleanup_rules);
         }
     }
 
@@ -284,20 +339,27 @@ impl System {
     where
         P: AsRef<Path> + Display,
     {
-        var_os("PATH")
-            .and_then(|paths| {
-                split_paths(&paths)
-                    .filter_map(|dir| {
-                        let full_path = dir.join(&name);
-                        if full_path.is_file() {
-                            Some(full_path)
-                        } else {
-                            None
-                        }
-                    })
-                    .next()
-            })
-            .with_context(|| format!("Unable to find executable '{}' in $PATH", name))
+        Self::find_executable_in(name, var_os("PATH").as_deref())
+    }
+
+    /// Find an executable inside the provided `PATH`
+    pub fn find_executable_in<P>(name: P, path: Option<&OsStr>) -> Result<PathBuf>
+    where
+        P: AsRef<Path> + Display,
+    {
+        path.and_then(|paths| {
+            split_paths(paths)
+                .filter_map(|dir| {
+                    let full_path = dir.join(&name);
+                    if full_path.is_file() {
+                        Some(full_path)
+                    } else {
+                        None
+                    }
+                })
+                .next()
+        })
+        .with_context(|| format!("Unable to find executable '{}' in $PATH", name))
     }
 
     /// Return the full path to the default system shell
@@ -327,7 +389,7 @@ impl System {
             return Ok(());
         }
         debug!("Loading kernel module '{}'", module);
-        let output = Command::new("modprobe").arg(module).output()?;
+        let output = process::command("modprobe").arg(module).output()?;
         if !output.status.success() {
             bail!(
                 "Unable to load '{}' kernel module: {}",
@@ -340,10 +402,7 @@ impl System {
 
     /// Check if a sysctl is already enabled (value is "1")
     fn sysctl_enabled(key: &str) -> bool {
-        let path = format!("/proc/sys/{}", key.replace('.', "/"));
-        read_to_string(&path)
-            .map(|v| v.trim() == "1")
-            .unwrap_or(false)
+        hoststate::read_sysctl(Path::new(PROC_SYS), key).is_ok_and(|v| v == "1")
     }
 
     /// Enable the network sysctls. In rootless mode, they belong to the
@@ -378,16 +437,8 @@ impl System {
             return Ok(());
         }
         debug!("Enabling sysctl '{}'", key);
-        let enable_arg = format!("{}=1", key);
-        let output = Command::new("sysctl").arg("-w").arg(&enable_arg).output()?;
-        if !output.status.success() {
-            bail!(
-                "Unable to set sysctl '{}': {}",
-                enable_arg,
-                String::from_utf8(output.stderr)?,
-            );
-        }
-        Ok(())
+        hoststate::write_sysctl(Path::new(PROC_SYS), key, "1")
+            .with_context(|| format!("Unable to set sysctl '{}=1'", key))
     }
 
     fn hosts() -> PathBuf {
@@ -406,7 +457,6 @@ impl Drop for System {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::tests::test_config;
 
     const VALID_EXECUTABLE: &str = "echo";
     const INVALID_EXECUTABLE: &str = "should-not-exist";
@@ -419,16 +469,6 @@ mod tests {
     #[test]
     fn sysctl_failure() {
         assert!(System::sysctl_enable("invalid").is_err());
-    }
-
-    #[test]
-    fn rootless_dirs_contain_cni_cache() {
-        assert!(System::ROOTLESS_DIRS.contains(&"/var/lib/cni"));
-    }
-
-    #[test]
-    fn rootless_dirs_contain_attach_socket_base() {
-        assert!(System::ROOTLESS_DIRS.contains(&crio::ATTACH_SOCKET_BASE));
     }
 
     const HOSTS: &str = "127.0.0.1 localhost\n::1 localhost # comment\n\n# end\n";
@@ -574,20 +614,23 @@ mod tests {
     }
 
     #[test]
+    fn find_executable_in_path() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        fs::write(dir.path().join("tool"), "")?;
+        let path = format!("/nonexistent:{}", dir.path().display());
+        assert_eq!(
+            System::find_executable_in("tool", Some(OsStr::new(&path)))?,
+            dir.path().join("tool")
+        );
+        assert!(System::find_executable_in("tool", Some(OsStr::new("/nonexistent"))).is_err());
+        assert!(System::find_executable_in("tool", None).is_err());
+        Ok(())
+    }
+
+    #[test]
     fn find_shell_success() {
         temp_env::with_var("SHELL", Some(VALID_EXECUTABLE), || {
             assert!(System::shell().is_ok());
         });
-    }
-
-    /// Integration test: requires root for modprobe/sysctl.
-    /// Run with: sudo cargo test -- --ignored
-    #[test]
-    #[ignore]
-    fn setup_success() -> Result<()> {
-        let c = test_config()?;
-        let mut s = System::setup(&c)?;
-        s.cleanup();
-        Ok(())
     }
 }

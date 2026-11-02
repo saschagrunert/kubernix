@@ -11,7 +11,9 @@ use crate::{
     process::{Process, ProcessState, stoppable},
 };
 use anyhow::Context;
-use std::fs::create_dir_all;
+use std::{fs::create_dir_all, path::PathBuf};
+
+const ETCD: &str = "etcd";
 
 /// Component wrapper for registry-based startup.
 pub struct EtcdComponent;
@@ -36,9 +38,19 @@ pub struct Etcd {
 }
 
 impl Etcd {
+    /// The data directory of etcd.
+    pub fn data_dir(config: &Config) -> PathBuf {
+        config.root().join(ETCD).join("run")
+    }
+
+    /// Returns true if etcd stored data, which depends on the cluster CA,
+    /// the ServiceAccount key and the encryption key.
+    pub fn has_data(config: &Config) -> bool {
+        Self::data_dir(config).join("member").exists()
+    }
+
     /// Start etcd with TLS and the given cluster configuration.
     pub fn start(config: &Config, network: &Network, pki: &Pki) -> ProcessState {
-        const ETCD: &str = "etcd";
         let dir = config.root().join(ETCD);
         create_dir_all(&dir).context("Unable to create etcd directory")?;
 
@@ -60,16 +72,16 @@ impl Etcd {
                 ),
                 &format!("--advertise-client-urls=https://{}", network.etcd_client()),
                 &format!("--cert-file={}", pki.etcd().cert().display()),
-                &format!("--data-dir={}", dir.join("run").display()),
+                &format!("--data-dir={}", Self::data_dir(config).display()),
                 &format!("--initial-cluster=etcd=https://{}", network.etcd_peer()),
                 &format!("--key-file={}", pki.etcd().key().display()),
                 &format!("--listen-client-urls=https://{}", network.etcd_client()),
                 &format!("--listen-peer-urls=https://{}", network.etcd_peer()),
                 &format!("--name={}", ETCD),
-                &format!("--peer-cert-file={}", pki.etcd().cert().display()),
-                &format!("--peer-key-file={}", pki.etcd().key().display()),
-                &format!("--peer-trusted-ca-file={}", pki.ca().cert().display()),
-                &format!("--trusted-ca-file={}", pki.ca().cert().display()),
+                &format!("--peer-cert-file={}", pki.etcd_peer().cert().display()),
+                &format!("--peer-key-file={}", pki.etcd_peer().key().display()),
+                &format!("--peer-trusted-ca-file={}", pki.etcd_ca().cert().display()),
+                &format!("--trusted-ca-file={}", pki.etcd_ca().cert().display()),
             ],
         )?;
 
@@ -79,30 +91,3 @@ impl Etcd {
 }
 
 stoppable!(Etcd);
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{config::tests::test_config, network::tests::test_network};
-    use anyhow::Result;
-
-    #[test]
-    fn component_metadata() {
-        let c = EtcdComponent;
-        assert_eq!(c.name(), "etcd");
-        assert_eq!(c.phase(), Phase::Infrastructure);
-    }
-
-    /// Integration test: requires the etcd binary in $PATH.
-    /// Run with: cargo test -- --ignored
-    #[test]
-    #[ignore]
-    fn start_and_stop() -> Result<()> {
-        let c = test_config()?;
-        let n = test_network()?;
-        let p = Pki::new(&c, &n)?;
-
-        let mut etcd = Etcd::start(&c, &n, &p)?;
-        etcd.stop()
-    }
-}

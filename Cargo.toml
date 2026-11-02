@@ -12,6 +12,14 @@ homepage = "https://github.com/saschagrunert/kubernix"
 keywords = ["kubernetes", "nix", "cluster", "cri-o", "containerd"]
 readme = "README.md"
 repository = "https://github.com/saschagrunert/kubernix"
+# The nix files and flake.lock get embedded into the binary.
+include = [
+    "/LICENSE",
+    "/README.md",
+    "/flake.lock",
+    "/nix/**",
+    "/src/**",
+]
 
 [dependencies]
 anyhow = "1.0.102"
@@ -24,17 +32,18 @@ ipnetwork = { version = "0.21.1", features = ["serde"] }
 log = { version = "0.4.32", features = ["serde", "std"] }
 nix = { version = "0.31.3", features = ["fs", "hostname", "signal", "mount", "process", "sched", "user"] }
 rayon = "1.12.0"
-rcgen = "0.14.10"
+rcgen = { version = "0.14.10", features = ["x509-parser"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 signal-hook = "0.4.4"
 time = "0.3.55"
 toml = "1.1.2"
+x509-parser = { version = "0.18.1", features = ["verify"] }
 
 [dev-dependencies]
+serde_norway = "0.9.42"
 temp-env = "0.3.6"
 tempfile = "3.27.0"
-x509-parser = { version = "0.18.1", features = ["verify"] }
 
 [profile.release]
 strip = true

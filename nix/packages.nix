@@ -21,7 +21,6 @@ with pkgs;
   runc
   slirp4netns
   socat
-  sysctl
   util-linux
 ]
 ++ [ /* PACKAGES */ ]

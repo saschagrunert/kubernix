@@ -20,7 +20,6 @@ trap 'rm -f "$README_TMP"' EXIT
 # packages.nix. If nixpkgs changes a pname, update this map.
 declare -A NAME_MAP=(
     [cri-o]=cri-o-wrapper
-    [procps]=sysctl
 )
 
 # Packages excluded from the versions table

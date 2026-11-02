@@ -18,7 +18,7 @@ for local testing, experimenting and development purposes.
 
 [1]: https://kubernetes.io
 
-Moving pictures are worth more than thousand words, so here is a short demo:
+Moving pictures are worth more than a thousand words, so here is a short demo:
 
 ![demo](.github/kubernix.gif)
 
@@ -61,7 +61,6 @@ The following technology stack is currently being used:
 | runc            | v1.5.2   |
 | slirp4netns     | v1.3.6   |
 | socat           | v1.8.1.3 |
-| sysctl          | v4.0.7   |
 | util-linux      | v2.42.4  |
 
 Some other tools are not explicitly mentioned here, because they are not
@@ -89,14 +88,16 @@ graph TD
 ### Requirements
 
 As already mentioned, there is only one real dependency needed to run this
-project: **Nix** (with [flakes][3] enabled). To set up Nix, run:
+project: **Nix**. To set up Nix, run:
 
 ```shell
 $ curl -L https://nixos.org/nix/install | sh
 ```
 
-Please make sure to follow the instructions output by the script and that
-[flakes are enabled][3] in your Nix configuration.
+Please make sure to follow the instructions output by the script. KuberNix
+uses [flakes][3] and enables the `nix-command` and `flakes` experimental
+features for its own Nix invocations, so they do not have to be enabled in
+the Nix configuration, also not for root.
 
 [3]: https://wiki.nixos.org/wiki/Flakes
 
@@ -105,25 +106,56 @@ cluster components and tools come from Nix.
 
 KuberNix runs in **root mode** when started as root, for example via `sudo`:
 
-- `nix` has to be in the `PATH` of root, for example via
+- `nix` has to be in the `PATH` of root, so run it via
   `sudo env "PATH=$PATH" kubernix`.
+- `sudo` drops the proxy variables (`http_proxy`, `https_proxy`, `no_proxy`
+  and their upper case variants) by default. If Nix or the nodes need a proxy,
+  keep them via `sudo -E env "PATH=$PATH" kubernix` or `Defaults env_keep`
+  in the sudoers configuration.
 - The kernel modules `overlay`, `br_netfilter` and `ip_conntrack` get loaded
-  and the required sysctls get set automatically. Inside a container this
-  step is skipped, so run [`contrib/prepare-system`](contrib/prepare-system)
-  on the host instead.
+  and the required sysctls get set automatically, and restored when the
+  cluster stops (see [Networking](#networking)). Inside a container or a
+  user namespace this step is skipped, so run
+  [`contrib/prepare-system`](contrib/prepare-system) on the host instead.
+- Root in a user namespace, like in a rootless `podman run --privileged`
+  container, an unprivileged LXC container or with Docker `userns-remap`,
+  runs in root mode as well, except in the shell of a rootless cluster.
+- The run directory and all its parent directories have to belong to root or
+  to the user running KuberNix via `sudo` (`SUDO_UID`). None of them may be
+  writable by others, or by their group, unless the group is the private
+  group of the owner (the primary group of the owner with the same name and
+  no other members, like with the user private groups of Fedora or RHEL; no
+  other user in `/etc/passwd` may have it as primary group, users of other
+  NSS sources like LDAP are not checked). Parent directories with the sticky
+  bit (like `/tmp`) may be writable by group and others. Otherwise another
+  user could plant files or symbolic links in the run directory or replace
+  it, which root would write to or execute, so KuberNix refuses to use it. A
+  new run directory gets the mode `0755`, so that the invoking user can
+  access the admin kubeconfig.
+- As root without `sudo` (no `SUDO_UID`), for example via `su -`, `doas`, an
+  SSH login as root or inside a container with a mounted directory of a
+  user, only directories of root are trusted. So a run directory below the
+  home directory or a checkout of a user gets refused. Run KuberNix via
+  `sudo` as that user instead, or use a run directory of root, for example
+  `--root /var/lib/kubernix`.
 
 Otherwise, it runs in **rootless mode**, which requires:
 
-- Unprivileged user namespaces (`kernel.unprivileged_userns_clone=1`). On
-  Ubuntu 23.10+, `kernel.apparmor_restrict_unprivileged_userns=0` may be
-  needed as well.
-- cgroup v2 with the `memory`, `cpu`, `pids` and `io` controllers delegated
-  to the user.
-- The setuid helpers `newuidmap` and `newgidmap` on the host (for example
-  from the `uidmap` or `shadow` package) and entries for the user in
-  `/etc/subuid` and `/etc/subgid`. Nix cannot provide setuid binaries.
+- Unprivileged user namespaces.
+- cgroup v2 (the unified hierarchy) with the `memory`, `cpu`, `pids` and `io`
+  controllers delegated to the user.
+- The helpers `newuidmap` and `newgidmap` on the host, setuid root or with
+  file capabilities, and subordinate IDs for the user. Nix cannot provide
+  setuid binaries.
 - `systemd-run` with a systemd user session, since KuberNix runs itself via
   `systemd-run --user --scope`.
+- The port `6443` on `127.0.0.1` being free, since the API server gets
+  published there. It is not configurable yet, so only one rootless cluster
+  can run at a time.
+
+KuberNix checks these prerequisites before starting the rootless session and
+points to [Troubleshooting](#troubleshooting), which describes how to fulfill
+them, if one of them is not met.
 
 ### Getting Started
 
@@ -144,10 +176,12 @@ install the application via `cargo install kubernix`. Downloaded release
 binaries can be checked as described in
 [Verifying Releases](#verifying-releases).
 
-Then start KuberNix:
+Then start KuberNix as a regular user (rootless mode) or as root (see
+[Requirements](#requirements)):
 
 ```
 $ kubernix
+$ sudo env "PATH=$PATH" kubernix
 ```
 
 KuberNix now sets up the Nix environment, downloads the needed binaries and
@@ -179,13 +213,15 @@ If everything went fine, you should be dropped into a new shell session,
 like this:
 
 ```
+[INFO ] Deploying CoreDNS in the background
 [INFO ] Everything is up and running
 [INFO ] Spawning interactive shell
 [INFO ] Please be aware that the cluster stops if you exit the shell
 >
 ```
 
-Now you can access your cluster via tools like `kubectl`:
+CoreDNS gets deployed while the shell is already usable, so its pod may
+still be starting. Now you can access your cluster via tools like `kubectl`:
 
 ```
 > kubectl get pods --all-namespaces
@@ -193,7 +229,7 @@ NAMESPACE     NAME                       READY   STATUS    RESTARTS   AGE
 kube-system   coredns-85d84dd694-xz997   1/1     Running   0          102s
 ```
 
-All configuration files have been written to the target directory, which is now
+All configuration files have been written to the run directory, which is now
 the current one:
 
 ```
@@ -208,9 +244,12 @@ kubeconfig/
 kubelet/
 kubernix.env
 kubernix.lock
+kubernix.pgroups
 kubernix.pid
 kubernix.toml
 nix/
+nix-profile/
+nix-profile.lock
 pki/
 policy.json
 proxy/
@@ -222,6 +261,7 @@ available within their corresponding directory:
 
 ```
 > ls -1 */*.log */*/*.log
+apiserver/audit.log
 apiserver/kube-apiserver.log
 controllermanager/kube-controller-manager.log
 crio/<node>/crio.log  # or containerd/<node>/containerd.log
@@ -239,14 +279,20 @@ log file is named after the container runtime, for example
 
 The kubeconfigs embed the client keys, so they are only readable by their
 owner. When running via `sudo`, the `kubeconfig/admin.kubeconfig` belongs to
-the invoking user.
+the invoking user. The `pki` directory is only accessible by its owner.
 
 If you want to spawn an additional shell session, simply run `kubernix shell`
 in the same directory as where the initial bootstrap happened. In rootless
-mode, the shell enters the namespaces of the running cluster via `nsenter`.
-If no cluster is running there (or it is not ready yet), `kubernix shell`
-fails with an error. Only one KuberNix instance can run per run directory, a second one fails to
-start and points to `kubernix shell` instead.
+mode, the shell enters the namespaces of the running cluster via `nsenter` and
+keeps the current working directory.
+If no cluster is running there, `kubernix shell` exits with `3`, and it fails
+if the cluster is not ready yet. Only one KuberNix instance can run per run
+directory, a second one fails to start and points to `kubernix shell` instead.
+The shells of the cluster export `KUBERNIX_ROOT` with the absolute path of the
+run directory, so `kubernix status`, `kubernix stop` and `kubernix shell` work
+there from any directory. A new cluster cannot be started from the shell of a
+rootless cluster, since KuberNix runs as root in its user namespace: start it
+from a regular terminal instead.
 
 ```
 $ kubernix shell
@@ -264,8 +310,8 @@ the exit code of the command:
 
 ```
 $ kubernix shell -- kubectl get nodes
-NAME     STATUS   ROLES    AGE   VERSION
-node-0   Ready    <none>   2m    v1.37.0
+NAME      STATUS   ROLES    AGE   VERSION
+my-host   Ready    <none>   2m    v1.37.1
 ```
 
 #### Status
@@ -283,12 +329,13 @@ Nodes:       1
 CRI runtime: crio
 OCI runtime: crun
 API server:  https://127.0.0.1:6443
-Node:        node-0 Ready
+Node:        my-host Ready
 ```
 
 The state is `starting` while KuberNix prepares the Nix environment and
 bootstraps the cluster, and `stopped` if no KuberNix instance uses the run
-directory. Use `kubernix status --output json` for a machine-readable output.
+directory. Use `kubernix status --output json` for a machine-readable output,
+see [Status Output](#status-output).
 
 #### Cleanup
 
@@ -298,54 +345,90 @@ from the initial process:
 ```
 > exit
 [INFO ] Cleaning up
+…
+[INFO ] Cleanup done
 ```
 
-The same happens on `SIGTERM` or `SIGHUP`, as well as on `SIGINT` (Ctrl+C)
-during the bootstrap or with `--no-shell`. KuberNix writes its PID to
+The same happens on `SIGTERM`, `SIGQUIT` or `SIGHUP`, as well as on `SIGINT`
+(Ctrl+C) during the bootstrap or with `--no-shell`. KuberNix writes its PID to
 `kubernix.pid` in the run directory once the cluster is ready and removes it
-after the cleanup. With `--no-shell`, it also shuts the cluster down if one of
-its components dies.
+after the cleanup. If one of the components dies, KuberNix shuts the cluster
+down with `--no-shell` and warns about it while the shell is open.
 
 `kubernix stop` stops the cluster of the run directory from another terminal
 or script. It sends `SIGTERM` to the KuberNix instance and waits until the
 cleanup is done and the instance exited, up to `--timeout` seconds (default
-`180`). A cluster which is still starting aborts its bootstrap instead.
+`180`). A cluster which is still starting aborts its bootstrap instead, also
+while the Nix environment gets evaluated, which removes the configuration of
+a new run directory again. `kubernix stop` works from the shell of the
+cluster as well.
 
-Another termination signal during the cleanup, for example pressing Ctrl+C
-again or running `kubernix stop` again, force quits KuberNix. If the cleanup
-did not start because of a signal, for example after exiting the shell, it
-takes two signals. A force quit kills all component processes immediately,
-restores `/etc/hosts` and removes the PID file, but skips the remaining cleanup
-steps, so pods, node containers, mounts, network interfaces or firewall rules
-may be left behind.
+Another termination signal during the bootstrap or the cleanup, for example
+pressing Ctrl+C again or running `kubernix stop` again, force quits KuberNix.
+Signals within one second after the first one count as duplicates of it, and
+`SIGHUP` never force quits, since a terminal or an SSH session may deliver a
+signal more than once. If the cleanup did not start because of a signal, for
+example after exiting the shell, it takes two signals. A force quit kills all
+component processes immediately, restores `/etc/hosts` and removes the PID
+file, but skips the remaining cleanup steps, so pods, node containers, mounts,
+network interfaces or firewall rules may be left behind. The next start in the
+same run directory removes these leftovers, like the component processes,
+node containers, bridges, pod IP allocations and firewall rules, as well as
+the ones of a killed KuberNix. `kubernix stop` removes the leftover node
+containers and mounts of a root cluster as well once no cluster runs there
+anymore.
+
+In rootless mode, the CRI storage (images and containers) contains files owned
+by the subordinate IDs of the user, so it gets removed during the cleanup from
+inside the user namespace, or by the next start after an unclean exit.
 
 A cluster started as root can only be accessed as root. `kubernix status`
-works for other users as well, but `kubernix shell` and `kubernix stop` (if the
-cluster runs) fail for them and print the matching `sudo` command, for example:
+works for other users as well (the lock file `kubernix.lock` is only readable
+by root, so they check the lock via `/proc/locks`), but `kubernix shell` and
+`kubernix stop` (if the cluster runs) fail for them and print the command to
+run them as root. It keeps the environment for the `KUBERNIX_*` variables, for
+example:
 
 ```
 $ sudo -E env "PATH=$PATH" kubernix stop
 ```
 
-`kubernix stop` and `kubernix status` exit with `3` if no cluster is running in
-the run directory, see [Exit Codes](#exit-codes).
+`kubernix stop`, `kubernix status` and `kubernix shell` exit with `3` if no
+cluster is running in the run directory, see [Exit Codes](#exit-codes).
 
-Please note that the directory where all the data is stored is not being
-removed after the exit of KuberNix. This means that you’re still able to
-access the log and configuration files for further processing. If you start
-the cluster again, then the cluster files will be reused. This is especially
-handy if you want to test configuration changes.
+Please note that the run directory is not removed after the exit of KuberNix.
+This means that you’re still able to access the log and configuration files
+for further processing, and that the next start reuses the cluster (see
+[Restart](#restart)).
+
+To remove the run directory of a stopped root cluster, run:
+
+```
+$ sudo rm -rf kubernix-run
+```
+
+The run directory of a rootless cluster may contain files owned by the
+subordinate IDs of the user, for which a plain `rm -rf` fails with
+`Permission denied`. Remove it from a user namespace which maps them instead:
+
+```
+$ unshare --map-auto --map-root-user rm -rf kubernix-run
+```
+
+This requires `util-linux` 2.39 or newer (for example via
+`nix shell nixpkgs#util-linux`). With `podman`, `podman unshare rm -rf
+kubernix-run` works as well.
 
 #### Restart
 
-If you start KuberNix again in the same run directory, then it will re-use the
-configuration during the cluster bootstrapping process. This means that you
-can modify all data inside the run root for testing and debugging purposes.
-Run directories created by an incompatible KuberNix version are rejected and
-have to be removed (see [Run Directory](#run-directory)). The startup of the
-individual components will be initiated by JSON files called `run.json`, which
-are available inside the directories of the corresponding components. For
-example, etcd gets started via:
+If you start KuberNix again in the same run directory, then it reuses the
+existing cluster: the etcd data, the certificates and keys of the `pki`
+directory (see [Run Directory](#run-directory)), the encryption config and the
+settings of `kubernix.toml`. Run directories created by an incompatible
+KuberNix version are rejected and have to be removed. The configuration files
+of the components get rendered on every start, so changes to them get
+overwritten. Every component directory contains a `run.json`, which records
+the command line the component got started with. For example, for etcd:
 
 ```
 > cat kubernix-run/etcd/run.json
@@ -367,25 +450,29 @@ example, etcd gets started via:
 }
 ```
 
-The generated Nix environment in the `nix` directory is an exception: it gets
-regenerated if it differs from the one of the running KuberNix version, for
-example after an upgrade or when the content of the overlay changed. The
-evaluated environment is cached as a Nix profile in `nix-profile/<hash>`, where
-the hash covers the files of the `nix` directory. This includes all inputs,
-since the overlay gets copied into it and cannot refer to other local files
-(see [Overlays](#overlays)). Starting KuberNix or a new shell re-enters the
-cached environment without evaluating the flake again, and a changed or
-unusable environment, for example one with removed store paths, gets replaced.
-The profile is a garbage collector root as well, so `nix-collect-garbage` keeps
-the store paths of the run directory until it gets removed. The CRI runtime
-configurations are always rendered, since they reference the Nix store paths.
+The generated Nix environment in the `nix` directory gets regenerated if it
+differs from the one of the running KuberNix version, for example after an
+upgrade or when the content of the overlay changed. The evaluated environment
+is cached as a Nix profile in `nix-profile/<hash>`, where the hash covers the
+files of the `nix` directory. This includes all inputs, since the overlay gets
+copied into it and cannot refer to other local files (see
+[Overlays](#overlays)). Starting KuberNix or a new shell re-enters the cached
+environment without evaluating the flake again, and a changed or unusable
+environment, for example one with removed store paths, gets replaced. The
+profile is a garbage collector root as well, so `nix-collect-garbage` keeps
+the store paths of the run directory until it gets removed.
 
-The `kubernix.toml` keeps the settings of the existing cluster. Options which
-shape the cluster (`--nodes`, `--cidr`, `--cri-runtime`, `--oci-runtime`,
-`--container-runtime` and the rootless mode) cannot be changed for an existing
-run directory, so remove it to apply different values. Other options like
-`--log-level`, `--shell` or `--packages` override the stored values if they are
-set on the command line or via the environment.
+The `kubernix.toml` keeps the settings of the existing cluster. KuberNix
+writes it once the settings of a new run directory are valid, and removes it
+again if the Nix environment cannot be created, for example for a package which
+does not exist. Options which shape the cluster (`--nodes`, `--cidr`,
+`--cri-runtime`, `--oci-runtime`, `--container-runtime` and the rootless mode)
+cannot be changed for an existing run directory, so remove it to apply
+different values. The subcommands ignore these options and always use the
+existing cluster. Other options like `--log-level`, `--shell` or `--packages`
+override the stored values if they are set on the command line or via the
+environment, and an empty value like `--overlay=` or `KUBERNIX_PACKAGES=`
+overrides a stored overlay, Dockerfile or package list with none.
 
 ### Verifying Releases
 
@@ -394,8 +481,9 @@ SPDX 2.3 SBOM per binary (`kubernix-<arch>.spdx.json`) and a `SHA256SUMS` file
 covering all of them.
 `SHA256SUMS` is signed keyless with [cosign](https://docs.sigstore.dev/cosign/)
 and the signature is published as `SHA256SUMS.sigstore.json`. To verify a
-downloaded binary with cosign v3 (cosign v2 needs `--new-bundle-format` in
-addition):
+downloaded binary, use cosign v3. Older cosign v2 releases need
+`--new-bundle-format` in addition and may fail on bundles with Rekor v2
+entries:
 
 ```shell
 $ cosign verify-blob SHA256SUMS \
@@ -416,11 +504,11 @@ $ gh attestation verify kubernix-x86_64 --repo saschagrunert/kubernix \
 Whether known vulnerabilities in dependencies affect KuberNix is tracked in
 the [OpenVEX](https://openvex.dev) document
 [`.openvex/kubernix.openvex.json`](.openvex/kubernix.openvex.json). It is a
-living document, not a release asset, so scanners should fetch the current
-version from
-`https://raw.githubusercontent.com/saschagrunert/kubernix/main/.openvex/kubernix.openvex.json`:
+living document, not a release asset, so scanners should use its current
+version from the `main` branch:
 
 ```shell
+$ curl -sSfLO https://raw.githubusercontent.com/saschagrunert/kubernix/main/.openvex/kubernix.openvex.json
 $ grype sbom:kubernix-x86_64.spdx.json --vex kubernix.openvex.json
 $ trivy sbom --vex kubernix.openvex.json kubernix-x86_64.spdx.json
 ```
@@ -432,7 +520,9 @@ since grype matches the GHSA and trivy the CVE ID. This form was verified with
 grype v0.120.0 and trivy v0.76.1 scanning the release SBOM as above, both
 ignore a `pkg:cargo/kubernix` product with the dependency as subcomponent.
 Statements get added with [`vexctl`](https://github.com/openvex/vexctl) and
-checked with `make lint-vex`, for example:
+checked with `make lint-vex`. For example, a statement for an advisory of the
+`crossbeam-channel` crate (which is not a dependency anymore) would look like
+this:
 
 ```shell
 $ vexctl add --in-place .openvex/kubernix.openvex.json \
@@ -453,24 +543,41 @@ variables:
 | `-r, --root`          | Path where all the runtime data is stored                                   | `kubernix-run` | `KUBERNIX_ROOT`              |
 | `-l, --log-level`     | Logging verbosity (`off`, `error`, `warn`, `info`, `debug` or `trace`)      | `info`         | `KUBERNIX_LOG_LEVEL`         |
 | `--log-format`        | Log output format (`text` or `json`)                                        | `text`         | `KUBERNIX_LOG_FORMAT`        |
-| `-c, --cidr`          | CIDR used for the cluster network                                           | `10.10.0.0/16` | `KUBERNIX_CIDR`              |
+| `-c, --cidr`          | CIDR used for the cluster network, host bits are ignored                    | `10.10.0.0/16` | `KUBERNIX_CIDR`              |
 | `-s, --shell`         | The shell executable to be used                                             | `$SHELL`/`sh`  | `KUBERNIX_SHELL`             |
 | `--no-shell`          | Do not spawn an interactive shell after bootstrap                           | `false`        | `KUBERNIX_NO_SHELL`          |
 | `-n, --nodes`         | The number of nodes to be registered (`1` to `64`)                          | `1`            | `KUBERNIX_NODES`             |
 | `--container-runtime` | Container runtime for the node containers, only used in multinode root mode | `podman`       | `KUBERNIX_CONTAINER_RUNTIME` |
 | `-o, --overlay`       | Nix package overlay to be used                                              |                | `KUBERNIX_OVERLAY`           |
-| `-d, --dockerfile`    | Custom Dockerfile for the multi-node container image                        |                | `KUBERNIX_DOCKERFILE`        |
+| `-d, --dockerfile`    | Custom Dockerfile for the node containers, only used in multinode root mode |                | `KUBERNIX_DOCKERFILE`        |
 | `-p, --packages`      | Additional Nix packages to be added to the environment, comma separated     |                | `KUBERNIX_PACKAGES`          |
 | `--cri-runtime`       | CRI runtime to use (`crio` or `containerd`)                                 | `crio`         | `KUBERNIX_CRI_RUNTIME`       |
 | `--oci-runtime`       | Default OCI runtime (`crun` or `runc`)                                      | `crun`         | `KUBERNIX_OCI_RUNTIME`       |
 | `-a, --addons`        | Cluster addons to deploy, comma separated (`coredns`), `none` disables all  | `coredns`      | `KUBERNIX_ADDONS`            |
 
 Options which take a list accept comma separated values and can be repeated,
-for example `--packages=kubernetes-helm,jq` or `-p kubernetes-helm -p jq`. The
-same applies to their environment variables, like
-`KUBERNIX_PACKAGES=kubernetes-helm,jq`. Boolean environment variables like
-`KUBERNIX_NO_SHELL` take `true` or `false`. The `--root` option can also be
-given after the `shell` subcommand.
+for example `--packages=kubernetes-helm,jq` or `-p kubernetes-helm -p jq`, but
+not space separated values. The same applies to their environment variables,
+like `KUBERNIX_PACKAGES=kubernetes-helm,jq`. An empty value, like
+`--packages=` or `KUBERNIX_OVERLAY=`, sets no packages, overlay or Dockerfile.
+Boolean environment variables like `KUBERNIX_NO_SHELL` take `true` or `false`,
+where `false` is the same as not setting the variable. Options on the command
+line take precedence over environment variables, which also applies to
+`--shell` and `--no-shell`: setting both on the command line or both via the
+environment is an error. The `--root` option can also be given after any
+subcommand.
+
+The subcommands have these options:
+
+| Subcommand        | Option            | Description                                                    | Default |
+| ----------------- | ----------------- | -------------------------------------------------------------- | ------- |
+| `kubernix shell`  | `-- COMMAND…`     | Run the command in the cluster environment instead of a shell  |         |
+| `kubernix stop`   | `-t, --timeout`   | Seconds to wait for the cleanup to finish                      | `180`   |
+| `kubernix status` | `--output`        | Output format (`text` or `json`)                               | `text`  |
+
+Environment variables starting with `_KUBERNIX_` pass state between the
+internal stages of KuberNix. They are not part of the interface and must not
+be set.
 
 Please ensure that the CIDR is not overlapping with existing local networks and
 that your setup has access to the internet. The CIDR will be automatically split
@@ -503,9 +610,32 @@ node, multinode and rootless mode. The container runtime used for the node
 containers in multinode mode (`--container-runtime`) is not affected by this
 option.
 
+CRI-O monitors the containers of a pod with one [conmon-rs][] instance (the
+`pod` runtime type), which it creates for the infra container. CRI-O 1.37 runs
+a pod without infra container with the default handler instead of the one of
+its RuntimeClass, so KuberNix keeps the infra containers
+(`drop_infra_ctr = false`) until CRI-O passes the handler on. This costs one
+pause container per pod, and every node pulls the pause image.
+
+Workloads behave the same with both CRI runtimes: containers get the default
+capabilities of containerd, may bind privileged ports and, outside of rootless
+mode, open ICMP echo sockets (`ping`). Short image names like `nginx` resolve to
+`docker.io`. In rootless mode, the runtimes raise OOM scores below their own to
+it, since they cannot lower them, so the kubelet keeps the order between
+BestEffort, Burstable and Guaranteed pods only above that score. Neither CRI
+runtime reads the configuration files of the host (for example `/etc/crio`,
+`/etc/containerd` or the storage, registries and policy files in
+`/etc/containers`), its OCI hooks or its CDI specs (`/etc/cdi` and
+`/var/run/cdi`), and NRI is disabled. On purpose, the registry credentials of
+the host (CRI-O only) and its registry certificate directories still apply, so
+that private registries work like on the host: CRI-O reads
+`/etc/containers/certs.d` and `/etc/docker/certs.d`, containerd reads the
+`hosts.toml` files and certificates in `/etc/containerd/certs.d` only.
+
 [5]: https://github.com/containers/crun
 [6]: https://github.com/opencontainers/runc
 [7]: https://kubernetes.io/docs/concepts/containers/runtime-class
+[conmon-rs]: https://github.com/containers/conmon-rs
 
 #### Multinode Support
 
@@ -520,33 +650,132 @@ minimal root file system (the `/etc/passwd` and `/etc/group` of root as well
 as `/run`, `/tmp` and `/var/tmp`), which KuberNix imports on the first
 multinode run. The container runtime can be selected via
 `--container-runtime`. The default runtime is [podman][8], but other Docker
-compatible runtimes should work as well.
+compatible runtimes should work as well. The node image is never pulled
+(`--pull=never`), it only exists locally.
+
+The node containers are called `kubernix-<id>-<node>`, where `<id>` identifies
+the run directory, and carry the labels `kubernix.root=<id>` and
+`kubernix.root.path=<run directory>`, so clusters in different run
+directories do not interfere (see [Cleanup](#cleanup) for leftover
+containers). The node containers of 0.4, which are called `kubernix-node-<n>`,
+get removed on start. Running ones may belong to a cluster of 0.4 and are not
+removed automatically: if they block the ports, the start fails with the
+command which removes them.
 
 The nodes trust the same CA bundle for pulling images as the components on the
 host: the one of `SSL_CERT_FILE`, otherwise the first system bundle like
 `/etc/ssl/certs/ca-certificates.crt` or `/etc/pki/tls/certs/ca-bundle.crt`,
 otherwise the one of the Nix environment. A bundle outside of the Nix store
 gets mounted read-only to `/etc/ssl/certs/ca-certificates.crt`, so registry CAs
-installed on the host work in multinode mode as well.
+installed on the host work in multinode mode as well. The same applies to the
+registry configuration which the CRI runtimes use on the host: the
+credentials of root (`/run/containers/0/auth.json`,
+`/root/.config/containers/auth.json`, `/root/.docker/config.json` and the file
+of `REGISTRY_AUTH_FILE`) and the certificate directories
+`/etc/containers/certs.d`, `/etc/containerd/certs.d` and `/etc/docker/certs.d`
+get mounted read-only if they exist. The proxy variables (`HTTP_PROXY`,
+`HTTPS_PROXY`, `NO_PROXY` and their lower case variants) get forwarded to the
+nodes as well.
 
 A custom image can be built via `-d, --dockerfile`, for example to provide
 additional files in the node containers. Its build context is the directory of
-the Dockerfile. The Nix store and the environment get mounted into the
-containers the same way, so the image does not need to contain Nix. Note that
-the mounted store hides a `/nix/store` of the image. The node images are tagged
-with a hash of their inputs (`kubernix:base-<hash>`): the content of the
-default image, or the custom Dockerfile together with the metadata (path,
-mode, size and modification time) of all files in its build context, except
-the run directory. So they get recreated if the inputs change, which is why
-the build context should be small, and the images of previous builds get
-removed afterwards.
+the Dockerfile, so it is best kept in a directory of its own. Run directories
+in the build context, the one of the cluster and every other directory which
+contains a `kubernix.toml`, contain the keys of their clusters. Podman
+excludes them via an ignore file (`containerignore` in the run directory,
+which extends the `.containerignore` or `.dockerignore` of the build context).
+Podman is detected by the name of the executable after resolving symbolic
+links, or by its `--version` output, so for example a `docker` command of
+podman-docker counts as podman. Other container runtimes refuse a build
+context which contains run directories: move the Dockerfile into its own
+directory or use podman. A build context within a run directory is always
+refused. The Nix store and the environment get mounted into the containers the
+same way, so the image does not need to contain Nix. Note that the mounted
+store hides a `/nix/store` of the image. The node images are tagged with a
+hash of their inputs (`kubernix:base-<hash>`): the content of the default
+image, or the custom Dockerfile together with the metadata (path, mode, size
+and modification time) of all files in its build context, except the run
+directories. This includes files which an ignore file excludes from the build,
+like a `.git` directory, whose index changes with every `git status`. So the
+images get recreated whenever the build context changes, which is why it
+should be small, and the images of previous builds get removed afterwards. The
+tag gets determined once per start, so changes of the build context while the
+cluster runs do not affect the nodes.
 
 All nodes share the network namespace of the host (or the one of rootlesskit),
 where every node has its own bridge. The bridges masquerade the traffic leaving
 the cluster network, while an iptables rule exempts the traffic between pods of
 different nodes, so it is routed without NAT.
 
+One kube-proxy serves all nodes and considers only the pods of the first node
+as local. So Services with `internalTrafficPolicy: Local` or
+`externalTrafficPolicy: Local` only reach the pods of the first node, and
+traffic to them gets dropped if none of their pods runs there.
+
 [8]: https://github.com/containers/podman
+
+#### Networking
+
+The pod network of every node is a CNI bridge named `kx<id>.<number>`, like
+`kx0123abcd.0` for the first node, where `<id>` identifies the run directory.
+So clusters of different run directories never share bridges.
+
+In root mode, KuberNix creates the bridges with their gateway address, the
+first address of the pod CIDR of the node (like `10.10.0.1`), which the
+kubelets report as node IP (`InternalIP`), and with a fixed MAC address
+derived from `<id>` and the node number. The node IP does not change with the
+network of the host, for example on a new DHCP lease, and it is not advertised
+to other machines. The API server reaches the kubelets via the node IP and
+advertises the node IP of the first node as endpoint of the `kubernetes`
+Service, so it also starts without a default route. In rootless mode, the node
+IP is the address of the network namespace of rootlesskit (`10.0.2.100`).
+
+Before it creates the bridges, KuberNix removes the bridges which a former run
+of the same run directory left behind. In root mode, it also removes the
+bridges of other run directories and of former versions (`kubernix.<number>`)
+whose address overlaps the CIDR, since the host would route the pod traffic
+via them. Only a cluster which did not clean up, for example after a force
+quit, leaves them behind, since only one cluster runs in root mode at a time
+(see below). Bridges of other run directories which do not overlap are kept
+until the next start in their run directory.
+
+CoreDNS runs in the host network and listens only on the node IP: on port
+`10053` for DNS, which its Service maps to port `53`, so it does not collide
+with other DNS servers on the host, on `10054` and `10055` for the health and
+readiness checks and on `9153` for the metrics. The node IP is not advertised,
+but the host accepts packets for all of its addresses on every interface, so a
+machine in the same local network which routes the CIDR via the host can reach
+these ports, unless a firewall on the host blocks them. Pods with the `Default` DNS
+policy, like CoreDNS for its upstream servers, use the resolver configuration
+of the host. If it points to the stub resolver of systemd-resolved on a
+loopback address, which pods cannot reach, the kubelets use
+`/run/systemd/resolve/resolv.conf` instead.
+
+The `hostPort` of pods works with both CRI runtimes: CRI-O maps the ports
+itself, while containerd uses the CNI `portmap` plugin.
+
+The components listen on fixed ports, which KuberNix checks before it changes
+the system: `2379` and `2380` (etcd), `6443` (API server), `10257` (controller
+manager), `10259` (scheduler), `10249` and `10256` (kube-proxy) and `11250` and
+`12250` for the first kubelet, counting up for every further node. So only one
+cluster runs in root mode at a time. If a port is in use by the cluster of
+another run directory, `kubernix status --root <dir>` shows and
+`kubernix stop --root <dir>` stops it.
+
+In root mode, KuberNix locks `/run/kubernix-host-state.lock` before it changes
+the system and keeps it locked until it has restored the system after the
+cluster stopped. Meanwhile, another cluster in root mode fails to start with an
+error, also while the components of the first one do not listen yet, instead of
+removing its bridges. KuberNix saves the sysctls which it, the kubelets and
+kube-proxy change in `/run/kubernix-host-state`, like
+`net.ipv4.conf.all.route_localnet` and `kernel.panic`. When the cluster stops,
+it restores them and removes the rules of kube-proxy via
+`kube-proxy --cleanup`. After a force quit, the next run keeps the saved values and
+restores them when it stops, like the values which could not be restored. KuberNix enables `net.ipv4.ip_forward`,
+`net.bridge.bridge-nf-call-iptables` and `net.bridge.bridge-nf-call-ip6tables`
+(loading `br_netfilter`) but does not disable them again, like kubeadm and
+kind, since other services started meanwhile, like Docker, libvirt or a VPN,
+may need them.
 
 #### Overlays
 
@@ -602,12 +831,109 @@ $ kubernix -p kubernetes-helm
 version.BuildInfo{Version:"v…", …}
 ```
 
-Multiple packages can be passed comma separated, for example
-`-p kubernetes-helm,jq` or `KUBERNIX_PACKAGES=kubernetes-helm,jq`. All
-available packages are listed on the [official Nix package search][10].
+Multiple packages can be passed comma separated or by repeating the option
+(see [Configuration](#configuration)), for example `-p kubernetes-helm,jq`. A
+package is a nixpkgs attribute path, like `jq` or `python3Packages.pyyaml`. All available
+packages are listed on the [official Nix package search][10].
 
 [9]: https://helm.sh
 [10]: https://search.nixos.org/packages?channel=unstable
+
+### Troubleshooting
+
+KuberNix checks the prerequisites of rootless mode before it starts and fails
+with one error per unmet prerequisite. The common causes and their fixes are:
+
+- **No systemd user session**: `systemd-run --user` needs the bus of the
+  systemd user instance (`$XDG_RUNTIME_DIR/bus` or
+  `$DBUS_SESSION_BUS_ADDRESS`), otherwise it fails with
+  `Failed to connect to bus`. Shells started via `su` or `sudo -u` have none,
+  so log in via a regular session, for example `ssh` or
+  `machinectl shell <user>@`. Alternatively, enable lingering via
+  `loginctl enable-linger <user>` and set `XDG_RUNTIME_DIR=/run/user/$(id -u)`.
+- **No subordinate IDs**: add a range for the user to `/etc/subuid` and
+  `/etc/subgid`, for example via
+  `sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 <user>`.
+  At least 65536 IDs are recommended. Subordinate IDs provided by NSS (the
+  `subid` entry of `/etc/nsswitch.conf`) are supported, KuberNix verifies them
+  via `getsubids` if available.
+- **Missing `newuidmap` or `newgidmap`**: install them from the host
+  distribution (`uidmap` on Debian and Ubuntu, `shadow-utils` on Fedora,
+  `shadow` on Arch Linux). They need to be setuid root or have the
+  `CAP_SETUID` or `CAP_SETGID` file capability, which Nix cannot provide.
+- **User namespaces restricted**: enable them via
+  `sudo sysctl -w kernel.unprivileged_userns_clone=1` (Debian based kernels)
+  or `sudo sysctl -w user.max_user_namespaces=28633`. Ubuntu 23.10+ restricts
+  them via AppArmor for binaries without a profile, like `rootlesskit` from the
+  Nix store. Lift the restriction via
+  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`, or write an
+  AppArmor profile which allows `userns` for it. Add the settings to
+  `/etc/sysctl.d` to make them persistent.
+- **cgroup v1**: boot with `systemd.unified_cgroup_hierarchy=1` on the kernel
+  command line to use the unified cgroup v2 hierarchy.
+- **cgroup controllers not delegated**: KuberNix warns about every missing
+  controller of `memory`, `cpu`, `pids` and `io`, without them pods may fail to
+  start or their limits may not apply. Many distributions only delegate
+  `memory` and `pids` to the user. To delegate all of them, create
+  `/etc/systemd/system/user@.service.d/delegate.conf` with the content below,
+  then run `sudo systemctl daemon-reload` and log in again:
+
+  ```ini
+  [Service]
+  Delegate=cpu cpuset io memory pids
+  ```
+
+- **Port 6443 in use**: the rootless API server gets published on
+  `127.0.0.1:6443`, which is not configurable yet. Stop the process using it,
+  for example the cluster of another run directory, which
+  `kubernix status --root <dir>` shows and `kubernix stop --root <dir>`
+  stops.
+- **`Permission denied` when removing the run directory**: it contains files
+  owned by the subordinate IDs of the user, see [Cleanup](#cleanup) for how to
+  remove it.
+- **Proxy on the loopback interface**: the rootless network namespace cannot
+  reach the loopback interface of the host, so a `HTTP_PROXY` or `HTTPS_PROXY`
+  pointing to `localhost` or `127.0.0.1` does not work for image pulls and
+  KuberNix warns about it. Let the proxy listen on another address of the host
+  and use that one instead.
+- **Pods cannot reach the API server or CoreDNS in root mode**: pods reach
+  them via the node IP on the bridge (like `10.10.0.1`), so a firewall on the
+  host which filters the `INPUT` chain, like the default firewall of NixOS,
+  `firewalld` or `ufw`, may drop the traffic. Allow the incoming traffic of
+  the bridges, which are named `kx<id>.<number>`, for example on NixOS via
+  `networking.firewall.trustedInterfaces = [ "kx+" ];` with the default
+  iptables backend or `[ "kx*" ]` with `networking.nftables.enable = true`
+  (nftables matches a `+` literally), with `firewalld` via
+  `sudo firewall-cmd --zone=trusted --add-interface=kx+` or with `ufw` via
+  `sudo ufw allow in on kx+`. `ip link show type bridge` lists the bridges of
+  the running cluster.
+
+### Upgrading from 0.4
+
+- Run directories of 0.4 cannot be used anymore, since the network layout and
+  the PKI changed. Remove them before starting a new cluster, via
+  `sudo rm -rf kubernix-run` for a root cluster or
+  `unshare --map-auto --map-root-user rm -rf kubernix-run` for a rootless one
+  (see [Cleanup](#cleanup)).
+- The short options `-e`, `-f` and `-u` are hidden aliases now, use
+  `--no-shell`, `--log-format` and `--container-runtime` instead.
+- Options which take a list (`--packages` and `--addons`) take comma separated
+  or repeated values, like `-p jq,kubernetes-helm` or `-p jq -p
+  kubernetes-helm`, but no space separated values anymore. The same applies to
+  `KUBERNIX_PACKAGES` and `KUBERNIX_ADDONS`.
+- `make run` and the other Makefile targets run KuberNix rootless by default,
+  use `SUDO='sudo -E env "PATH=$$PATH"'` to run it as root (`$$` because
+  make expands `$`).
+- `cfssl` is not needed anymore, the certificates get generated by KuberNix
+  itself.
+- Release binaries only exist for `x86_64` and `aarch64`, the `armv7`,
+  `ppc64le`, `riscv64` and `s390x` binaries are not built anymore.
+- A custom `--dockerfile` uses the directory of the Dockerfile as build
+  context. The node containers get the Nix store of the host mounted, so the
+  image does not need to contain Nix (see
+  [Multinode Support](#multinode-support)). Container runtimes other than
+  podman refuse a build context which contains run directories, so move a
+  Dockerfile next to `kubernix-run` into its own directory.
 
 ### Stability
 
@@ -620,15 +946,15 @@ log fields or files.
 
 #### Command Line
 
-- The subcommands, the long option names and the short options in the
-  [configuration table](#configuration), as well as their value formats.
+- The subcommands and their options, the long option names and the short
+  options in the [configuration tables](#configuration), as well as their value
+  formats.
 - The environment variables of the options (`KUBERNIX_*`), which take the same
-  values as the options.
+  values as the options. Variables starting with `_KUBERNIX_` are internal and
+  not part of the interface.
 - The `-e`, `-f` and `-u` short options of earlier versions keep working as
   hidden aliases of `--no-shell`, `--log-format` and `--container-runtime`, but
-  are no longer documented. The same applies to `--addons` without a value,
-  which equals `--addons none`, and to multiple space separated values after
-  `--packages`.
+  are no longer documented.
 
 The versions of the bundled packages (see [What is inside](#what-is-inside))
 are not part of the stable interface and get updated in any release.
@@ -640,14 +966,15 @@ are not part of the stable interface and get updated in any release.
 | `0`  | Success, for example after the interactive shell exited, on `SIGTERM` with `--no-shell` or after a stop     |
 | `1`  | Any error, including a failed bootstrap, a dying component with `--no-shell` or an aborted bootstrap        |
 | `2`  | Command line arguments or environment variables which cannot be parsed                                      |
-| `3`  | `kubernix stop` and `kubernix status` only: no cluster is running in the run directory                      |
+| `3`  | `kubernix stop`, `kubernix status` and `kubernix shell` only: no cluster is running in the run directory    |
 
 `kubernix status` exits with `0` while a cluster is running or starting, and
 `kubernix stop` with `0` once the cluster stopped, also if it aborted its
 bootstrap. The aborted instance itself exits with a non-zero code.
 `kubernix shell` replaces itself with the spawned shell or the command passed
-after `--`, so it returns their exit code once they started. Subcommands may
-define further exit codes, which are documented together with them.
+after `--`, so it returns their exit code once they started. It exits with `1`
+if the cluster is still starting. Subcommands may define further exit codes,
+which are documented together with them.
 
 #### Environment File
 
@@ -659,6 +986,27 @@ single quoting. It contains at least these variables:
 - `CONTAINER_RUNTIME_ENDPOINT`: the CRI socket of the first node, as
   `unix://<path>`.
 
+#### Status Output
+
+`kubernix status --output json` prints one JSON object to stdout. Its field
+names use kebab-case like the options and `kubernix.toml`:
+
+- `root`: the absolute path of the run directory.
+- `state`: one of `running`, `starting` or `stopped`.
+- `pid`: the PID of the KuberNix instance, missing if stopped or unknown.
+
+If the run directory contains a cluster, these fields are present as well:
+
+- `mode`: `root` or `rootless`.
+- `nodes`: the number of nodes.
+- `cri-runtime`: `crio` or `containerd`.
+- `oci-runtime`: `crun` or `runc`.
+- `api-server`: the URL of the API server.
+- `node-status`: only while running and if the API server answered, a list of
+  objects with the node `name` and whether it is `ready`.
+
+Consumers should ignore unknown fields.
+
 #### JSON Logs
 
 With `--log-format=json`, KuberNix writes one JSON object per line to stderr
@@ -669,11 +1017,13 @@ with the following fields:
 - `target`: the source of the message, which is meant for debugging and may
   change.
 
-Consumers should ignore unknown fields. The error which terminates KuberNix and
-its causes are always written as plain text lines (`[ERROR] …`), since they may
-occur before the logger is set up. Command line arguments and environment variables
-which cannot be parsed (exit code `2`) are reported in the format of the argument
-parser instead.
+Consumers should ignore unknown fields. The error which terminates KuberNix is
+written as one `error` object, also with `--log-level=off`, whose message
+contains its causes separated by `: `. Errors which occur before the logger is
+set up, for example in an unusable `kubernix.toml`, are written as plain text
+lines (`[ERROR] …`).
+Command line arguments and environment variables which cannot be parsed (exit
+code `2`) are reported in the format of the argument parser instead.
 
 #### Run Directory
 
@@ -689,11 +1039,24 @@ The run directory (`--root`) keeps these files at stable locations:
 All other files, like the PKI, the component configurations and the generated
 Nix environment, are internal and may change in any release.
 
+KuberNix reuses the certificates and keys of the `pki` directory if they are
+valid and match the cluster, and regenerates the affected ones otherwise, for
+example the serving certificates of the API server and of the kubelet in single
+node mode after the hostname changed. The serving certificates do not depend
+on the network of the host: in root mode, they contain the node IPs, which are
+the bridge gateways (the API server only the one of the first node, which it
+advertises), and in rootless mode, the kubelet certificates contain the fixed
+addresses of the network namespace of rootlesskit. Once etcd contains data, it
+refuses to regenerate the cluster CA, the ServiceAccount key and the
+encryption config, since the stored cluster state depends on them. Restore
+them in this case, or remove the run directory.
+
 The `kubernix.toml` contains a `version` field, which is the format version of
 the run directory. A run directory without it has version 0. KuberNix uses run
 directories of the same version as is, migrates those of older versions in
-place if possible, and otherwise refuses them with an error asking to remove
-the run directory. It also refuses run directories created by a newer
+place when starting a cluster if possible, and otherwise refuses them with an
+error which contains the command to remove the run directory (see
+[Cleanup](#cleanup)). It also refuses run directories created by a newer
 KuberNix, starting with 1.0: earlier versions ignore the `version` field and
 use any run directory. Version 2 changed the network layout and the PKI, so run
 directories of version 0 and 1 have to be removed, and KuberNix versions before

@@ -24,5 +24,6 @@ containerRuntimeEndpoint: "{cri_socket}"
 podLogsDir: "{pod_logs_dir}"
 port: {port}
 healthzPort: {healthzPort}
+resolvConf: "{resolv_conf}"
 featureGates:
   KubeletInUserNamespace: true

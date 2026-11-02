@@ -9,10 +9,11 @@ use crate::{
     kubeconfig::KubeConfig,
     network::Network,
     node::Node,
-    process::{Process, ProcessState, stoppable},
+    process::{self, Process, ProcessState, stoppable},
     write_if_changed,
 };
 use anyhow::Context;
+use log::{debug, warn};
 use std::fs::create_dir_all;
 
 /// Component wrapper for registry-based startup.
@@ -74,6 +75,28 @@ impl Proxy {
         Ok(Box::new(Proxy { process }))
     }
 
+    /// Remove the rules kube-proxy leaves behind after it stopped, like the
+    /// `KUBE-*` iptables chains. In rootless mode, they belong to the
+    /// network namespace of rootlesskit, which gets removed anyway.
+    pub fn cleanup_rules() {
+        debug!("Removing the kube-proxy rules");
+        match process::command("kube-proxy").arg("--cleanup").output() {
+            Ok(o) if o.status.success() => {}
+            // It also fails if a proxy mode is not supported by the host,
+            // like IPVS, after removing the rules of the other modes.
+            Ok(o) => debug!(
+                "kube-proxy --cleanup exited with {}: {}",
+                o.status,
+                String::from_utf8_lossy(&o.stderr).trim()
+            ),
+            Err(e) => warn!(
+                "Unable to run 'kube-proxy --cleanup', the kube-proxy rules may need \
+                 manual cleanup: {}",
+                e
+            ),
+        }
+    }
+
     /// Render the proxy configuration. In rootless mode:
     ///
     /// - The conntrack sysctls are not writable from within a user
@@ -130,12 +153,5 @@ mod tests {
         assert!(yml.contains("conntrack:\n  maxPerCore: 0\n"));
         assert!(yml.contains("tcpEstablishedTimeout: 0s"));
         assert!(yml.contains("tcpCloseWaitTimeout: 0s"));
-    }
-
-    #[test]
-    fn component_metadata() {
-        let c = ProxyComponent;
-        assert_eq!(c.name(), "Proxy");
-        assert_eq!(c.phase(), Phase::Controller);
     }
 }

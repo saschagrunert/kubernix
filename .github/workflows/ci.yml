@@ -7,6 +7,10 @@ on:
     branches:
       - main
 
+# Jobs which need more declare it themselves.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -61,7 +65,7 @@ jobs:
             cache_suffix: "-release"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -88,11 +92,13 @@ jobs:
             target: aarch64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: cargo-auditable@0.7.7
+      # Release binaries get built from scratch.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         with:
           path: |
             ~/.cargo/registry
@@ -110,11 +116,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: all-checks
     if: startsWith(github.ref, 'refs/tags/v')
+    # Protection rules like required reviewers can be added to this
+    # environment in the repository settings.
+    environment: release
     permissions:
       attestations: write
       contents: write
       id-token: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the tag against the crate version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the version $version in Cargo.toml"
+            exit 1
+          fi
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: kubernix-*
@@ -139,7 +158,8 @@ jobs:
         run: |
           for arch in x86_64 aarch64; do
             "$SYFT" scan "file:kubernix-$arch" -o "spdx-json@2.3=kubernix-$arch.spdx.json"
-            jq -e 'any(.packages[].externalRefs[]?; .referenceLocator | startswith("pkg:cargo/kubernix@"))' \
+            jq -e --arg purl "pkg:cargo/kubernix@${GITHUB_REF_NAME#v}" \
+              'any(.packages[].externalRefs[]?; .referenceLocator | split("?")[0] | split("#")[0] == $purl)' \
               "kubernix-$arch.spdx.json" >/dev/null
           done
       - name: Generate checksums
@@ -181,7 +201,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -218,7 +238,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: clippy
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -235,7 +255,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt
       - run: make lint-rustfmt
@@ -274,16 +294,38 @@ jobs:
     permissions:
       contents: write
     steps:
+      # A rerun after the merge finds the branch deleted. Its README got
+      # checked or updated before, so there is nothing left to do.
+      - name: Resolve the branch to update
+        id: branch
+        if: env.COMMIT_README == 'true'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          rc=0
+          git ls-remote --exit-code "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "refs/heads/$HEAD_REF" >/dev/null || rc=$?
+          case $rc in
+            0) echo "ref=$HEAD_REF" >> "$GITHUB_OUTPUT" ;;
+            2)
+              echo "::notice::Branch $HEAD_REF no longer exists, skipping the check"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *) exit "$rc" ;;
+          esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.branch.outputs.skip != 'true'
         with:
-          ref: ${{ env.COMMIT_README == 'true' && github.head_ref || '' }}
+          ref: ${{ steps.branch.outputs.ref }}
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+        if: steps.branch.outputs.skip != 'true'
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
       - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
-      - run: make update-readme
-      - if: env.COMMIT_README == 'true'
+        if: steps.branch.outputs.skip != 'true'
+      - if: steps.branch.outputs.skip != 'true'
+        run: make update-readme
+      - if: env.COMMIT_README == 'true' && steps.branch.outputs.skip != 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -291,7 +333,8 @@ jobs:
             git commit -m "Update the README versions" README.md
             git push
           fi
-      - run: git diff --exit-code README.md
+      - if: steps.branch.outputs.skip != 'true'
+        run: git diff --exit-code README.md
 
   lint-shellcheck:
     name: lint / shellcheck
@@ -315,7 +358,7 @@ jobs:
       - name: Read MSRV from Cargo.toml
         id: msrv
         run: echo "version=$(grep '^rust-version' Cargo.toml | sed 's/.*"\(.*\)"/\1/')" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -332,7 +375,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
         with:
           tool: cargo-llvm-cov
@@ -368,6 +411,52 @@ jobs:
             nodes: 1
           - mode: multi
             nodes: 2
+          # Failed starts: a port conflict has to be refused before the
+          # system changes, and an abort after the system setup must not
+          # leave anything behind. The listener on the etcd port only
+          # conflicts in root mode, rootless clusters have their own
+          # network namespace.
+          - arch: x86_64
+            cri_runtime: crio
+            oci_runtime: crun
+            mode: single
+            rootless: false
+            failed_start: true
+          # Variants of single options, named by their mode
+          - arch: x86_64
+            cri_runtime: crio
+            oci_runtime: crun
+            mode: 3-nodes
+            nodes: 3
+            rootless: false
+          - arch: x86_64
+            cri_runtime: containerd
+            oci_runtime: crun
+            mode: cidr
+            nodes: 1
+            rootless: false
+            cidr: 172.30.0.0/20
+          - arch: x86_64
+            cri_runtime: crio
+            oci_runtime: runc
+            mode: addons-none
+            nodes: 1
+            rootless: true
+            addons: none
+          - arch: x86_64
+            cri_runtime: containerd
+            oci_runtime: runc
+            mode: json-logs
+            nodes: 1
+            rootless: true
+            log_format: json
+          - arch: x86_64
+            cri_runtime: crio
+            oci_runtime: crun
+            mode: long-root
+            nodes: 1
+            rootless: false
+            long_root: true
           # Smoke test a small subset on aarch64
           - arch: aarch64
             cri_runtime: crio
@@ -381,6 +470,23 @@ jobs:
             mode: single
             nodes: 1
             rootless: true
+          - arch: aarch64
+            cri_runtime: containerd
+            oci_runtime: crun
+            mode: single
+            nodes: 1
+            rootless: false
+    env:
+      NODES: ${{ matrix.nodes }}
+      CRI_RUNTIME: ${{ matrix.cri_runtime }}
+      OCI_RUNTIME: ${{ matrix.oci_runtime }}
+      CIDR: ${{ matrix.cidr || '10.10.0.0/16' }}
+      ADDONS: ${{ matrix.addons || 'coredns' }}
+      LOG_FORMAT: ${{ matrix.log_format || 'text' }}
+      ROOTLESS: ${{ matrix.rootless }}
+      # Used by the scripts to read the state of a root cluster
+      SUDO: ${{ !matrix.rootless && 'sudo' || '' }}
+      CHECK_CONTAINERS: ${{ !matrix.rootless && matrix.nodes > 1 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
@@ -392,6 +498,19 @@ jobs:
         with:
           name: kubernix-${{ matrix.arch }}
       - run: chmod +x kubernix
+      - name: Set the run root
+        env:
+          LONG_ROOT: ${{ matrix.long_root || false }}
+        run: |
+          root=$PWD/kubernix-run
+          if [ "$LONG_ROOT" = true ]; then
+            # The kubelet sockets below <root>/kubelet/test/run fit into the
+            # 107 bytes of unix socket paths up to a root of 66 bytes.
+            root=$(printf '%s/long-root-%s' "$PWD" "$(printf 'x%.0s' $(seq 64))" | cut -c1-64)
+          fi
+          echo "Using the run root $root"
+          echo "KUBERNIX_ROOT=$root" >> "$GITHUB_ENV"
+          echo "KUBECONFIG=$root/kubeconfig/admin.kubeconfig" >> "$GITHUB_ENV"
       - name: Set hostname
         if: ${{ !matrix.rootless }}
         run: |
@@ -407,16 +526,21 @@ jobs:
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           sudo systemctl disable --now apparmor || true
           sudo sh -c 'mkdir -p /etc/systemd/system/user-.slice.d && printf "[Slice]\nDelegate=yes\n" > /etc/systemd/system/user-.slice.d/delegate.conf && systemctl daemon-reload'
+      # The time budget: up to 10 minutes for the start, 14 for the checks,
+      # 2 for their cleanup and 3 for the stop.
       - name: Run integration test
         id: integration
         env:
-          SUDO: ${{ !matrix.rootless && 'sudo' || '' }}
+          TEST_TIMEOUT: 840
         run: |
-          ${{ !matrix.rootless && 'sudo -E env "PATH=$PATH"' || '' }} ./kubernix --log-level=debug --no-shell --nodes=${{ matrix.nodes }} --cri-runtime=${{ matrix.cri_runtime }} --oci-runtime=${{ matrix.oci_runtime }} &
+          if [ "$ROOTLESS" = true ]; then AS_ROOT=(); else AS_ROOT=(sudo -E env "PATH=$PATH"); fi
+          "${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" --log-level=debug --log-format="$LOG_FORMAT" \
+            --no-shell --nodes="$NODES" --cri-runtime="$CRI_RUNTIME" --oci-runtime="$OCI_RUNTIME" \
+            --cidr="$CIDR" --addons="$ADDONS" > >(tee "$RUNNER_TEMP/kubernix.log") 2>&1 &
           KUBERNIX_PID=$!
           # In root mode this is the PID of sudo, which an unprivileged
           # kill -0 cannot probe, so check /proc instead.
-          until [ -f kubernix-run/kubernix.pid ]; do
+          until [ -f "$KUBERNIX_ROOT/kubernix.pid" ]; do
             if [ ! -d "/proc/$KUBERNIX_PID" ]; then
               rc=0
               wait "$KUBERNIX_PID" || rc=$?
@@ -430,12 +554,11 @@ jobs:
             sleep 1
           done
           echo "Cluster is up, running checks"
-          export KUBECONFIG=$PWD/kubernix-run/kubeconfig/admin.kubeconfig
-          contrib/integration-test ${{ matrix.nodes }} ${{ matrix.cri_runtime }} ${{ matrix.oci_runtime }}
+          contrib/integration-test "$NODES" "$CRI_RUNTIME" "$OCI_RUNTIME"
           # $KUBERNIX_PID is the outermost process (sudo or the rootless
           # wrapper chain), kubernix stop signals the kubernix process itself.
           rc=0
-          $SUDO ./kubernix stop || rc=$?
+          $SUDO ./kubernix --root="$KUBERNIX_ROOT" stop || rc=$?
           if [ "$rc" -ne 0 ]; then
             echo "::error::kubernix stop exited with $rc"
             exit 1
@@ -446,138 +569,229 @@ jobs:
             echo "::error::kubernix exited with $rc after kubernix stop"
             exit 1
           fi
-        timeout-minutes: 15
-      - name: Check for leftovers
-        env:
-          ROOTLESS: ${{ matrix.rootless }}
-          CHECK_CONTAINERS: ${{ !matrix.rootless && matrix.mode == 'multi' }}
-        run: |
-          if [ "$ROOTLESS" = true ]; then AS_ROOT=(); else AS_ROOT=(sudo); fi
-          failed=0
-          for cmd in status stop; do
-            rc=0
-            "${AS_ROOT[@]}" ./kubernix "$cmd" || rc=$?
-            if [ "$rc" -ne 3 ]; then
-              echo "::error::kubernix $cmd exited with $rc instead of 3 without a running cluster"
-              failed=1
+          if [ "$LOG_FORMAT" = json ]; then
+            # Nix and rootlesskit write to the same output, so only the log
+            # lines of kubernix have to be JSON.
+            text=$(grep -E '^\[(ERROR|WARN |INFO |DEBUG|TRACE)\]' "$RUNNER_TEMP/kubernix.log" || true)
+            if [ -n "$text" ]; then
+              echo "::error::Text log lines with --log-format=json"
+              echo "$text"
+              exit 1
             fi
-          done
-          # Other users can read the state of a root cluster
-          rc=0
-          ./kubernix status || rc=$?
-          if [ "$rc" -ne 3 ]; then
-            echo "::error::unprivileged kubernix status exited with $rc instead of 3 without a running cluster"
-            failed=1
-          fi
-          # Give the kernel a moment to reap the last processes
-          for _ in $(seq 10); do
-            procs=$(sudo find /proc/[0-9]*/exe -maxdepth 0 -printf '%p %l\n' 2>/dev/null |
-              grep -E ' /nix/store/[^/]+/bin/\.?(etcd|kube-apiserver|kubelet|crio|containerd)(-wrapped)?( \(deleted\))?$' || true)
-            [ -z "$procs" ] && break
-            sleep 1
-          done
-          if [ -n "$procs" ]; then
-            echo "::error::Leftover kubernix processes"
-            echo "$procs"
-            failed=1
-          fi
-          mounts=$(grep -F "$PWD/kubernix-run" /proc/mounts || true)
-          if [ -n "$mounts" ]; then
-            echo "::error::Leftover mounts below kubernix-run"
-            echo "$mounts"
-            failed=1
-          fi
-          if [ "$CHECK_CONTAINERS" = true ]; then
-            containers=$(sudo podman ps -a --filter 'name=^kubernix-node-' --format '{{.Names}}')
-            if [ -n "$containers" ]; then
-              echo "::error::Leftover node containers"
-              echo "$containers"
-              failed=1
+            json=$(jq -cR 'fromjson? | select(type == "object" and (.level | type) == "string"
+              and (.message | type) == "string" and (.target | type) == "string")' "$RUNNER_TEMP/kubernix.log")
+            if ! jq -se 'any(.[]; .level == "info") and any(.[]; .level == "debug")' <<<"$json" >/dev/null; then
+              echo "::error::No JSON log lines of kubernix found"
+              exit 1
             fi
+            echo "Found $(wc -l <<<"$json") JSON log lines"
           fi
-          # The CNI bridge rules are tagged with the network name kubernix-<node>,
-          # the NAT exemption with "kubernix <run root>"
-          rules=$({ sudo iptables-save || true; sudo nft list ruleset || true; } 2>/dev/null | grep -F kubernix || true)
-          if [ -n "$rules" ]; then
-            echo "::error::Leftover kubernix firewall rules"
-            echo "$rules"
-            failed=1
-          fi
-          links=$(ip -o link show | grep -F kubernix || true)
-          if [ -n "$links" ]; then
-            echo "::error::Leftover kubernix network interfaces"
-            echo "$links"
-            failed=1
-          fi
-          hosts=$(grep -E '^127\.0\.0\.1 node-[0-9]+$' /etc/hosts || true)
-          if [ -n "$hosts" ]; then
-            echo "::error::Leftover node entries in /etc/hosts"
-            echo "$hosts"
-            failed=1
-          fi
-          exit "$failed"
+        timeout-minutes: 30
+      - name: Check for leftovers after kubernix stop
+        run: contrib/check-leftovers
+      # The time budget: up to 5 minutes for the start, 8 for the checks,
+      # 4 for their cleanup and 3 for the stop.
       - name: Restart the cluster
         id: restart
         env:
-          ROOTLESS: ${{ matrix.rootless }}
-          NODES: ${{ matrix.nodes }}
+          TEST_PHASE: restart
+          TEST_TIMEOUT: 480
         run: |
           if [ "$ROOTLESS" = true ]; then AS_ROOT=(); else AS_ROOT=(sudo -E env "PATH=$PATH"); fi
           # Reuse the stored configuration of the run directory
-          "${AS_ROOT[@]}" ./kubernix --log-level=debug --no-shell &
+          "${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" --log-level=debug --no-shell &
           KUBERNIX_PID=$!
-          until [ -f kubernix-run/kubernix.pid ]; do
+          until [ -f "$KUBERNIX_ROOT/kubernix.pid" ]; do
             if [ ! -d "/proc/$KUBERNIX_PID" ]; then
               rc=0
               wait "$KUBERNIX_PID" || rc=$?
               echo "::error::kubernix exited with $rc before the cluster came up again"
               exit 1
             fi
-            if [ "$SECONDS" -ge 600 ]; then
+            if [ "$SECONDS" -ge 300 ]; then
               echo "::error::Timed out waiting for the cluster to come up again"
               exit 1
             fi
             sleep 1
           done
           echo "Cluster is up again, running checks"
-          # The status check below fails on a timeout or a wrong number of nodes
-          "${AS_ROOT[@]}" ./kubernix shell -- kubectl wait --for=condition=Ready nodes --all --timeout=120s || true
-          "${AS_ROOT[@]}" ./kubernix status
-          status=$("${AS_ROOT[@]}" ./kubernix status --output json)
+          # Checks the workload created before the restart
+          contrib/integration-test "$NODES" "$CRI_RUNTIME" "$OCI_RUNTIME"
+          "${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" status
+          status=$("${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" status --output json)
           echo "$status"
           if ! jq -e --argjson nodes "$NODES" \
-            '.state == "running" and .nodes == $nodes and (.node_status | length) == $nodes and all(.node_status[]; .ready)' \
+            '.state == "running" and .nodes == $nodes and (.["node-status"] | length) == $nodes and all(.["node-status"][]; .ready)' \
             <<<"$status" >/dev/null; then
             echo "::error::Unexpected kubernix status"
             exit 1
           fi
-          "${AS_ROOT[@]}" ./kubernix shell -- kubectl get nodes
+          "${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" shell -- kubectl get nodes
           rc=0
-          "${AS_ROOT[@]}" ./kubernix shell -- sh -c 'exit 42' || rc=$?
+          "${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" shell -- sh -c 'exit 42' || rc=$?
           if [ "$rc" -ne 42 ]; then
             echo "::error::kubernix shell exited with $rc instead of the exit code 42 of the command"
             exit 1
           fi
-          rc=0
-          "${AS_ROOT[@]}" ./kubernix stop || rc=$?
-          if [ "$rc" -ne 0 ]; then
-            echo "::error::kubernix stop exited with $rc"
-            exit 1
-          fi
+          # Stop with SIGINT like Ctrl+C does, the leftover check follows
+          pid=$(cat "$KUBERNIX_ROOT/kubernix.pid")
+          $SUDO kill -INT "$pid"
+          deadline=$((SECONDS + 180))
+          while [ -d "/proc/$KUBERNIX_PID" ]; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::kubernix did not exit within 180s after SIGINT"
+              exit 1
+            fi
+            sleep 1
+          done
           rc=0
           wait "$KUBERNIX_PID" || rc=$?
           if [ "$rc" -ne 0 ]; then
-            echo "::error::kubernix exited with $rc after kubernix stop"
+            echo "::error::kubernix exited with $rc after SIGINT"
+            exit 1
+          fi
+        timeout-minutes: 25
+      - name: Check for leftovers after SIGINT
+        run: contrib/check-leftovers
+      - name: Refuse a start with a port conflict
+        if: ${{ matrix.failed_start }}
+        run: |
+          # The sysctls which the system setup saves and restores, taken from
+          # SYSCTLS in src/hoststate.rs, and the ones it enables
+          mapfile -t sysctls < <(sed -n '/^const SYSCTLS/,/^];/p' src/hoststate.rs |
+            sed -nE 's/^ *\(?"([a-z0-9_.-]+)".*/\1/p')
+          if [ "${#sysctls[@]}" -eq 0 ]; then
+            echo "::error::Unable to read the sysctls of src/hoststate.rs"
+            exit 1
+          fi
+          sysctls+=(net.ipv4.ip_forward)
+          # The host state which kubernix changes during the system setup
+          snapshot() {
+            cat /etc/hosts
+            ip -o link show | awk '{print $2}'
+            ip -o addr show | awk '{print $2, $4}'
+            ip route show
+            sudo iptables-save | grep -v '^[#:]'
+            for key in "${sysctls[@]}"; do
+              echo "$key = $(sysctl -n "$key" 2>/dev/null || echo missing)"
+            done
+            sudo cat /run/kubernix-host-state 2>/dev/null || true
+          }
+          # Occupy the etcd client port, kubernix has to refuse the start
+          # before it changes the system
+          python3 -m http.server --bind 127.0.0.1 2379 >/dev/null 2>&1 &
+          LISTENER=$!
+          trap 'kill "$LISTENER"' EXIT
+          timeout 30 bash -c 'until nc -z 127.0.0.1 2379; do sleep 1; done'
+          before=$(snapshot)
+          rc=0
+          timeout 600 sudo -E env "PATH=$PATH" ./kubernix --root="$KUBERNIX_ROOT" --log-level=debug --no-shell \
+            > "$RUNNER_TEMP/port-conflict.log" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/port-conflict.log"
+          if [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ]; then
+            echo "::error::kubernix exited with $rc despite the port conflict"
+            exit 1
+          fi
+          if ! grep -q 'Port 2379 of etcd is already in use' "$RUNNER_TEMP/port-conflict.log"; then
+            echo "::error::kubernix did not refuse the start because of the port conflict"
+            exit 1
+          fi
+          if ! diff -u <(echo "$before") <(snapshot); then
+            echo "::error::kubernix changed the system before refusing the start"
+            exit 1
+          fi
+          # A setup which got restored afterwards leaves the same state, but
+          # logs the kernel modules and sysctls (System::setup) and the
+          # restore of the host state at debug level
+          setup=$(grep -iE "kernel module '|sysctl '|skipping modprobe|host state" "$RUNNER_TEMP/port-conflict.log" || true)
+          if [ -n "$setup" ]; then
+            echo "::error::kubernix ran the system setup before refusing the start"
+            echo "$setup"
+            exit 1
+          fi
+          echo "kubernix refused the start with $rc as expected"
+        timeout-minutes: 15
+      - name: Check for leftovers after the refused start
+        if: ${{ matrix.failed_start }}
+        run: contrib/check-leftovers
+      - name: Abort the start after the system setup
+        if: ${{ matrix.failed_start }}
+        run: |
+          # The log belongs to the runner user
+          AS_ROOT=(sudo -E env "PATH=$PATH")
+          "${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" --log-level=debug --no-shell \
+            > "$RUNNER_TEMP/abort.log" 2>&1 &
+          KUBERNIX_PID=$!
+          trap 'tail -n 300 "$RUNNER_TEMP/abort.log"' EXIT
+          # The API server starts after the system setup, the bridges, the
+          # PKI and the NAT exemption, and before the CRI runtime and the
+          # kubelet.
+          until grep -q 'API Server is ready' "$RUNNER_TEMP/abort.log"; do
+            if [ ! -d "/proc/$KUBERNIX_PID" ]; then
+              echo "::error::kubernix exited before it could be aborted"
+              exit 1
+            fi
+            if [ "$SECONDS" -ge 600 ]; then
+              echo "::error::Timed out waiting for the API server"
+              exit 1
+            fi
+            sleep 0.2
+          done
+          # The PID file only exists once the cluster is up, kubernix status
+          # shows the PID of a starting instance from the lock file. Right
+          # after taking the lock, it still contains the PID of the former
+          # instance, so read it only now and check that it is kubernix.
+          if ! status=$(sudo ./kubernix --root="$KUBERNIX_ROOT" status --output json); then
+            echo "::error::kubernix status failed for the starting cluster"
+            exit 1
+          fi
+          echo "$status"
+          pid=$(jq -r '.pid // empty' <<<"$status")
+          if [ -z "$pid" ]; then
+            echo "::error::kubernix status shows no PID"
+            exit 1
+          fi
+          exe=$(sudo readlink "/proc/$pid/exe" || true)
+          if [ "${exe##*/}" != kubernix ]; then
+            echo "::error::PID $pid belongs to '$exe' instead of kubernix"
+            exit 1
+          fi
+          echo "Sending SIGTERM to kubernix (PID $pid)"
+          sudo kill -TERM "$pid"
+          deadline=$((SECONDS + 180))
+          while [ -d "/proc/$KUBERNIX_PID" ]; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::kubernix did not exit within 180s after SIGTERM"
+              exit 1
+            fi
+            sleep 1
+          done
+          rc=0
+          wait "$KUBERNIX_PID" || rc=$?
+          echo "kubernix exited with $rc after SIGTERM"
+          # An aborted bootstrap exits with 1, a cluster which came up before
+          # the signal with 0 (see the exit codes in the README). Anything
+          # else, like 101 of a panic, is a failure.
+          if grep -q 'Everything is up and running' "$RUNNER_TEMP/abort.log"; then
+            echo "::warning::The cluster came up before the abort"
+            expected=0
+          else
+            expected=1
+          fi
+          if [ "$rc" -ne "$expected" ]; then
+            echo "::error::kubernix exited with $rc instead of $expected after SIGTERM"
             exit 1
           fi
         timeout-minutes: 15
+      - name: Check for leftovers after the aborted start
+        if: ${{ matrix.failed_start }}
+        run: contrib/check-leftovers
       - name: Dump logs on failure
-        if: ${{ always() && (steps.integration.outcome != 'success' || steps.restart.outcome == 'failure') }}
+        if: ${{ failure() }}
         continue-on-error: true
         timeout-minutes: 5
         run: |
-          export KUBECONFIG=$PWD/kubernix-run/kubeconfig/admin.kubeconfig
-          for f in $(sudo find kubernix-run -name '*.log' -type f \( -path '*/crio/*' -o -path '*/containerd/*' -o -path '*/kubelet/*' \) -not -path '*/containers/*' -not -path '*/root/*' -not -path '*/state/*' | sort); do
+          for f in $(sudo find "$KUBERNIX_ROOT" -name '*.log' -type f \( -path '*/crio/*' -o -path '*/containerd/*' -o -path '*/kubelet/*' \) -not -path '*/containers/*' -not -path '*/root/*' -not -path '*/state/*' | sort); do
             echo "::group::$f"
             sudo tail -n 1000 "$f" || true
             echo "::endgroup::"
@@ -590,11 +804,10 @@ jobs:
           timeout 30 kubectl logs -n kube-system -l k8s-app=coredns --all-containers || true
           echo "::endgroup::"
           echo "::group::sockets of the CoreDNS ports"
-          sudo ss -tulpn | grep -E ':(53|9153|10054|10055)\s' || true
+          sudo ss -tulpn | grep -E ':(53|9153|10053|10054|10055)\s' || true
           echo "::endgroup::"
-          echo "::group::kubectl describe pods -n kube-system"
-          timeout 30 kubectl describe pods -n kube-system || true
-          timeout 30 kubectl describe pods -n default || true
+          echo "::group::kubectl describe pods"
+          timeout 30 kubectl describe pods -A || true
           echo "::endgroup::"
           echo "::group::kubectl get events"
           timeout 30 kubectl get events -A --sort-by=.lastTimestamp || true

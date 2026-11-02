@@ -3,22 +3,23 @@
 //! Creates kubeconfig files for each identity (admin, kubelet, proxy,
 //! controller-manager, scheduler) as JSON, which is valid YAML. The files
 //! embed the client keys, so only their owner can read them. When running
-//! via sudo, the admin kubeconfig belongs to the invoking user.
+//! via sudo, the admin kubeconfig belongs to the invoking user. The files
+//! get rewritten if the certificates change.
 
 use crate::{
     API_SERVER_PORT, Config,
+    files::{Owner, write_private_if_changed},
     pki::{Identity, Pki},
-    write_private,
 };
 use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use log::{debug, info, warn};
-use nix::unistd::{Gid, Uid, fchown};
+use log::{debug, info};
+use nix::unistd::{Gid, Uid};
 use rayon::prelude::*;
 use serde::Serialize;
 use std::{
     env,
-    fs::{self, File, create_dir_all},
+    fs::{self, create_dir_all},
     net::Ipv4Addr,
     path::{Path, PathBuf},
 };
@@ -164,112 +165,63 @@ impl KubeConfig {
         &self.admin
     }
 
-    /// Returns true if all kubeconfig files exist.
-    fn complete(&self) -> bool {
-        [
-            &self.proxy,
-            &self.controller_manager,
-            &self.scheduler,
-            &self.admin,
-        ]
-        .into_iter()
-        .chain(&self.kubelets)
-        .all(|p| p.exists())
-    }
-
-    /// Generate or load kubeconfig files for all cluster components.
+    /// Write the kubeconfig files for all cluster components, if they do
+    /// not exist or differ, for example because the certificates changed.
     pub fn new(config: &Config, pki: &Pki) -> Result<KubeConfig> {
-        // Create the target dir
         let dir = config.root().join(Self::DIR);
+        create_dir_all(&dir).context("Unable to create kubeconfig directory")?;
 
-        if dir.exists() {
-            let kubelets = pki
+        let ca = pki.ca().cert();
+        let admin_owner = Self::sudo_owner(Uid::effective().is_root() && !config.is_rootless());
+
+        // The kubeconfig files are independent of each other
+        let mut identities = vec![
+            (pki.proxy(), None),
+            (pki.controller_manager(), None),
+            (pki.scheduler(), None),
+            (pki.admin(), admin_owner),
+        ];
+        identities.extend(pki.kubelets().iter().map(|i| (i, None)));
+        let written = identities
+            .into_par_iter()
+            .map(|(identity, owner)| Self::setup_kubeconfig(&dir, identity, ca, owner))
+            .collect::<Result<Vec<bool>>>()?;
+        if written.contains(&true) {
+            info!("Created kubeconfigs");
+        } else {
+            info!("Reusing existing kubeconfigs");
+        }
+
+        Ok(KubeConfig {
+            kubelets: pki
                 .kubelets()
                 .iter()
                 .map(|i| Self::target_config(&dir, i))
-                .collect();
-
-            let kubeconfig = KubeConfig {
-                kubelets,
-                proxy: Self::target_config(&dir, pki.proxy()),
-                controller_manager: Self::target_config(&dir, pki.controller_manager()),
-                scheduler: Self::target_config(&dir, pki.scheduler()),
-                admin: Self::target_config(&dir, pki.admin()),
-            };
-
-            // A failed generation leaves an incomplete directory behind
-            if !kubeconfig.complete() {
-                warn!("Kubeconfig directory is incomplete, regenerating it");
-                fs::remove_dir_all(&dir)
-                    .context("Unable to remove incomplete kubeconfig directory")?;
-                return Self::new(config, pki);
-            }
-            info!("Kubeconfig directory already exists, skipping generation");
-            Ok(kubeconfig)
-        } else {
-            info!("Creating kubeconfigs");
-            create_dir_all(&dir).context("Unable to create kubeconfig directory")?;
-
-            let ca = pki.ca().cert();
-
-            // Generate all kubeconfig files in parallel since they are
-            // independent of each other.
-            let identities = [
-                pki.proxy(),
-                pki.controller_manager(),
-                pki.scheduler(),
-                pki.admin(),
-            ];
-            let (configs, kubelets) = rayon::join(
-                || {
-                    identities
-                        .into_par_iter()
-                        .map(|id| Self::setup_kubeconfig(&dir, id, ca))
-                        .collect::<Vec<_>>()
-                },
-                || {
-                    pki.kubelets()
-                        .par_iter()
-                        .map(|id| Self::setup_kubeconfig(&dir, id, ca))
-                        .collect::<Result<Vec<_>>>()
-                },
-            );
-
-            let mut it = configs.into_iter();
-            let proxy = it.next().context("missing proxy kubeconfig result")??;
-            let controller_manager = it
-                .next()
-                .context("missing controller-manager kubeconfig result")??;
-            let scheduler = it.next().context("missing scheduler kubeconfig result")??;
-            let admin = it.next().context("missing admin kubeconfig result")??;
-            debug_assert!(it.next().is_none());
-
-            if let Some((uid, gid)) =
-                Self::sudo_owner(Uid::effective().is_root() && !config.is_rootless())
-            {
-                debug!("Changing the admin kubeconfig owner to {}:{}", uid, gid);
-                let file = File::open(&admin).context("Unable to open admin kubeconfig")?;
-                fchown(&file, Some(uid), Some(gid))
-                    .context("Unable to change the admin kubeconfig owner")?;
-            }
-
-            Ok(KubeConfig {
-                proxy,
-                controller_manager,
-                scheduler,
-                admin,
-                kubelets: kubelets?,
-            })
-        }
+                .collect(),
+            proxy: Self::target_config(&dir, pki.proxy()),
+            controller_manager: Self::target_config(&dir, pki.controller_manager()),
+            scheduler: Self::target_config(&dir, pki.scheduler()),
+            admin: Self::target_config(&dir, pki.admin()),
+        })
     }
 
-    fn setup_kubeconfig(dir: &Path, identity: &Identity, ca: &Path) -> Result<PathBuf> {
-        debug!("Creating kubeconfig for {}", identity.name());
+    /// Write the kubeconfig of the identity, owned by `owner` or the
+    /// current user, if it does not exist or differs. Returns true if it
+    /// has been written.
+    fn setup_kubeconfig(
+        dir: &Path,
+        identity: &Identity,
+        ca: &Path,
+        owner: Option<Owner>,
+    ) -> Result<bool> {
         let kubeconfig = Self::target_config(dir, identity);
         let document = Document::new(identity, ca)?;
-        write_private(&kubeconfig, &serde_json::to_vec_pretty(&document)?)?;
-        debug!("Kubeconfig created for {}", identity.name());
-        Ok(kubeconfig)
+        let written =
+            write_private_if_changed(&kubeconfig, &serde_json::to_vec_pretty(&document)?, owner)?;
+        if written {
+            debug!("Kubeconfig created for {}", identity.name());
+        }
+        Ok(written)
     }
 
     fn target_config(dir: &Path, identity: &Identity) -> PathBuf {
@@ -278,7 +230,7 @@ impl KubeConfig {
 
     /// The user and group which invoked kubernix via sudo, if running as
     /// real root.
-    fn sudo_owner(root: bool) -> Option<(Uid, Gid)> {
+    fn sudo_owner(root: bool) -> Option<Owner> {
         if !root {
             return None;
         }
@@ -293,7 +245,7 @@ mod tests {
     use super::*;
     use crate::{config::tests::test_config, network::tests::test_network};
     use serde::Deserialize;
-    use std::os::unix::fs::PermissionsExt;
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
     #[test]
     fn new_success() -> Result<()> {
@@ -442,19 +394,36 @@ mod tests {
         let c = test_config()?;
         let dir = c.root().join("missing");
         let identity = Identity::new(&dir, "admin", "admin");
-        assert!(KubeConfig::setup_kubeconfig(c.root(), &identity, &dir.join("ca.pem")).is_err());
+        assert!(
+            KubeConfig::setup_kubeconfig(c.root(), &identity, &dir.join("ca.pem"), None).is_err()
+        );
         assert!(!c.root().join("admin.kubeconfig").exists());
         Ok(())
     }
 
     #[test]
-    fn new_regenerates_incomplete() -> Result<()> {
+    fn new_rewrites_changed() -> Result<()> {
         let c = test_config()?;
         let n = test_network()?;
         let p = Pki::new(&c, &n)?;
-        create_dir_all(c.root().join(KubeConfig::DIR))?;
         let kc = KubeConfig::new(&c, &p)?;
-        assert!(kc.complete());
+        let admin = fs::read(kc.admin())?;
+        let inode = |path: &Path| -> Result<u64> { Ok(fs::metadata(path)?.ino()) };
+        let proxy = inode(kc.proxy())?;
+
+        // A regenerated certificate and a missing file
+        fs::remove_file(p.admin().key())?;
+        fs::remove_file(kc.scheduler())?;
+        let p = Pki::new(&c, &n)?;
+        let kc = KubeConfig::new(&c, &p)?;
+        assert_ne!(fs::read(kc.admin())?, admin);
+        assert_eq!(
+            serde_json::from_slice::<Document>(&fs::read(kc.admin())?)?,
+            Document::new(p.admin(), p.ca().cert())?
+        );
+        assert!(kc.scheduler().exists());
+        // Unchanged files are kept
+        assert_eq!(inode(kc.proxy())?, proxy);
         Ok(())
     }
 
