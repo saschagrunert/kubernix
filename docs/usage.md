@@ -155,7 +155,8 @@ my-host   Ready    <none>   2m    v1.37.1
 
 `kubernix status` shows whether a cluster is running in the run directory, as
 well as its mode (`root` or `rootless`), the number of nodes, the CRI and OCI
-runtimes, the API server endpoint and the readiness of the nodes:
+runtimes, whether NRI is enabled, the API server endpoint and the readiness of
+the nodes:
 
 ```console
 $ kubernix status
@@ -165,6 +166,7 @@ Mode:        rootless
 Nodes:       1
 CRI runtime: crio
 OCI runtime: crun
+NRI:         disabled
 API server:  https://127.0.0.1:6443
 Node:        my-host Ready
 ```
@@ -303,9 +305,9 @@ The `kubernix.toml` keeps the settings of the existing cluster. KuberNix writes
 it once the settings of a new run directory are valid, and removes it again if
 the Nix environment cannot be created, for example for a package which does not
 exist. Options which shape the cluster (`--nodes`, `--cidr`, `--cri-runtime`,
-`--oci-runtime`, `--container-runtime` and the rootless mode) cannot be changed
-for an existing run directory, so remove it to apply different values. The
-subcommands ignore these options and always use the existing cluster. Other
+`--oci-runtime`, `--container-runtime`, `--nri` and the rootless mode) cannot be
+changed for an existing run directory, so remove it to apply different values.
+The subcommands ignore these options and always use the existing cluster. Other
 options like `--log-level`, `--shell` or `--packages` override the stored values
 if they are set on the command line or via the environment, and an empty value
 like `--overlay=` or `KUBERNIX_PACKAGES=` overrides a stored overlay, Dockerfile

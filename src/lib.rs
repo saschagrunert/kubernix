@@ -231,6 +231,7 @@ struct ClusterStatus {
     nodes: u8,
     cri_runtime: CriRuntime,
     oci_runtime: OciRuntime,
+    nri: bool,
     api_server: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     node_status: Option<Vec<NodeStatus>>,
@@ -284,6 +285,7 @@ impl Status {
                 ("Nodes", c.nodes.to_string()),
                 ("CRI runtime", c.cri_runtime.to_string()),
                 ("OCI runtime", c.oci_runtime.to_string()),
+                ("NRI", if c.nri { "enabled" } else { "disabled" }.into()),
                 ("API server", c.api_server.clone()),
             ]);
         }
@@ -699,6 +701,7 @@ impl Kubernix {
             nodes: config.nodes(),
             cri_runtime: config.cri_runtime(),
             oci_runtime: config.oci_runtime(),
+            nri: config.nri(),
             api_server: format!("https://{}:{}", Ipv4Addr::LOCALHOST, API_SERVER_PORT),
             node_status: match state {
                 State::Running(_) => Self::node_status(&config)
@@ -2211,6 +2214,7 @@ mod tests {
                 nodes: 2,
                 cri_runtime: CriRuntime::Containerd,
                 oci_runtime: OciRuntime::Runc,
+                nri: true,
                 api_server: "https://127.0.0.1:6443".into(),
                 node_status: Some(vec![
                     NodeStatus {
@@ -2237,6 +2241,7 @@ mod tests {
                 "Nodes:       2\n",
                 "CRI runtime: containerd\n",
                 "OCI runtime: runc\n",
+                "NRI:         enabled\n",
                 "API server:  https://127.0.0.1:6443\n",
                 "Node:        node-0 Ready\n",
                 "Node:        node-1 NotReady\n",
@@ -2268,6 +2273,7 @@ mod tests {
                 "nodes": 2,
                 "cri-runtime": "containerd",
                 "oci-runtime": "runc",
+                "nri": true,
                 "api-server": "https://127.0.0.1:6443",
                 "node-status": [
                     {"name": "node-0", "ready": true},

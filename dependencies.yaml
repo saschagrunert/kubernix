@@ -37,3 +37,9 @@ dependencies:
     refPaths:
       - path: Cargo.toml
         match: "rust-version ="
+
+  - name: nri
+    version: 0.12.5
+    refPaths:
+      - path: .github/workflows/ci.yml
+        match: "NRI_COMMIT: [0-9a-f]+ # v"

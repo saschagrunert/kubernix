@@ -9,7 +9,7 @@ use crate::{
     Config,
     component::{ClusterContext, Component, Phase},
     container::{Container, NodeContainer},
-    cri::{self, CriSocket, RuntimePaths},
+    cri::{self, CriSocket, NriPaths, RuntimePaths},
     network::Network,
     node::Node,
     process::{Process, ProcessState, Stoppable},
@@ -80,11 +80,18 @@ impl Containerd {
         let config_file = dir.join("config.toml");
         let cni_conf_dir = dir.join("cni");
         let socket = Self::socket(config, network, node)?;
+        let nri = NriPaths::new(&dir)?;
 
         // Always render the configuration, since it references the current
         // Nix store paths.
-        create_dir_all(&cni_conf_dir).context("Unable to create containerd CNI directory")?;
-        create_dir_all(dir.join("cdi")).context("Unable to create containerd CDI directory")?;
+        for d in [cni_conf_dir.as_path(), &dir.join("cdi")]
+            .into_iter()
+            .chain(nri.dirs().into_iter().filter(|_| config.nri()))
+        {
+            create_dir_all(d).with_context(|| {
+                format!("Unable to create containerd directory {}", d.display())
+            })?;
+        }
 
         if config.is_rootless() {
             cri::write_rootless_wrappers(&dir, &paths)?;
@@ -92,7 +99,7 @@ impl Containerd {
 
         write_if_changed(
             &config_file,
-            &Self::render_config(config, &dir, &socket, &cni_conf_dir, &paths),
+            &Self::render_config(config, &dir, &socket, &nri, &cni_conf_dir, &paths),
         )
         .context("Unable to write containerd config")?;
 
@@ -133,18 +140,19 @@ impl Containerd {
     /// Both OCI runtimes are registered as runtime handlers with their own
     /// state directory, the configured one is used as default.
     ///
-    /// NRI is disabled, since its default socket and plugin directories
-    /// belong to the host. The CDI spec directory of the node is empty, so
-    /// that the CDI specs of the host do not apply. The registry host
-    /// configuration of the host (`/etc/containerd/certs.d`) still applies
-    /// on purpose, so that private registries work like on the host. In
-    /// rootless mode, AppArmor is disabled and the OOM scores are restricted
-    /// to the one of containerd, which cannot be lowered in a user
-    /// namespace.
+    /// NRI is disabled unless `--nri` is set, and its socket and plugin
+    /// directories belong to the node instead of the host, see `NriPaths`. The
+    /// CDI spec directory of the node is empty, so that the CDI specs of the
+    /// host do not apply. The registry host configuration of the host
+    /// (`/etc/containerd/certs.d`) still applies on purpose, so that private
+    /// registries work like on the host. In rootless mode, AppArmor is disabled
+    /// and the OOM scores are restricted to the one of containerd, which cannot
+    /// be lowered in a user namespace.
     fn render_config(
         config: &Config,
         dir: &Path,
         socket: &CriSocket,
+        nri: &NriPaths,
         cni_conf_dir: &Path,
         paths: &RuntimePaths,
     ) -> String {
@@ -183,6 +191,10 @@ impl Containerd {
             runtimes = runtimes,
             snapshotter = snapshotter,
             rootless = config.is_rootless(),
+            disable_nri = !config.nri(),
+            nri_socket = nri.socket.display(),
+            nri_plugin_dir = nri.plugin_dir.display(),
+            nri_plugin_config_dir = nri.plugin_config_dir.display(),
         )
     }
 
@@ -244,7 +256,9 @@ mod tests {
             plugin_dir: "/nix/cni".into(),
         };
         let config = crate::config::tests::parse(&["--oci-runtime=runc"])?;
-        let content = Containerd::render_config(&config, &dir, &socket, &dir.join("cni"), &paths);
+        let nri = NriPaths::new(&dir)?;
+        let content =
+            Containerd::render_config(&config, &dir, &socket, &nri, &dir.join("cni"), &paths);
         let v: toml::Value = toml::from_str(&content)?;
         let containerd = cri_runtime(&v);
         assert_eq!(containerd["default_runtime_name"].as_str(), Some("runc"));
@@ -263,7 +277,9 @@ mod tests {
             ],
             plugin_dir: "/nix/cni".into(),
         };
-        let content = Containerd::render_config(config, &dir, &socket, &dir.join("cni"), &paths);
+        let nri = NriPaths::new(&dir)?;
+        let content =
+            Containerd::render_config(config, &dir, &socket, &nri, &dir.join("cni"), &paths);
         Ok(toml::from_str(&content)?)
     }
 
@@ -357,6 +373,23 @@ mod tests {
                 v["plugins"]["io.containerd.nri.v1.nri"]["disable"].as_bool(),
                 Some(true)
             );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn render_config_nri() -> Result<()> {
+        for (args, enabled) in [(&[][..], false), (&["--nri"][..], true)] {
+            let v = render(&crate::config::tests::parse(args)?)?;
+            let nri = &v["plugins"]["io.containerd.nri.v1.nri"];
+            assert_eq!(nri["disable"].as_bool(), Some(!enabled));
+            for (key, expected) in [
+                ("socket_path", "/kubernix/containerd/node/nri.sock"),
+                ("plugin_path", "/kubernix/containerd/node/nri/plugins"),
+                ("plugin_config_path", "/kubernix/containerd/node/nri/conf.d"),
+            ] {
+                assert_eq!(nri[key].as_str(), Some(expected), "{}", key);
+            }
         }
         Ok(())
     }

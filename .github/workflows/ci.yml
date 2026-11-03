@@ -411,7 +411,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   test-integration:
-    name: test / integration / ${{ matrix.cri_runtime }} / ${{ matrix.oci_runtime }} / ${{ matrix.mode }}${{ matrix.rootless && ' / rootless' || '' }}${{ matrix.arch == 'aarch64' && ' / aarch64' || '' }}
+    name: test / integration / ${{ matrix.cri_runtime }} / ${{ matrix.oci_runtime }} / ${{ matrix.mode }}${{ matrix.rootless && ' / rootless' || '' }}${{ matrix.nri && ' / nri' || '' }}${{ matrix.arch == 'aarch64' && ' / aarch64' || '' }}
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     needs: build-static
     strategy:
@@ -438,6 +438,32 @@ jobs:
             mode: single
             rootless: false
             failed_start: true
+          # NRI on existing legs, for both CRI runtimes in multinode root
+          # mode, where they run in the node containers, and in rootless mode
+          - arch: x86_64
+            cri_runtime: crio
+            oci_runtime: crun
+            mode: multi
+            rootless: false
+            nri: true
+          - arch: x86_64
+            cri_runtime: containerd
+            oci_runtime: runc
+            mode: multi
+            rootless: false
+            nri: true
+          - arch: x86_64
+            cri_runtime: crio
+            oci_runtime: runc
+            mode: single
+            rootless: true
+            nri: true
+          - arch: x86_64
+            cri_runtime: containerd
+            oci_runtime: crun
+            mode: multi
+            rootless: true
+            nri: true
           # Variants of single options, named by their mode
           - arch: x86_64
             cri_runtime: crio
@@ -500,6 +526,7 @@ jobs:
       ADDONS: ${{ matrix.addons || 'coredns' }}
       LOG_FORMAT: ${{ matrix.log_format || 'text' }}
       ROOTLESS: ${{ matrix.rootless }}
+      NRI: ${{ matrix.nri || false }}
       # Used by the scripts to read the state of a root cluster
       SUDO: ${{ !matrix.rootless && 'sudo' || '' }}
       CHECK_CONTAINERS: ${{ !matrix.rootless && matrix.nodes > 1 }}
@@ -527,6 +554,19 @@ jobs:
           echo "Using the run root $root"
           echo "KUBERNIX_ROOT=$root" >> "$GITHUB_ENV"
           echo "KUBECONFIG=$root/kubeconfig/admin.kubeconfig" >> "$GITHUB_ENV"
+      # The nri-logger sample plugin, which registers from the host in the
+      # integration test, built with the Go of the pinned nixpkgs
+      - name: Build the NRI plugin
+        if: ${{ matrix.nri }}
+        env:
+          NRI_COMMIT: 5df40b41f7a269412ea74505265b9142c4d4ecb5 # v0.12.5
+        run: |
+          git init -q "$RUNNER_TEMP/nri"
+          git -C "$RUNNER_TEMP/nri" fetch -q --depth 1 https://github.com/containerd/nri "$NRI_COMMIT"
+          git -C "$RUNNER_TEMP/nri" checkout -q FETCH_HEAD
+          (cd "$RUNNER_TEMP/nri/plugins/logger" &&
+            nix shell --inputs-from "$GITHUB_WORKSPACE" nixpkgs#go -c env CGO_ENABLED=0 go build -o "$RUNNER_TEMP/nri-logger" .)
+          echo "NRI_PLUGIN=$RUNNER_TEMP/nri-logger" >> "$GITHUB_ENV"
       - name: Set hostname
         if: ${{ !matrix.rootless }}
         run: |
@@ -550,9 +590,11 @@ jobs:
           TEST_TIMEOUT: 840
         run: |
           if [ "$ROOTLESS" = true ]; then AS_ROOT=(); else AS_ROOT=(sudo -E env "PATH=$PATH"); fi
+          NRI_ARGS=()
+          if [ "$NRI" = true ]; then NRI_ARGS=(--nri); fi
           "${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" --log-level=debug --log-format="$LOG_FORMAT" \
             --no-shell --nodes="$NODES" --cri-runtime="$CRI_RUNTIME" --oci-runtime="$OCI_RUNTIME" \
-            --cidr="$CIDR" --addons="$ADDONS" > >(tee "$RUNNER_TEMP/kubernix.log") 2>&1 &
+            --cidr="$CIDR" --addons="$ADDONS" "${NRI_ARGS[@]}" > >(tee "$RUNNER_TEMP/kubernix.log") 2>&1 &
           KUBERNIX_PID=$!
           # In root mode this is the PID of sudo, which an unprivileged
           # kill -0 cannot probe, so check /proc instead.
@@ -636,8 +678,8 @@ jobs:
           "${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" status
           status=$("${AS_ROOT[@]}" ./kubernix --root="$KUBERNIX_ROOT" status --output json)
           echo "$status"
-          if ! jq -e --argjson nodes "$NODES" \
-            '.state == "running" and .nodes == $nodes and (.["node-status"] | length) == $nodes and all(.["node-status"][]; .ready)' \
+          if ! jq -e --argjson nodes "$NODES" --argjson nri "$NRI" \
+            '.state == "running" and .nodes == $nodes and .nri == $nri and (.["node-status"] | length) == $nodes and all(.["node-status"][]; .ready)' \
             <<<"$status" >/dev/null; then
             echo "::error::Unexpected kubernix status"
             exit 1

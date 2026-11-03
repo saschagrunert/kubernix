@@ -17,6 +17,7 @@ KuberNix can be configured via command line arguments or environment variables:
 | `-p, --packages`      | Additional Nix packages to be added to the environment, comma separated     |                | `KUBERNIX_PACKAGES`          |
 | `--cri-runtime`       | CRI runtime to use (`crio` or `containerd`)                                 | `crio`         | `KUBERNIX_CRI_RUNTIME`       |
 | `--oci-runtime`       | Default OCI runtime (`crun` or `runc`)                                      | `crun`         | `KUBERNIX_OCI_RUNTIME`       |
+| `--nri`               | Enable NRI in the CRI runtime, see [NRI](#nri)                              | `false`        | `KUBERNIX_NRI`               |
 | `-a, --addons`        | Cluster addons to deploy, comma separated (`coredns`), `none` disables all  | `coredns`      | `KUBERNIX_ADDONS`            |
 
 Options which take a list accept comma separated values and can be repeated, for
@@ -88,16 +89,47 @@ BestEffort, Burstable and Guaranteed pods only above that score. Neither CRI
 runtime reads the configuration files of the host (for example `/etc/crio`,
 `/etc/containerd` or the storage, registries and policy files in
 `/etc/containers`), its OCI hooks or its CDI specs (`/etc/cdi` and
-`/var/run/cdi`), and NRI is disabled. On purpose, the registry credentials of
-the host (CRI-O only) and its registry certificate directories still apply, so
-that private registries work like on the host: CRI-O reads
-`/etc/containers/certs.d` and `/etc/docker/certs.d`, containerd reads the
-`hosts.toml` files and certificates in `/etc/containerd/certs.d` only.
+`/var/run/cdi`), and NRI is disabled unless `--nri` is set (see [NRI](#nri)). On
+purpose, the registry credentials of the host (CRI-O only) and its registry
+certificate directories still apply, so that private registries work like on the
+host: CRI-O reads `/etc/containers/certs.d` and `/etc/docker/certs.d`,
+containerd reads the `hosts.toml` files and certificates in
+`/etc/containerd/certs.d` only.
 
 [1]: https://github.com/containers/crun
 [2]: https://github.com/opencontainers/runc
 [3]: https://kubernetes.io/docs/concepts/containers/runtime-class
 [conmon-rs]: https://github.com/containers/conmon-rs
+
+## NRI
+
+The [Node Resource Interface][nri] (NRI) allows plugins to adjust containers
+when the CRI runtime creates them. It is disabled by default. With `--nri`,
+CRI-O and containerd enable it with a socket and plugin directories in the
+directory of every node instead of the default ones of the host
+(`/var/run/nri/nri.sock`, `/opt/nri/plugins` and `/etc/nri/conf.d`), so that
+neither plugins of the host nor a CRI runtime of the host interfere:
+
+- `<cri>/<node>/nri.sock`: the socket which externally started plugins connect
+  to, for example `crio/<node>/nri.sock`.
+- `<cri>/<node>/nri/plugins`: the pre-installed plugins, which the CRI runtime
+  starts itself. Their executables have to be named `<index>-<name>` with a two
+  digit index, for example `10-logger`, otherwise NRI fails to start at all.
+- `<cri>/<node>/nri/conf.d`: the configuration of the pre-installed plugins,
+  `<index>-<name>.conf` or `<name>.conf`.
+
+With `--nri`, KuberNix creates the plugin directories before the CRI runtime
+starts, and a restart keeps their content, so plugins added there get started on
+the next start. The sockets work from the host in all modes: in multinode root
+mode, the node containers mount the run directory at the same path, and in
+rootless mode, the sockets belong to the invoking user. The CRI runtime starts
+the pre-installed plugins itself, so in multinode root mode they run inside the
+node container, which only provides a minimal root file system and the Nix store
+of the host: use statically linked plugins or ones from the Nix store there.
+Like `--cri-runtime`, `--nri` shapes the cluster and cannot be changed for an
+existing run directory.
+
+[nri]: https://github.com/containerd/nri
 
 ## Multinode Support
 

@@ -177,6 +177,36 @@ pub fn cri_socket(config: &Config, network: &Network, node: u8) -> Result<CriSoc
     }
 }
 
+/// The NRI socket and plugin directories of a node, below its working
+/// directory, so that neither the socket nor the plugins of the host apply.
+pub struct NriPaths {
+    pub socket: PathBuf,
+    pub plugin_dir: PathBuf,
+    pub plugin_config_dir: PathBuf,
+}
+
+impl NriPaths {
+    /// The NRI paths for the node working directory `dir`, validating the
+    /// socket path length against Unix limits.
+    pub fn new(dir: &Path) -> Result<Self> {
+        let socket = dir.join("nri.sock");
+        if socket.as_os_str().len() > MAX_SOCKET_PATH_LEN {
+            bail!("NRI socket path '{}' is too long", socket.display())
+        }
+        let nri = dir.join("nri");
+        Ok(Self {
+            socket,
+            plugin_dir: nri.join("plugins"),
+            plugin_config_dir: nri.join("conf.d"),
+        })
+    }
+
+    /// The plugin directories, which get created if NRI is enabled.
+    pub fn dirs(&self) -> [&Path; 2] {
+        [&self.plugin_dir, &self.plugin_config_dir]
+    }
+}
+
 /// Directory used by the host-local IPAM plugin to store the allocated IPs,
 /// instead of the default `/var/lib/cni/networks`, which is not writable in
 /// rootless mode. CNI skips directories when loading the network configs.
@@ -427,6 +457,33 @@ mod tests {
     #[test]
     fn cri_socket_failure() {
         assert!(CriSocket::new("a".repeat(MAX_SOCKET_PATH_LEN + 1).into()).is_err());
+    }
+
+    #[test]
+    fn nri_paths_below_node_dir() -> Result<()> {
+        let nri = NriPaths::new(Path::new("/kx/crio/node"))?;
+        assert_eq!(nri.socket, Path::new("/kx/crio/node/nri.sock"));
+        assert_eq!(
+            nri.dirs(),
+            [
+                Path::new("/kx/crio/node/nri/plugins"),
+                Path::new("/kx/crio/node/nri/conf.d"),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nri_paths_socket_too_long() -> Result<()> {
+        // The longest directory whose socket still fits
+        let fits = "a".repeat(MAX_SOCKET_PATH_LEN - "/nri.sock".len());
+        NriPaths::new(Path::new(&fits))?;
+        let err = NriPaths::new(Path::new(&format!("{}a", fits)))
+            .err()
+            .context("expected error")?
+            .to_string();
+        assert!(err.contains("NRI socket path"), "{}", err);
+        Ok(())
     }
 
     #[test]

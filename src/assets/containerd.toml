@@ -33,4 +33,7 @@ default_runtime_name = "{default_runtime}"
 
 {runtimes}
 [plugins."io.containerd.nri.v1.nri"]
-disable = true
+disable = {disable_nri}
+socket_path = "{nri_socket}"
+plugin_path = "{nri_plugin_dir}"
+plugin_config_path = "{nri_plugin_config_dir}"

@@ -278,6 +278,12 @@ pub struct Config {
     /// The default OCI runtime, both are registered as runtime handlers
     oci_runtime: OciRuntime,
 
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[arg(env = "KUBERNIX_NRI", long = "nri")]
+    /// Enable NRI in the CRI runtime, with the socket and plugin directories
+    /// in the directory of the node
+    nri: bool,
+
     /// Whether the run directory belongs to a rootless cluster, unset for
     /// configuration files written by older versions
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -373,6 +379,11 @@ impl Config {
     /// Default OCI runtime handler (crun or runc).
     pub(crate) fn oci_runtime(&self) -> OciRuntime {
         self.oci_runtime
+    }
+
+    /// Whether NRI is enabled in the CRI runtime.
+    pub(crate) fn nri(&self) -> bool {
+        self.nri
     }
 
     /// Cluster addons to deploy after bootstrap (e.g. `coredns`).
@@ -479,9 +490,13 @@ impl Config {
         config.dockerfile = config.dockerfile.filter(set).map(Self::absolute);
         config.packages.retain(|p| !p.is_empty());
 
-        // `KUBERNIX_NO_SHELL=false` is the same as not setting it.
+        // `KUBERNIX_NO_SHELL=false` and `KUBERNIX_NRI=false` are the same
+        // as not setting them.
         if !config.no_shell {
             config.explicit.remove("no_shell");
+        }
+        if !config.nri {
+            config.explicit.remove("nri");
         }
         // `--no-shell` and `--shell` exclude each other, where the command
         // line takes precedence over the environment.
@@ -545,7 +560,7 @@ impl Config {
 /// Compatibility of a stored run directory version with the current one.
 #[derive(Debug, PartialEq, Eq)]
 enum Compat {
-    /// Same version, usable as is
+    /// Current or compatible version, usable as is
     Current,
     /// Older version, which can be migrated in place
     Migrate,
@@ -557,11 +572,12 @@ enum Compat {
 
 impl Compat {
     /// The compatibility of `version` with the `current` one, where all
-    /// versions starting at `oldest` can be migrated.
-    fn of(version: u32, current: u32, oldest: u32) -> Self {
+    /// versions starting at `compatible` are usable as is and all versions
+    /// starting at `oldest` can be migrated.
+    fn of(version: u32, current: u32, compatible: u32, oldest: u32) -> Self {
         if version > current {
             Compat::Newer
-        } else if version == current {
+        } else if version >= compatible {
             Compat::Current
         } else if version >= oldest {
             Compat::Migrate
@@ -655,6 +671,9 @@ impl Config {
     /// - 1: Adds the version, otherwise identical to 0
     /// - 2: New CIDR layout and PKI (front proxy CA, `kubelet-<node>` files),
     ///   not migratable
+    /// - 3: Adds the `nri` setting, which older versions would drop, so
+    ///   only configurations which enable NRI get version 3 (see
+    ///   `format_version`)
     ///
     /// Changes of the PKI need no new version as long as they keep the
     /// cluster CA and the ServiceAccount key, since missing or outdated
@@ -662,12 +681,30 @@ impl Config {
     ///
     /// Bump it if an existing run directory or configuration file cannot be
     /// used as is anymore, and either migrate the older versions in
-    /// `migrate` or refuse them by raising `OLDEST_VERSION`.
-    pub(crate) const VERSION: u32 = 2;
+    /// `migrate` or refuse them by raising `OLDEST_VERSION`. A version which
+    /// only adds settings keeps `COMPATIBLE_VERSION` and gets written only
+    /// for configurations which use them, so that older kubernix versions
+    /// refuse those instead of ignoring the settings, but keep using all
+    /// other run directories.
+    pub(crate) const VERSION: u32 = 3;
+
+    /// Oldest version which is used as is, since the newer versions only
+    /// add settings.
+    const COMPATIBLE_VERSION: u32 = 2;
 
     /// Oldest version which gets migrated in place to `VERSION`. Older
     /// run directories are refused and have to be removed.
     const OLDEST_VERSION: u32 = 2;
+
+    /// The oldest format version which keeps all settings of the
+    /// configuration, which gets written to the configuration file.
+    fn format_version(&self) -> u32 {
+        if self.nri {
+            3
+        } else {
+            Self::COMPATIBLE_VERSION
+        }
+    }
 
     /// Check the format version of a stored configuration file of a root
     /// or rootless (`rootless`) run directory. Returns true if the run
@@ -682,7 +719,12 @@ impl Config {
                 Self::VERSION
             )
         };
-        match Compat::of(version, Self::VERSION, Self::OLDEST_VERSION) {
+        match Compat::of(
+            version,
+            Self::VERSION,
+            Self::COMPATIBLE_VERSION,
+            Self::OLDEST_VERSION,
+        ) {
             Compat::Current => Ok(false),
             Compat::Migrate => Ok(true),
             Compat::Outdated => bail!(
@@ -722,7 +764,7 @@ impl Config {
     /// current version.
     fn migrate(mut stored: Config) -> Config {
         // No version is migratable at the moment
-        stored.version = Self::VERSION;
+        stored.version = stored.format_version();
         stored
     }
 
@@ -837,9 +879,13 @@ impl Config {
     /// Write the current configuration to the internal set root path
     pub(crate) fn to_file(&self) -> Result<()> {
         self.create_root_dir()?;
+        let file = Config {
+            version: self.format_version(),
+            ..self.clone()
+        };
         write_file(
             &self.root().join(Self::FILENAME),
-            toml::to_string(&self)?.as_bytes(),
+            toml::to_string(&file)?.as_bytes(),
         )
         .context("Unable to write configuration to file")?;
         Ok(())
@@ -988,7 +1034,14 @@ impl Config {
                 self.$field = stored.$field;
             )*};
         }
-        cluster!(nodes, cidr, cri_runtime, oci_runtime, container_runtime);
+        cluster!(
+            nodes,
+            cidr,
+            cri_runtime,
+            oci_runtime,
+            container_runtime,
+            nri
+        );
 
         macro_rules! overridable {
             ($($field:ident),*) => {$(
@@ -1605,24 +1658,34 @@ root = "root"
 
     #[test]
     fn compat_policy() {
-        assert_eq!(Compat::of(1, 1, 0), Compat::Current);
-        assert_eq!(Compat::of(0, 1, 0), Compat::Migrate);
-        assert_eq!(Compat::of(2, 1, 0), Compat::Newer);
-        assert_eq!(Compat::of(0, 2, 1), Compat::Outdated);
-        assert_eq!(Compat::of(1, 3, 1), Compat::Migrate);
-        assert_eq!(Compat::of(2, 2, 2), Compat::Current);
+        assert_eq!(Compat::of(1, 1, 1, 0), Compat::Current);
+        assert_eq!(Compat::of(0, 1, 1, 0), Compat::Migrate);
+        assert_eq!(Compat::of(2, 1, 1, 0), Compat::Newer);
+        assert_eq!(Compat::of(0, 2, 2, 1), Compat::Outdated);
+        assert_eq!(Compat::of(1, 3, 3, 1), Compat::Migrate);
+        assert_eq!(Compat::of(2, 2, 2, 2), Compat::Current);
+        // Compatible versions are used as is
+        assert_eq!(Compat::of(2, 3, 2, 2), Compat::Current);
+        assert_eq!(Compat::of(1, 3, 2, 1), Compat::Migrate);
     }
 
     #[test]
     fn version_written() -> Result<()> {
-        let c = test_config()?;
-        c.to_file()?;
-        let content = read_to_string(c.root.join(Config::FILENAME))?;
-        assert!(
-            content.starts_with(&format!("version = {}\n", Config::VERSION)),
-            "{}",
-            content
-        );
+        // Only a configuration with NRI needs version 3, others stay
+        // readable by kubernix 1.0.0
+        for (nri, version) in [(false, Config::COMPATIBLE_VERSION), (true, 3)] {
+            let mut c = test_config()?;
+            c.nri = nri;
+            c.to_file()?;
+            let content = read_to_string(c.root.join(Config::FILENAME))?;
+            assert!(
+                content.starts_with(&format!("version = {}\n", version)),
+                "{}",
+                content
+            );
+            assert_eq!(content.contains("nri = true"), nri, "{}", content);
+            assert!(!content.contains("nri = false"), "{}", content);
+        }
         Ok(())
     }
 
@@ -1642,7 +1705,7 @@ root = "root"
         stored.to_file()?;
         let file = stored.root.join(Config::FILENAME);
         let content = read_to_string(&file)?;
-        let current = format!("version = {}\n", Config::VERSION);
+        let current = format!("version = {}\n", stored.format_version());
         for version in ["", "version = 1\n"] {
             let old = content.replace(&current, version);
             assert_ne!(old, content);
@@ -1657,6 +1720,23 @@ root = "root"
             assert!(err.ends_with(&remove), "{}", err);
             assert_eq!(read_to_string(&file)?, old);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn version_compatible_loaded() -> Result<()> {
+        // A configuration file of kubernix 1.0.0 gets used as is
+        let stored = test_config()?;
+        stored.to_file()?;
+        let file = stored.root.join(Config::FILENAME);
+        let content = read_to_string(&file)?;
+        assert!(content.starts_with("version = 2\n"), "{}", content);
+
+        let mut c = test_config()?;
+        c.root = stored.root.clone();
+        assert!(c.load_file()?.is_none());
+        assert!(!c.nri());
+        assert_eq!(read_to_string(&file)?, content);
         Ok(())
     }
 
@@ -1680,9 +1760,10 @@ root = "root"
         let err = c.check_version(u32::MAX, false).unwrap_err().to_string();
         assert!(err.contains("newer kubernix"), "{}", err);
         assert!(!c.check_version(Config::VERSION, false)?);
+        assert!(!c.check_version(Config::COMPATIBLE_VERSION, false)?);
         assert_eq!(
             c.check_version(Config::OLDEST_VERSION, false)?,
-            Config::OLDEST_VERSION < Config::VERSION
+            Config::OLDEST_VERSION < Config::COMPATIBLE_VERSION
         );
 
         // Rootless clusters leave files of subordinate users behind
@@ -1885,6 +1966,28 @@ root = "root"
     }
 
     #[test]
+    fn nri_env() -> Result<()> {
+        assert!(!parse(&[])?.nri());
+        let c = parse_env(&[], &[("KUBERNIX_NRI", "true")])?;
+        assert!(c.nri());
+        assert!(c.is_explicit("nri"));
+        // A disabled option is not set
+        let c = parse_env(&[], &[("KUBERNIX_NRI", "false")])?;
+        assert!(!c.nri());
+        assert!(!c.is_explicit("nri"));
+        Ok(())
+    }
+
+    #[test]
+    fn merge_keeps_stored_nri_for_disabled_env() -> Result<()> {
+        // Like not setting it, so the stored setting applies without a
+        // mismatch error
+        let c = existing_env(&["--nri"], &[], &[("KUBERNIX_NRI", "false")])?;
+        assert!(c.nri());
+        Ok(())
+    }
+
+    #[test]
     fn shell_options_precedence() -> Result<()> {
         // The command line wins over the environment
         let c = parse_env(&["--shell=bash"], &[("KUBERNIX_NO_SHELL", "true")])?;
@@ -2021,14 +2124,16 @@ root = "root"
             .collect();
         assert!(removed.contains(&"KUBERNIX_ROOT".into()));
         assert!(removed.contains(&"KUBERNIX_NO_SHELL".into()));
-        assert_eq!(removed.len(), 14, "{:?}", removed);
+        assert!(removed.contains(&"KUBERNIX_NRI".into()));
+        assert_eq!(removed.len(), 15, "{:?}", removed);
     }
 
     #[test]
     fn merge_keeps_stored_cluster_settings() -> Result<()> {
-        let c = existing(&["--nodes=2", "--cri-runtime=containerd"], &[])?;
+        let c = existing(&["--nodes=2", "--cri-runtime=containerd", "--nri"], &[])?;
         assert_eq!(c.nodes(), 2);
         assert_eq!(c.cri_runtime(), CriRuntime::Containerd);
+        assert!(c.nri());
         Ok(())
     }
 
@@ -2049,9 +2154,11 @@ root = "root"
                 "--cri-runtime=crio",
                 "--oci-runtime=runc",
                 "--container-runtime=docker",
+                "--nri",
                 subcommand,
             ];
             let c = existing(&stored, &args)?;
+            assert!(!c.nri());
             assert_eq!(c.nodes(), 2);
             assert_eq!(c.cidr().to_string(), "10.10.0.0/16");
             assert_eq!(c.cri_runtime(), CriRuntime::Containerd);
@@ -2072,6 +2179,7 @@ root = "root"
                 &["--oci-runtime=crun"],
                 "oci-runtime",
             ),
+            (&[], &["--nri"], "nri"),
         ] {
             let err = existing(stored, args)
                 .err()

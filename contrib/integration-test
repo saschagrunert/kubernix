@@ -19,10 +19,14 @@ TEST_PHASE="${TEST_PHASE:-start}"
 # are only accessible by root when not running in rootless mode.
 SUDO="${SUDO:-}"
 
-# The --cidr and --addons of the cluster, and whether it runs rootless.
+# The --cidr and --addons of the cluster, whether it runs rootless and
+# whether NRI is enabled (--nri).
 CIDR="${CIDR:-10.10.0.0/16}"
 ADDONS="${ADDONS:-coredns}"
 ROOTLESS="${ROOTLESS:-false}"
+NRI="${NRI:-false}"
+# An NRI plugin binary which registers via -socket-path, optional.
+NRI_PLUGIN="${NRI_PLUGIN:-}"
 
 # The time in seconds all waits of a phase may take together, so that the
 # diagnostics of a failed wait run before CI kills the job.
@@ -345,6 +349,78 @@ assert_runtime() {
   echo "$what containers ${ids[*]} use $expected"
 }
 
+# Assert that the CRI runtime of every node serves NRI on its socket with
+# --nri, also if it runs in a node container: the NRI plugin NRI_PLUGIN (the
+# nri-logger sample plugin of containerd/nri) has to register from the host.
+# Without NRI_PLUGIN, which only local runs leave unset, a connection to the
+# socket has to succeed instead. Without --nri, neither NRI sockets nor plugin
+# directories may exist.
+assert_nri() {
+  local out path socket sockets=() log pidfile pid registered
+  if ! out=$($SUDO find "$KUBERNIX_ROOT/$CRI_RUNTIME" -mindepth 2 -maxdepth 2 \
+    \( -name nri.sock -o -name nri \)); then
+    echo "FAIL: unable to look for NRI paths in $KUBERNIX_ROOT/$CRI_RUNTIME"
+    exit 1
+  fi
+  if [ "$NRI" != true ]; then
+    if [ -n "$out" ]; then
+      echo "FAIL: NRI paths found without --nri:"
+      echo "$out"
+      exit 1
+    fi
+    echo "No NRI paths exist without --nri"
+    return
+  fi
+  while read -r path; do
+    if [ "${path##*/}" = nri.sock ] && $SUDO test -S "$path"; then
+      sockets+=("$path")
+    fi
+  done <<<"$out"
+  if [ "${#sockets[@]}" -ne "$EXPECTED_NODES" ]; then
+    echo "FAIL: expected $EXPECTED_NODES NRI sockets, found ${#sockets[@]}: ${sockets[*]}"
+    exit 1
+  fi
+  for socket in "${sockets[@]}"; do
+    if [ -z "$NRI_PLUGIN" ]; then
+      if ! $SUDO python3 -I -c \
+        'import socket, sys; socket.socket(socket.AF_UNIX).connect(sys.argv[1])' \
+        "$socket"; then
+        echo "FAIL: unable to connect to the NRI socket $socket"
+        exit 1
+      fi
+      echo "The NRI socket $socket accepts connections"
+      continue
+    fi
+    log="$TMP/nri-plugin.log"
+    # The PID of timeout, which stops the plugin on SIGTERM. In root mode,
+    # $! is the PID of sudo, which may not relay a signal of the script.
+    pidfile="$TMP/nri-plugin.pid"
+    rm -f "$pidfile"
+    # shellcheck disable=SC2016 # Expanded by the inner shell
+    $SUDO sh -c 'echo $$ >"$1"; shift; exec timeout "$@"' sh "$pidfile" \
+      "$(budget 60)" "$NRI_PLUGIN" -idx 99 -socket-path "$socket" >"$log" 2>&1 &
+    pid=$!
+    registered=false
+    for _ in $(seq "$(budget 30)"); do
+      if grep -q "got configuration data" "$log"; then
+        registered=true
+        break
+      fi
+      sleep 1
+    done
+    if [ -s "$pidfile" ]; then
+      $SUDO kill "$(cat "$pidfile")" 2>/dev/null || true
+    fi
+    wait "$pid" || true
+    if [ "$registered" != true ]; then
+      echo "FAIL: the NRI plugin did not register on $socket"
+      cat "$log"
+      exit 1
+    fi
+    echo "The NRI plugin registered on $socket: $(grep -m1 "got configuration data" "$log")"
+  done
+}
+
 # Run a pause pod and wait until it is ready. The optional argument is the
 # runtime class name.
 run_pod() {
@@ -424,6 +500,7 @@ assert_restart_test_ready() {
 }
 
 assert_nodes_ready
+assert_nri
 
 if [ "$TEST_PHASE" = restart ]; then
   if [ "$DNS" = true ]; then
