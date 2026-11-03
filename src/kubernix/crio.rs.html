@@ -9,7 +9,7 @@
 <a href=#9 id=9 data-nosnippet>9</a>    Config,
 <a href=#10 id=10 data-nosnippet>10</a>    component::{ClusterContext, Component, Phase},
 <a href=#11 id=11 data-nosnippet>11</a>    container::{Container, NodeContainer},
-<a href=#12 id=12 data-nosnippet>12</a>    cri::{<span class="self">self</span>, CriSocket, RuntimePaths},
+<a href=#12 id=12 data-nosnippet>12</a>    cri::{<span class="self">self</span>, CriSocket, NriPaths, RuntimePaths},
 <a href=#13 id=13 data-nosnippet>13</a>    network::Network,
 <a href=#14 id=14 data-nosnippet>14</a>    node::Node,
 <a href=#15 id=15 data-nosnippet>15</a>    process::{Process, ProcessState, Stoppable},
@@ -99,622 +99,660 @@
 <a href=#99 id=99 data-nosnippet>99</a>        <span class="kw">let </span>network_dir = dir.join(<span class="string">"cni"</span>);
 <a href=#100 id=100 data-nosnippet>100</a>        <span class="kw">let </span>socket = <span class="self">Self</span>::socket(config, network, node)<span class="question-mark">?</span>;
 <a href=#101 id=101 data-nosnippet>101</a>        <span class="kw">let </span>run_dir = <span class="self">Self</span>::run_dir(config, node);
-<a href=#102 id=102 data-nosnippet>102</a>
-<a href=#103 id=103 data-nosnippet>103</a>        <span class="comment">// Always render the configuration, since it references the current
-<a href=#104 id=104 data-nosnippet>104</a>        // Nix store paths.
-<a href=#105 id=105 data-nosnippet>105</a>        </span><span class="kw">for </span>d <span class="kw">in </span>[
-<a href=#106 id=106 data-nosnippet>106</a>            <span class="kw-2">&amp;</span>network_dir,
-<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw-2">&amp;</span>config_dir,
-<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw-2">&amp;</span>registries_dir,
-<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw-2">&amp;</span>dir.join(<span class="string">"ns"</span>),
-<a href=#110 id=110 data-nosnippet>110</a>            <span class="kw-2">&amp;</span>dir.join(<span class="string">"hooks.d"</span>),
-<a href=#111 id=111 data-nosnippet>111</a>            <span class="kw-2">&amp;</span>dir.join(<span class="string">"cdi"</span>),
-<a href=#112 id=112 data-nosnippet>112</a>            <span class="kw-2">&amp;</span>dir.join(<span class="string">"tmp"</span>),
-<a href=#113 id=113 data-nosnippet>113</a>        ] {
-<a href=#114 id=114 data-nosnippet>114</a>            create_dir_all(d)
-<a href=#115 id=115 data-nosnippet>115</a>                .with_context(|| <span class="macro">format!</span>(<span class="string">"Unable to create CRI-O directory {}"</span>, d.display()))<span class="question-mark">?</span>;
-<a href=#116 id=116 data-nosnippet>116</a>        }
-<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">if </span>config.is_rootless() {
-<a href=#118 id=118 data-nosnippet>118</a>            cri::write_rootless_wrappers(<span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>paths)<span class="question-mark">?</span>;
-<a href=#119 id=119 data-nosnippet>119</a>        }
-<a href=#120 id=120 data-nosnippet>120</a>        write_if_changed(
-<a href=#121 id=121 data-nosnippet>121</a>            <span class="kw-2">&amp;</span>config_file,
-<a href=#122 id=122 data-nosnippet>122</a>            <span class="kw-2">&amp;</span><span class="self">Self</span>::render_config(config, <span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>run_dir, <span class="kw-2">&amp;</span>socket, <span class="kw-2">&amp;</span>conmonrs, <span class="kw-2">&amp;</span>paths),
-<a href=#123 id=123 data-nosnippet>123</a>        )
-<a href=#124 id=124 data-nosnippet>124</a>        .context(<span class="string">"Unable to write CRI-O config"</span>)<span class="question-mark">?</span>;
-<a href=#125 id=125 data-nosnippet>125</a>        write_if_changed(<span class="kw-2">&amp;</span>registries_file, REGISTRIES_CONF)
-<a href=#126 id=126 data-nosnippet>126</a>            .context(<span class="string">"Unable to write CRI-O registries config"</span>)<span class="question-mark">?</span>;
-<a href=#127 id=127 data-nosnippet>127</a>        write_if_changed(<span class="kw-2">&amp;</span>storage_file, STORAGE_CONF)
-<a href=#128 id=128 data-nosnippet>128</a>            .context(<span class="string">"Unable to write CRI-O storage config"</span>)<span class="question-mark">?</span>;
-<a href=#129 id=129 data-nosnippet>129</a>        <span class="comment">// CRI-O maps the host ports of the pods itself
-<a href=#130 id=130 data-nosnippet>130</a>        </span>cri::write_cni_config(<span class="kw-2">&amp;</span>network_dir, <span class="kw-2">&amp;</span>node_name, node, network, <span class="bool-val">false</span>)<span class="question-mark">?</span>;
-<a href=#131 id=131 data-nosnippet>131</a>        cri::reset_ipam_data(<span class="kw-2">&amp;</span>network_dir)<span class="question-mark">?</span>;
-<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw">let </span>args = <span class="self">Self</span>::args(<span class="kw-2">&amp;</span>config_dir, <span class="kw-2">&amp;</span>registries_file, <span class="kw-2">&amp;</span>registries_dir);
-<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw">let </span>args: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = args.iter().map(String::as_str).collect();
-<a href=#134 id=134 data-nosnippet>134</a>        <span class="kw">let </span>storage_file = storage_file.display().to_string();
-<a href=#135 id=135 data-nosnippet>135</a>        <span class="kw">let </span>env = [(STORAGE_CONF_ENV, storage_file.as_str())];
-<a href=#136 id=136 data-nosnippet>136</a>
-<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">let </span><span class="kw-2">mut </span>process = <span class="kw">if </span>config.multi_node() &amp;&amp; !config.is_rootless() {
-<a href=#138 id=138 data-nosnippet>138</a>            <span class="comment">// Run inside a container
-<a href=#139 id=139 data-nosnippet>139</a>            </span><span class="kw">let </span>identifier = <span class="macro">format!</span>(<span class="string">"CRI-O {}"</span>, node_name);
-<a href=#140 id=140 data-nosnippet>140</a>            Container::start(config, <span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>identifier, CRIO, <span class="kw-2">&amp;</span>node_name, <span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>env)<span class="question-mark">?
-<a href=#141 id=141 data-nosnippet>141</a>        </span>} <span class="kw">else </span>{
-<a href=#142 id=142 data-nosnippet>142</a>            Process::start_with_env(<span class="kw-2">&amp;</span>dir, <span class="string">"CRI-O"</span>, CRIO, <span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>env)<span class="question-mark">?
-<a href=#143 id=143 data-nosnippet>143</a>        </span>};
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">let </span>container = Container::node(config, <span class="kw-2">&amp;</span>node_name);
-<a href=#145 id=145 data-nosnippet>145</a>        process.wait_ready(<span class="string">"No systemd watchdog enabled"</span>)<span class="question-mark">?</span>;
-<a href=#146 id=146 data-nosnippet>146</a>
-<a href=#147 id=147 data-nosnippet>147</a>        <span class="prelude-val">Ok</span>(Box::new(<span class="self">Self </span>{
-<a href=#148 id=148 data-nosnippet>148</a>            process,
-<a href=#149 id=149 data-nosnippet>149</a>            socket,
-<a href=#150 id=150 data-nosnippet>150</a>            container,
-<a href=#151 id=151 data-nosnippet>151</a>            node_name,
-<a href=#152 id=152 data-nosnippet>152</a>        }))
-<a href=#153 id=153 data-nosnippet>153</a>    }
-<a href=#154 id=154 data-nosnippet>154</a>
-<a href=#155 id=155 data-nosnippet>155</a>    <span class="doccomment">/// The command line arguments of CRI-O. The main configuration file
-<a href=#156 id=156 data-nosnippet>156</a>    /// defaults to the one of the host, so an empty one replaces it and the
-<a href=#157 id=157 data-nosnippet>157</a>    /// configuration comes from the drop-in directory of the node. Short
-<a href=#158 id=158 data-nosnippet>158</a>    /// image names get resolved via the registries config of the node,
-<a href=#159 id=159 data-nosnippet>159</a>    /// without the drop-in files of the host.
-<a href=#160 id=160 data-nosnippet>160</a>    </span><span class="kw">fn </span>args(config_dir: <span class="kw-2">&amp;</span>Path, registries_file: <span class="kw-2">&amp;</span>Path, registries_dir: <span class="kw-2">&amp;</span>Path) -&gt; Vec&lt;String&gt; {
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="macro">vec!</span>[
-<a href=#162 id=162 data-nosnippet>162</a>            <span class="string">"--config=/dev/null"</span>.into(),
-<a href=#163 id=163 data-nosnippet>163</a>            <span class="macro">format!</span>(<span class="string">"--config-dir={}"</span>, config_dir.display()),
-<a href=#164 id=164 data-nosnippet>164</a>            <span class="macro">format!</span>(<span class="string">"--registries-conf={}"</span>, registries_file.display()),
-<a href=#165 id=165 data-nosnippet>165</a>            <span class="macro">format!</span>(<span class="string">"--registries-conf-dir={}"</span>, registries_dir.display()),
-<a href=#166 id=166 data-nosnippet>166</a>        ]
-<a href=#167 id=167 data-nosnippet>167</a>    }
-<a href=#168 id=168 data-nosnippet>168</a>
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="doccomment">/// Render the CRI-O configuration for the node working directory `dir`
-<a href=#170 id=170 data-nosnippet>170</a>    /// and the temporary directory `run_dir`.
-<a href=#171 id=171 data-nosnippet>171</a>    ///
-<a href=#172 id=172 data-nosnippet>172</a>    /// Both OCI runtimes are registered as runtime handlers with their own
-<a href=#173 id=173 data-nosnippet>173</a>    /// state directory, the configured one is used as default.
-<a href=#174 id=174 data-nosnippet>174</a>    ///
-<a href=#175 id=175 data-nosnippet>175</a>    /// The handlers use the pod runtime type, where one conmon-rs instance
-<a href=#176 id=176 data-nosnippet>176</a>    /// per pod monitors the containers and also provides their attach
-<a href=#177 id=177 data-nosnippet>177</a>    /// sockets below the directory of the infra container. CRI-O 1.37
-<a href=#178 id=178 data-nosnippet>178</a>    /// creates that instance for the infra container of the pod and
-<a href=#179 id=179 data-nosnippet>179</a>    /// replaces a dropped infra container by a placeholder without runtime
-<a href=#180 id=180 data-nosnippet>180</a>    /// handler, which would run all containers of the pod with the default
-<a href=#181 id=181 data-nosnippet>181</a>    /// handler instead of the one of their RuntimeClass, so the infra
-<a href=#182 id=182 data-nosnippet>182</a>    /// container is kept (`drop_infra_ctr = false`). Every pod has an infra
-<a href=#183 id=183 data-nosnippet>183</a>    /// container then, and every node pulls the pause image. Its OOM score
-<a href=#184 id=184 data-nosnippet>184</a>    /// of -998 cannot be set in a user namespace, so rootless mode uses the
-<a href=#185 id=185 data-nosnippet>185</a>    /// runtime wrappers which raise it (see `cri::write_rootless_wrappers`).
-<a href=#186 id=186 data-nosnippet>186</a>    /// Both workarounds become unnecessary once CRI-O passes the runtime
-<a href=#187 id=187 data-nosnippet>187</a>    /// handler of the pod to the conmon-rs instance of a dropped infra
-<a href=#188 id=188 data-nosnippet>188</a>    /// container, and skips or clamps the OOM score of the infra container
-<a href=#189 id=189 data-nosnippet>189</a>    /// in a user namespace.
-<a href=#190 id=190 data-nosnippet>190</a>    ///
-<a href=#191 id=191 data-nosnippet>191</a>    /// The capabilities and sysctls of the containers match the defaults of
-<a href=#192 id=192 data-nosnippet>192</a>    /// containerd. NRI is disabled, and the other paths CRI-O uses belong to
-<a href=#193 id=193 data-nosnippet>193</a>    /// the node instead of the host, also the CDI spec directory, which is
-<a href=#194 id=194 data-nosnippet>194</a>    /// empty. CRI-O creates the attach socket directory and the PID files of
-<a href=#195 id=195 data-nosnippet>195</a>    /// exec sessions below `run_dir`, otherwise it would use `/var/run/crio`.
-<a href=#196 id=196 data-nosnippet>196</a>    /// Only the registry certificates (`certs.d`) and credentials of the host
-<a href=#197 id=197 data-nosnippet>197</a>    /// still apply, like for other image pulls on the host.
-<a href=#198 id=198 data-nosnippet>198</a>    </span><span class="kw">fn </span>render_config(
-<a href=#199 id=199 data-nosnippet>199</a>        config: <span class="kw-2">&amp;</span>Config,
-<a href=#200 id=200 data-nosnippet>200</a>        dir: <span class="kw-2">&amp;</span>Path,
-<a href=#201 id=201 data-nosnippet>201</a>        run_dir: <span class="kw-2">&amp;</span>Path,
-<a href=#202 id=202 data-nosnippet>202</a>        socket: <span class="kw-2">&amp;</span>CriSocket,
-<a href=#203 id=203 data-nosnippet>203</a>        conmonrs: <span class="kw-2">&amp;</span>str,
-<a href=#204 id=204 data-nosnippet>204</a>        paths: <span class="kw-2">&amp;</span>RuntimePaths,
-<a href=#205 id=205 data-nosnippet>205</a>    ) -&gt; String {
-<a href=#206 id=206 data-nosnippet>206</a>        <span class="kw">let </span>runtimes = paths
-<a href=#207 id=207 data-nosnippet>207</a>            .handlers(config, dir)
-<a href=#208 id=208 data-nosnippet>208</a>            .iter()
-<a href=#209 id=209 data-nosnippet>209</a>            .map(|(runtime, path)| {
-<a href=#210 id=210 data-nosnippet>210</a>                <span class="macro">format!</span>(
-<a href=#211 id=211 data-nosnippet>211</a>                    <span class="string">"[crio.runtime.runtimes.{name}]\n\
-<a href=#212 id=212 data-nosnippet>212</a>                     runtime_path = \"{path}\"\n\
-<a href=#213 id=213 data-nosnippet>213</a>                     runtime_root = \"{root}\"\n\
-<a href=#214 id=214 data-nosnippet>214</a>                     runtime_type = \"pod\"\n\
-<a href=#215 id=215 data-nosnippet>215</a>                     monitor_path = \"{conmonrs}\"\n\
-<a href=#216 id=216 data-nosnippet>216</a>                     monitor_cgroup = \"pod\"\n"</span>,
-<a href=#217 id=217 data-nosnippet>217</a>                    name = runtime,
-<a href=#218 id=218 data-nosnippet>218</a>                    root = dir.join(runtime.name()).display(),
-<a href=#219 id=219 data-nosnippet>219</a>                )
-<a href=#220 id=220 data-nosnippet>220</a>            })
-<a href=#221 id=221 data-nosnippet>221</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
-<a href=#222 id=222 data-nosnippet>222</a>            .join(<span class="string">"\n"</span>);
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="kw">let </span>containers_dir = dir.join(<span class="string">"containers"</span>);
-<a href=#224 id=224 data-nosnippet>224</a>        <span class="macro">format!</span>(
-<a href=#225 id=225 data-nosnippet>225</a>            <span class="macro">include_str!</span>(<span class="string">"assets/crio.conf"</span>),
-<a href=#226 id=226 data-nosnippet>226</a>            attach_socket_dir = run_dir.display(),
-<a href=#227 id=227 data-nosnippet>227</a>            big_files_temporary_dir = dir.join(<span class="string">"tmp"</span>).display(),
-<a href=#228 id=228 data-nosnippet>228</a>            cdi_spec_dir = dir.join(<span class="string">"cdi"</span>).display(),
-<a href=#229 id=229 data-nosnippet>229</a>            clean_shutdown_file = dir.join(<span class="string">"clean.shutdown"</span>).display(),
-<a href=#230 id=230 data-nosnippet>230</a>            containers_root = containers_dir.join(<span class="string">"storage"</span>).display(),
-<a href=#231 id=231 data-nosnippet>231</a>            containers_runroot = containers_dir.join(<span class="string">"run"</span>).display(),
-<a href=#232 id=232 data-nosnippet>232</a>            decryption_keys_path = dir.join(<span class="string">"keys"</span>).display(),
-<a href=#233 id=233 data-nosnippet>233</a>            default_mounts_file = dir.join(<span class="string">"mounts.conf"</span>).display(),
-<a href=#234 id=234 data-nosnippet>234</a>            default_sysctls = <span class="self">Self</span>::default_sysctls(config),
-<a href=#235 id=235 data-nosnippet>235</a>            hooks_dir = dir.join(<span class="string">"hooks.d"</span>).display(),
-<a href=#236 id=236 data-nosnippet>236</a>            irqbalance_config_file = dir.join(<span class="string">"irqbalance"</span>).display(),
-<a href=#237 id=237 data-nosnippet>237</a>            listen = socket,
-<a href=#238 id=238 data-nosnippet>238</a>            log_dir = dir.join(<span class="string">"log"</span>).display(),
-<a href=#239 id=239 data-nosnippet>239</a>            namespaces_dir = dir.join(<span class="string">"ns"</span>).display(),
-<a href=#240 id=240 data-nosnippet>240</a>            network_dir = dir.join(<span class="string">"cni"</span>).display(),
-<a href=#241 id=241 data-nosnippet>241</a>            plugin_dir = paths.plugin_dir,
-<a href=#242 id=242 data-nosnippet>242</a>            exits_dir = dir.join(<span class="string">"exits"</span>).display(),
-<a href=#243 id=243 data-nosnippet>243</a>            default_runtime = config.oci_runtime(),
-<a href=#244 id=244 data-nosnippet>244</a>            runtimes = runtimes,
-<a href=#245 id=245 data-nosnippet>245</a>            signature_policy = Container::policy_json(config).display(),
-<a href=#246 id=246 data-nosnippet>246</a>            signature_policy_dir = dir.join(<span class="string">"policies"</span>).display(),
-<a href=#247 id=247 data-nosnippet>247</a>            storage_driver = <span class="string">"overlay"</span>,
-<a href=#248 id=248 data-nosnippet>248</a>            storage_option = <span class="string">""</span>,
-<a href=#249 id=249 data-nosnippet>249</a>            version_file = run_dir.join(<span class="string">"version"</span>).display(),
-<a href=#250 id=250 data-nosnippet>250</a>        )
-<a href=#251 id=251 data-nosnippet>251</a>    }
-<a href=#252 id=252 data-nosnippet>252</a>
-<a href=#253 id=253 data-nosnippet>253</a>    <span class="doccomment">/// The default sysctls of the containers as TOML array items, like
-<a href=#254 id=254 data-nosnippet>254</a>    /// containerd sets them for pods outside of the host network.
-<a href=#255 id=255 data-nosnippet>255</a>    /// containerd skips the ICMP echo socket range in a user namespace, in
-<a href=#256 id=256 data-nosnippet>256</a>    /// which the groups up to 2147483647 are not mapped.
-<a href=#257 id=257 data-nosnippet>257</a>    </span><span class="kw">fn </span>default_sysctls(config: <span class="kw-2">&amp;</span>Config) -&gt; String {
-<a href=#258 id=258 data-nosnippet>258</a>        <span class="kw">let </span><span class="kw-2">mut </span>sysctls = <span class="macro">vec!</span>[<span class="string">"net.ipv4.ip_unprivileged_port_start=0"</span>];
-<a href=#259 id=259 data-nosnippet>259</a>        <span class="kw">if </span>!config.is_rootless() {
-<a href=#260 id=260 data-nosnippet>260</a>            sysctls.push(<span class="string">"net.ipv4.ping_group_range=0 2147483647"</span>);
-<a href=#261 id=261 data-nosnippet>261</a>        }
-<a href=#262 id=262 data-nosnippet>262</a>        <span class="kw">let </span>items: String = sysctls
-<a href=#263 id=263 data-nosnippet>263</a>            .iter()
-<a href=#264 id=264 data-nosnippet>264</a>            .map(|s| <span class="macro">format!</span>(<span class="string">"\n    \"{}\","</span>, s))
-<a href=#265 id=265 data-nosnippet>265</a>            .collect();
-<a href=#266 id=266 data-nosnippet>266</a>        items + <span class="string">"\n"
-<a href=#267 id=267 data-nosnippet>267</a>    </span>}
-<a href=#268 id=268 data-nosnippet>268</a>
-<a href=#269 id=269 data-nosnippet>269</a>    <span class="doccomment">/// Retrieve the CRI socket
-<a href=#270 id=270 data-nosnippet>270</a>    </span><span class="kw">pub fn </span>socket(config: <span class="kw-2">&amp;</span>Config, network: <span class="kw-2">&amp;</span>Network, node: u8) -&gt; <span class="prelude-ty">Result</span>&lt;CriSocket&gt; {
-<a href=#271 id=271 data-nosnippet>271</a>        CriSocket::new(<span class="self">Self</span>::path(config, network, node).join(<span class="string">"crio.sock"</span>))
-<a href=#272 id=272 data-nosnippet>272</a>    }
-<a href=#273 id=273 data-nosnippet>273</a>
-<a href=#274 id=274 data-nosnippet>274</a>    <span class="doccomment">/// Retrieve the temporary directory of the node, which is unique per run
-<a href=#275 id=275 data-nosnippet>275</a>    /// root and node.
-<a href=#276 id=276 data-nosnippet>276</a>    </span><span class="kw">fn </span>run_dir(config: <span class="kw-2">&amp;</span>Config, node: u8) -&gt; PathBuf {
-<a href=#277 id=277 data-nosnippet>277</a>        PathBuf::from(RUN_BASE)
-<a href=#278 id=278 data-nosnippet>278</a>            .join(System::root_id(config.root()))
-<a href=#279 id=279 data-nosnippet>279</a>            .join(node.to_string())
-<a href=#280 id=280 data-nosnippet>280</a>    }
-<a href=#281 id=281 data-nosnippet>281</a>
-<a href=#282 id=282 data-nosnippet>282</a>    <span class="doccomment">/// Retrieve the working path for the node
-<a href=#283 id=283 data-nosnippet>283</a>    </span><span class="kw">fn </span>path(config: <span class="kw-2">&amp;</span>Config, network: <span class="kw-2">&amp;</span>Network, node: u8) -&gt; PathBuf {
-<a href=#284 id=284 data-nosnippet>284</a>        config
-<a href=#285 id=285 data-nosnippet>285</a>            .root()
-<a href=#286 id=286 data-nosnippet>286</a>            .join(CRIO)
-<a href=#287 id=287 data-nosnippet>287</a>            .join(Node::name(config, network, node))
-<a href=#288 id=288 data-nosnippet>288</a>    }
-<a href=#289 id=289 data-nosnippet>289</a>}
-<a href=#290 id=290 data-nosnippet>290</a>
-<a href=#291 id=291 data-nosnippet>291</a><span class="kw">impl </span>Stoppable <span class="kw">for </span>Crio {
-<a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#293 id=293 data-nosnippet>293</a>        <span class="comment">// Always stop the process, even if the workloads cannot be removed,
-<a href=#294 id=294 data-nosnippet>294</a>        // for example because CRI-O crashed.
-<a href=#295 id=295 data-nosnippet>295</a>        </span><span class="kw">let </span>removed = cri::remove_all_containers(<span class="string">"CRI-O"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.socket, <span class="kw-2">&amp;</span><span class="self">self</span>.node_name)
-<a href=#296 id=296 data-nosnippet>296</a>            .with_context(|| <span class="macro">format!</span>(<span class="string">"Unable to remove CRI-O containers on {}"</span>, <span class="self">self</span>.node_name));
-<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">let </span>stopped = <span class="self">self</span>.process.stop();
-<a href=#298 id=298 data-nosnippet>298</a>        cri::kill_leftover_monitors(<span class="kw-2">&amp;</span><span class="self">self</span>.socket, <span class="kw-2">&amp;</span><span class="self">self</span>.node_name);
-<a href=#299 id=299 data-nosnippet>299</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(container) = <span class="kw-2">&amp;mut </span><span class="self">self</span>.container {
-<a href=#300 id=300 data-nosnippet>300</a>            container.remove();
-<a href=#301 id=301 data-nosnippet>301</a>        }
-<a href=#302 id=302 data-nosnippet>302</a>        removed.and(stopped)
-<a href=#303 id=303 data-nosnippet>303</a>    }
-<a href=#304 id=304 data-nosnippet>304</a>
-<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">fn </span>died(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
-<a href=#306 id=306 data-nosnippet>306</a>        <span class="self">self</span>.process.died()
-<a href=#307 id=307 data-nosnippet>307</a>    }
-<a href=#308 id=308 data-nosnippet>308</a>}
-<a href=#309 id=309 data-nosnippet>309</a>
-<a href=#310 id=310 data-nosnippet>310</a><span class="attr">#[cfg(test)]
-<a href=#311 id=311 data-nosnippet>311</a></span><span class="kw">mod </span>tests {
-<a href=#312 id=312 data-nosnippet>312</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
-<a href=#313 id=313 data-nosnippet>313</a>    <span class="kw">use </span><span class="kw">crate</span>::config::OciRuntime;
-<a href=#314 id=314 data-nosnippet>314</a>
-<a href=#315 id=315 data-nosnippet>315</a>    <span class="attr">#[test]
-<a href=#316 id=316 data-nosnippet>316</a>    </span><span class="kw">fn </span>component_name_per_node() {
-<a href=#317 id=317 data-nosnippet>317</a>        <span class="macro">assert_eq!</span>(CrioComponent::new(<span class="number">0</span>).name(), <span class="string">"CRI-O (node 0)"</span>);
-<a href=#318 id=318 data-nosnippet>318</a>        <span class="macro">assert_eq!</span>(CrioComponent::new(<span class="number">2</span>).name(), <span class="string">"CRI-O (node 2)"</span>);
+<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw">let </span>nri = NriPaths::new(<span class="kw-2">&amp;</span>dir)<span class="question-mark">?</span>;
+<a href=#103 id=103 data-nosnippet>103</a>
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="comment">// Always render the configuration, since it references the current
+<a href=#105 id=105 data-nosnippet>105</a>        // Nix store paths.
+<a href=#106 id=106 data-nosnippet>106</a>        </span><span class="kw">for </span>d <span class="kw">in </span>[
+<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw-2">&amp;</span>network_dir,
+<a href=#108 id=108 data-nosnippet>108</a>            <span class="kw-2">&amp;</span>config_dir,
+<a href=#109 id=109 data-nosnippet>109</a>            <span class="kw-2">&amp;</span>registries_dir,
+<a href=#110 id=110 data-nosnippet>110</a>            <span class="kw-2">&amp;</span>dir.join(<span class="string">"ns"</span>),
+<a href=#111 id=111 data-nosnippet>111</a>            <span class="kw-2">&amp;</span>dir.join(<span class="string">"hooks.d"</span>),
+<a href=#112 id=112 data-nosnippet>112</a>            <span class="kw-2">&amp;</span>dir.join(<span class="string">"cdi"</span>),
+<a href=#113 id=113 data-nosnippet>113</a>            <span class="kw-2">&amp;</span>dir.join(<span class="string">"tmp"</span>),
+<a href=#114 id=114 data-nosnippet>114</a>        ]
+<a href=#115 id=115 data-nosnippet>115</a>        .into_iter()
+<a href=#116 id=116 data-nosnippet>116</a>        .map(PathBuf::as_path)
+<a href=#117 id=117 data-nosnippet>117</a>        .chain(nri.dirs().into_iter().filter(|<span class="kw">_</span>| config.nri()))
+<a href=#118 id=118 data-nosnippet>118</a>        {
+<a href=#119 id=119 data-nosnippet>119</a>            create_dir_all(d)
+<a href=#120 id=120 data-nosnippet>120</a>                .with_context(|| <span class="macro">format!</span>(<span class="string">"Unable to create CRI-O directory {}"</span>, d.display()))<span class="question-mark">?</span>;
+<a href=#121 id=121 data-nosnippet>121</a>        }
+<a href=#122 id=122 data-nosnippet>122</a>        <span class="kw">if </span>config.is_rootless() {
+<a href=#123 id=123 data-nosnippet>123</a>            cri::write_rootless_wrappers(<span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>paths)<span class="question-mark">?</span>;
+<a href=#124 id=124 data-nosnippet>124</a>        }
+<a href=#125 id=125 data-nosnippet>125</a>        write_if_changed(
+<a href=#126 id=126 data-nosnippet>126</a>            <span class="kw-2">&amp;</span>config_file,
+<a href=#127 id=127 data-nosnippet>127</a>            <span class="kw-2">&amp;</span><span class="self">Self</span>::render_config(config, <span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>run_dir, <span class="kw-2">&amp;</span>socket, <span class="kw-2">&amp;</span>nri, <span class="kw-2">&amp;</span>conmonrs, <span class="kw-2">&amp;</span>paths),
+<a href=#128 id=128 data-nosnippet>128</a>        )
+<a href=#129 id=129 data-nosnippet>129</a>        .context(<span class="string">"Unable to write CRI-O config"</span>)<span class="question-mark">?</span>;
+<a href=#130 id=130 data-nosnippet>130</a>        write_if_changed(<span class="kw-2">&amp;</span>registries_file, REGISTRIES_CONF)
+<a href=#131 id=131 data-nosnippet>131</a>            .context(<span class="string">"Unable to write CRI-O registries config"</span>)<span class="question-mark">?</span>;
+<a href=#132 id=132 data-nosnippet>132</a>        write_if_changed(<span class="kw-2">&amp;</span>storage_file, STORAGE_CONF)
+<a href=#133 id=133 data-nosnippet>133</a>            .context(<span class="string">"Unable to write CRI-O storage config"</span>)<span class="question-mark">?</span>;
+<a href=#134 id=134 data-nosnippet>134</a>        <span class="comment">// CRI-O maps the host ports of the pods itself
+<a href=#135 id=135 data-nosnippet>135</a>        </span>cri::write_cni_config(<span class="kw-2">&amp;</span>network_dir, <span class="kw-2">&amp;</span>node_name, node, network, <span class="bool-val">false</span>)<span class="question-mark">?</span>;
+<a href=#136 id=136 data-nosnippet>136</a>        cri::reset_ipam_data(<span class="kw-2">&amp;</span>network_dir)<span class="question-mark">?</span>;
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="kw">let </span>args = <span class="self">Self</span>::args(<span class="kw-2">&amp;</span>config_dir, <span class="kw-2">&amp;</span>registries_file, <span class="kw-2">&amp;</span>registries_dir);
+<a href=#138 id=138 data-nosnippet>138</a>        <span class="kw">let </span>args: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = args.iter().map(String::as_str).collect();
+<a href=#139 id=139 data-nosnippet>139</a>        <span class="kw">let </span>storage_file = storage_file.display().to_string();
+<a href=#140 id=140 data-nosnippet>140</a>        <span class="kw">let </span>env = [(STORAGE_CONF_ENV, storage_file.as_str())];
+<a href=#141 id=141 data-nosnippet>141</a>
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="kw">let </span><span class="kw-2">mut </span>process = <span class="kw">if </span>config.multi_node() &amp;&amp; !config.is_rootless() {
+<a href=#143 id=143 data-nosnippet>143</a>            <span class="comment">// Run inside a container
+<a href=#144 id=144 data-nosnippet>144</a>            </span><span class="kw">let </span>identifier = <span class="macro">format!</span>(<span class="string">"CRI-O {}"</span>, node_name);
+<a href=#145 id=145 data-nosnippet>145</a>            Container::start(config, <span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>identifier, CRIO, <span class="kw-2">&amp;</span>node_name, <span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>env)<span class="question-mark">?
+<a href=#146 id=146 data-nosnippet>146</a>        </span>} <span class="kw">else </span>{
+<a href=#147 id=147 data-nosnippet>147</a>            Process::start_with_env(<span class="kw-2">&amp;</span>dir, <span class="string">"CRI-O"</span>, CRIO, <span class="kw-2">&amp;</span>args, <span class="kw-2">&amp;</span>env)<span class="question-mark">?
+<a href=#148 id=148 data-nosnippet>148</a>        </span>};
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="kw">let </span>container = Container::node(config, <span class="kw-2">&amp;</span>node_name);
+<a href=#150 id=150 data-nosnippet>150</a>        process.wait_ready(<span class="string">"No systemd watchdog enabled"</span>)<span class="question-mark">?</span>;
+<a href=#151 id=151 data-nosnippet>151</a>
+<a href=#152 id=152 data-nosnippet>152</a>        <span class="prelude-val">Ok</span>(Box::new(<span class="self">Self </span>{
+<a href=#153 id=153 data-nosnippet>153</a>            process,
+<a href=#154 id=154 data-nosnippet>154</a>            socket,
+<a href=#155 id=155 data-nosnippet>155</a>            container,
+<a href=#156 id=156 data-nosnippet>156</a>            node_name,
+<a href=#157 id=157 data-nosnippet>157</a>        }))
+<a href=#158 id=158 data-nosnippet>158</a>    }
+<a href=#159 id=159 data-nosnippet>159</a>
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="doccomment">/// The command line arguments of CRI-O. The main configuration file
+<a href=#161 id=161 data-nosnippet>161</a>    /// defaults to the one of the host, so an empty one replaces it and the
+<a href=#162 id=162 data-nosnippet>162</a>    /// configuration comes from the drop-in directory of the node. Short
+<a href=#163 id=163 data-nosnippet>163</a>    /// image names get resolved via the registries config of the node,
+<a href=#164 id=164 data-nosnippet>164</a>    /// without the drop-in files of the host.
+<a href=#165 id=165 data-nosnippet>165</a>    </span><span class="kw">fn </span>args(config_dir: <span class="kw-2">&amp;</span>Path, registries_file: <span class="kw-2">&amp;</span>Path, registries_dir: <span class="kw-2">&amp;</span>Path) -&gt; Vec&lt;String&gt; {
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="macro">vec!</span>[
+<a href=#167 id=167 data-nosnippet>167</a>            <span class="string">"--config=/dev/null"</span>.into(),
+<a href=#168 id=168 data-nosnippet>168</a>            <span class="macro">format!</span>(<span class="string">"--config-dir={}"</span>, config_dir.display()),
+<a href=#169 id=169 data-nosnippet>169</a>            <span class="macro">format!</span>(<span class="string">"--registries-conf={}"</span>, registries_file.display()),
+<a href=#170 id=170 data-nosnippet>170</a>            <span class="macro">format!</span>(<span class="string">"--registries-conf-dir={}"</span>, registries_dir.display()),
+<a href=#171 id=171 data-nosnippet>171</a>        ]
+<a href=#172 id=172 data-nosnippet>172</a>    }
+<a href=#173 id=173 data-nosnippet>173</a>
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="doccomment">/// Render the CRI-O configuration for the node working directory `dir`
+<a href=#175 id=175 data-nosnippet>175</a>    /// and the temporary directory `run_dir`.
+<a href=#176 id=176 data-nosnippet>176</a>    ///
+<a href=#177 id=177 data-nosnippet>177</a>    /// Both OCI runtimes are registered as runtime handlers with their own
+<a href=#178 id=178 data-nosnippet>178</a>    /// state directory, the configured one is used as default.
+<a href=#179 id=179 data-nosnippet>179</a>    ///
+<a href=#180 id=180 data-nosnippet>180</a>    /// The handlers use the pod runtime type, where one conmon-rs instance
+<a href=#181 id=181 data-nosnippet>181</a>    /// per pod monitors the containers and also provides their attach
+<a href=#182 id=182 data-nosnippet>182</a>    /// sockets below the directory of the infra container. CRI-O 1.37
+<a href=#183 id=183 data-nosnippet>183</a>    /// creates that instance for the infra container of the pod and
+<a href=#184 id=184 data-nosnippet>184</a>    /// replaces a dropped infra container by a placeholder without runtime
+<a href=#185 id=185 data-nosnippet>185</a>    /// handler, which would run all containers of the pod with the default
+<a href=#186 id=186 data-nosnippet>186</a>    /// handler instead of the one of their RuntimeClass, so the infra
+<a href=#187 id=187 data-nosnippet>187</a>    /// container is kept (`drop_infra_ctr = false`). Every pod has an infra
+<a href=#188 id=188 data-nosnippet>188</a>    /// container then, and every node pulls the pause image. Its OOM score
+<a href=#189 id=189 data-nosnippet>189</a>    /// of -998 cannot be set in a user namespace, so rootless mode uses the
+<a href=#190 id=190 data-nosnippet>190</a>    /// runtime wrappers which raise it (see `cri::write_rootless_wrappers`).
+<a href=#191 id=191 data-nosnippet>191</a>    /// Both workarounds become unnecessary once CRI-O passes the runtime
+<a href=#192 id=192 data-nosnippet>192</a>    /// handler of the pod to the conmon-rs instance of a dropped infra
+<a href=#193 id=193 data-nosnippet>193</a>    /// container, and skips or clamps the OOM score of the infra container
+<a href=#194 id=194 data-nosnippet>194</a>    /// in a user namespace.
+<a href=#195 id=195 data-nosnippet>195</a>    ///
+<a href=#196 id=196 data-nosnippet>196</a>    /// The capabilities and sysctls of the containers match the defaults of
+<a href=#197 id=197 data-nosnippet>197</a>    /// containerd. NRI is disabled unless `--nri` is set, and its socket and
+<a href=#198 id=198 data-nosnippet>198</a>    /// plugin directories (see `NriPaths`) as well as the other paths CRI-O
+<a href=#199 id=199 data-nosnippet>199</a>    /// uses belong to the node instead of the host, also the CDI spec
+<a href=#200 id=200 data-nosnippet>200</a>    /// directory, which is empty. CRI-O creates the attach socket directory and
+<a href=#201 id=201 data-nosnippet>201</a>    /// the PID files of exec sessions below `run_dir`, otherwise it would use
+<a href=#202 id=202 data-nosnippet>202</a>    /// `/var/run/crio`. Only the registry certificates (`certs.d`) and
+<a href=#203 id=203 data-nosnippet>203</a>    /// credentials of the host still apply, like for other image pulls on the
+<a href=#204 id=204 data-nosnippet>204</a>    /// host.
+<a href=#205 id=205 data-nosnippet>205</a>    </span><span class="kw">fn </span>render_config(
+<a href=#206 id=206 data-nosnippet>206</a>        config: <span class="kw-2">&amp;</span>Config,
+<a href=#207 id=207 data-nosnippet>207</a>        dir: <span class="kw-2">&amp;</span>Path,
+<a href=#208 id=208 data-nosnippet>208</a>        run_dir: <span class="kw-2">&amp;</span>Path,
+<a href=#209 id=209 data-nosnippet>209</a>        socket: <span class="kw-2">&amp;</span>CriSocket,
+<a href=#210 id=210 data-nosnippet>210</a>        nri: <span class="kw-2">&amp;</span>NriPaths,
+<a href=#211 id=211 data-nosnippet>211</a>        conmonrs: <span class="kw-2">&amp;</span>str,
+<a href=#212 id=212 data-nosnippet>212</a>        paths: <span class="kw-2">&amp;</span>RuntimePaths,
+<a href=#213 id=213 data-nosnippet>213</a>    ) -&gt; String {
+<a href=#214 id=214 data-nosnippet>214</a>        <span class="kw">let </span>runtimes = paths
+<a href=#215 id=215 data-nosnippet>215</a>            .handlers(config, dir)
+<a href=#216 id=216 data-nosnippet>216</a>            .iter()
+<a href=#217 id=217 data-nosnippet>217</a>            .map(|(runtime, path)| {
+<a href=#218 id=218 data-nosnippet>218</a>                <span class="macro">format!</span>(
+<a href=#219 id=219 data-nosnippet>219</a>                    <span class="string">"[crio.runtime.runtimes.{name}]\n\
+<a href=#220 id=220 data-nosnippet>220</a>                     runtime_path = \"{path}\"\n\
+<a href=#221 id=221 data-nosnippet>221</a>                     runtime_root = \"{root}\"\n\
+<a href=#222 id=222 data-nosnippet>222</a>                     runtime_type = \"pod\"\n\
+<a href=#223 id=223 data-nosnippet>223</a>                     monitor_path = \"{conmonrs}\"\n\
+<a href=#224 id=224 data-nosnippet>224</a>                     monitor_cgroup = \"pod\"\n"</span>,
+<a href=#225 id=225 data-nosnippet>225</a>                    name = runtime,
+<a href=#226 id=226 data-nosnippet>226</a>                    root = dir.join(runtime.name()).display(),
+<a href=#227 id=227 data-nosnippet>227</a>                )
+<a href=#228 id=228 data-nosnippet>228</a>            })
+<a href=#229 id=229 data-nosnippet>229</a>            .collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;()
+<a href=#230 id=230 data-nosnippet>230</a>            .join(<span class="string">"\n"</span>);
+<a href=#231 id=231 data-nosnippet>231</a>        <span class="kw">let </span>containers_dir = dir.join(<span class="string">"containers"</span>);
+<a href=#232 id=232 data-nosnippet>232</a>        <span class="macro">format!</span>(
+<a href=#233 id=233 data-nosnippet>233</a>            <span class="macro">include_str!</span>(<span class="string">"assets/crio.conf"</span>),
+<a href=#234 id=234 data-nosnippet>234</a>            attach_socket_dir = run_dir.display(),
+<a href=#235 id=235 data-nosnippet>235</a>            big_files_temporary_dir = dir.join(<span class="string">"tmp"</span>).display(),
+<a href=#236 id=236 data-nosnippet>236</a>            cdi_spec_dir = dir.join(<span class="string">"cdi"</span>).display(),
+<a href=#237 id=237 data-nosnippet>237</a>            clean_shutdown_file = dir.join(<span class="string">"clean.shutdown"</span>).display(),
+<a href=#238 id=238 data-nosnippet>238</a>            containers_root = containers_dir.join(<span class="string">"storage"</span>).display(),
+<a href=#239 id=239 data-nosnippet>239</a>            containers_runroot = containers_dir.join(<span class="string">"run"</span>).display(),
+<a href=#240 id=240 data-nosnippet>240</a>            decryption_keys_path = dir.join(<span class="string">"keys"</span>).display(),
+<a href=#241 id=241 data-nosnippet>241</a>            default_mounts_file = dir.join(<span class="string">"mounts.conf"</span>).display(),
+<a href=#242 id=242 data-nosnippet>242</a>            default_sysctls = <span class="self">Self</span>::default_sysctls(config),
+<a href=#243 id=243 data-nosnippet>243</a>            hooks_dir = dir.join(<span class="string">"hooks.d"</span>).display(),
+<a href=#244 id=244 data-nosnippet>244</a>            irqbalance_config_file = dir.join(<span class="string">"irqbalance"</span>).display(),
+<a href=#245 id=245 data-nosnippet>245</a>            listen = socket,
+<a href=#246 id=246 data-nosnippet>246</a>            log_dir = dir.join(<span class="string">"log"</span>).display(),
+<a href=#247 id=247 data-nosnippet>247</a>            namespaces_dir = dir.join(<span class="string">"ns"</span>).display(),
+<a href=#248 id=248 data-nosnippet>248</a>            network_dir = dir.join(<span class="string">"cni"</span>).display(),
+<a href=#249 id=249 data-nosnippet>249</a>            nri = config.nri(),
+<a href=#250 id=250 data-nosnippet>250</a>            nri_listen = nri.socket.display(),
+<a href=#251 id=251 data-nosnippet>251</a>            nri_plugin_dir = nri.plugin_dir.display(),
+<a href=#252 id=252 data-nosnippet>252</a>            nri_plugin_config_dir = nri.plugin_config_dir.display(),
+<a href=#253 id=253 data-nosnippet>253</a>            plugin_dir = paths.plugin_dir,
+<a href=#254 id=254 data-nosnippet>254</a>            exits_dir = dir.join(<span class="string">"exits"</span>).display(),
+<a href=#255 id=255 data-nosnippet>255</a>            default_runtime = config.oci_runtime(),
+<a href=#256 id=256 data-nosnippet>256</a>            runtimes = runtimes,
+<a href=#257 id=257 data-nosnippet>257</a>            signature_policy = Container::policy_json(config).display(),
+<a href=#258 id=258 data-nosnippet>258</a>            signature_policy_dir = dir.join(<span class="string">"policies"</span>).display(),
+<a href=#259 id=259 data-nosnippet>259</a>            storage_driver = <span class="string">"overlay"</span>,
+<a href=#260 id=260 data-nosnippet>260</a>            storage_option = <span class="string">""</span>,
+<a href=#261 id=261 data-nosnippet>261</a>            version_file = run_dir.join(<span class="string">"version"</span>).display(),
+<a href=#262 id=262 data-nosnippet>262</a>        )
+<a href=#263 id=263 data-nosnippet>263</a>    }
+<a href=#264 id=264 data-nosnippet>264</a>
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="doccomment">/// The default sysctls of the containers as TOML array items, like
+<a href=#266 id=266 data-nosnippet>266</a>    /// containerd sets them for pods outside of the host network.
+<a href=#267 id=267 data-nosnippet>267</a>    /// containerd skips the ICMP echo socket range in a user namespace, in
+<a href=#268 id=268 data-nosnippet>268</a>    /// which the groups up to 2147483647 are not mapped.
+<a href=#269 id=269 data-nosnippet>269</a>    </span><span class="kw">fn </span>default_sysctls(config: <span class="kw-2">&amp;</span>Config) -&gt; String {
+<a href=#270 id=270 data-nosnippet>270</a>        <span class="kw">let </span><span class="kw-2">mut </span>sysctls = <span class="macro">vec!</span>[<span class="string">"net.ipv4.ip_unprivileged_port_start=0"</span>];
+<a href=#271 id=271 data-nosnippet>271</a>        <span class="kw">if </span>!config.is_rootless() {
+<a href=#272 id=272 data-nosnippet>272</a>            sysctls.push(<span class="string">"net.ipv4.ping_group_range=0 2147483647"</span>);
+<a href=#273 id=273 data-nosnippet>273</a>        }
+<a href=#274 id=274 data-nosnippet>274</a>        <span class="kw">let </span>items: String = sysctls
+<a href=#275 id=275 data-nosnippet>275</a>            .iter()
+<a href=#276 id=276 data-nosnippet>276</a>            .map(|s| <span class="macro">format!</span>(<span class="string">"\n    \"{}\","</span>, s))
+<a href=#277 id=277 data-nosnippet>277</a>            .collect();
+<a href=#278 id=278 data-nosnippet>278</a>        items + <span class="string">"\n"
+<a href=#279 id=279 data-nosnippet>279</a>    </span>}
+<a href=#280 id=280 data-nosnippet>280</a>
+<a href=#281 id=281 data-nosnippet>281</a>    <span class="doccomment">/// Retrieve the CRI socket
+<a href=#282 id=282 data-nosnippet>282</a>    </span><span class="kw">pub fn </span>socket(config: <span class="kw-2">&amp;</span>Config, network: <span class="kw-2">&amp;</span>Network, node: u8) -&gt; <span class="prelude-ty">Result</span>&lt;CriSocket&gt; {
+<a href=#283 id=283 data-nosnippet>283</a>        CriSocket::new(<span class="self">Self</span>::path(config, network, node).join(<span class="string">"crio.sock"</span>))
+<a href=#284 id=284 data-nosnippet>284</a>    }
+<a href=#285 id=285 data-nosnippet>285</a>
+<a href=#286 id=286 data-nosnippet>286</a>    <span class="doccomment">/// Retrieve the temporary directory of the node, which is unique per run
+<a href=#287 id=287 data-nosnippet>287</a>    /// root and node.
+<a href=#288 id=288 data-nosnippet>288</a>    </span><span class="kw">fn </span>run_dir(config: <span class="kw-2">&amp;</span>Config, node: u8) -&gt; PathBuf {
+<a href=#289 id=289 data-nosnippet>289</a>        PathBuf::from(RUN_BASE)
+<a href=#290 id=290 data-nosnippet>290</a>            .join(System::root_id(config.root()))
+<a href=#291 id=291 data-nosnippet>291</a>            .join(node.to_string())
+<a href=#292 id=292 data-nosnippet>292</a>    }
+<a href=#293 id=293 data-nosnippet>293</a>
+<a href=#294 id=294 data-nosnippet>294</a>    <span class="doccomment">/// Retrieve the working path for the node
+<a href=#295 id=295 data-nosnippet>295</a>    </span><span class="kw">fn </span>path(config: <span class="kw-2">&amp;</span>Config, network: <span class="kw-2">&amp;</span>Network, node: u8) -&gt; PathBuf {
+<a href=#296 id=296 data-nosnippet>296</a>        config
+<a href=#297 id=297 data-nosnippet>297</a>            .root()
+<a href=#298 id=298 data-nosnippet>298</a>            .join(CRIO)
+<a href=#299 id=299 data-nosnippet>299</a>            .join(Node::name(config, network, node))
+<a href=#300 id=300 data-nosnippet>300</a>    }
+<a href=#301 id=301 data-nosnippet>301</a>}
+<a href=#302 id=302 data-nosnippet>302</a>
+<a href=#303 id=303 data-nosnippet>303</a><span class="kw">impl </span>Stoppable <span class="kw">for </span>Crio {
+<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">fn </span>stop(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#305 id=305 data-nosnippet>305</a>        <span class="comment">// Always stop the process, even if the workloads cannot be removed,
+<a href=#306 id=306 data-nosnippet>306</a>        // for example because CRI-O crashed.
+<a href=#307 id=307 data-nosnippet>307</a>        </span><span class="kw">let </span>removed = cri::remove_all_containers(<span class="string">"CRI-O"</span>, <span class="kw-2">&amp;</span><span class="self">self</span>.socket, <span class="kw-2">&amp;</span><span class="self">self</span>.node_name)
+<a href=#308 id=308 data-nosnippet>308</a>            .with_context(|| <span class="macro">format!</span>(<span class="string">"Unable to remove CRI-O containers on {}"</span>, <span class="self">self</span>.node_name));
+<a href=#309 id=309 data-nosnippet>309</a>        <span class="kw">let </span>stopped = <span class="self">self</span>.process.stop();
+<a href=#310 id=310 data-nosnippet>310</a>        cri::kill_leftover_monitors(<span class="kw-2">&amp;</span><span class="self">self</span>.socket, <span class="kw-2">&amp;</span><span class="self">self</span>.node_name);
+<a href=#311 id=311 data-nosnippet>311</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(container) = <span class="kw-2">&amp;mut </span><span class="self">self</span>.container {
+<a href=#312 id=312 data-nosnippet>312</a>            container.remove();
+<a href=#313 id=313 data-nosnippet>313</a>        }
+<a href=#314 id=314 data-nosnippet>314</a>        removed.and(stopped)
+<a href=#315 id=315 data-nosnippet>315</a>    }
+<a href=#316 id=316 data-nosnippet>316</a>
+<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">fn </span>died(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; bool {
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="self">self</span>.process.died()
 <a href=#319 id=319 data-nosnippet>319</a>    }
-<a href=#320 id=320 data-nosnippet>320</a>
-<a href=#321 id=321 data-nosnippet>321</a>    <span class="kw">fn </span>test_paths() -&gt; RuntimePaths {
-<a href=#322 id=322 data-nosnippet>322</a>        RuntimePaths {
-<a href=#323 id=323 data-nosnippet>323</a>            runtimes: <span class="macro">vec!</span>[
-<a href=#324 id=324 data-nosnippet>324</a>                (OciRuntime::Crun, <span class="string">"/nix/bin/crun"</span>.into()),
-<a href=#325 id=325 data-nosnippet>325</a>                (OciRuntime::Runc, <span class="string">"/nix/bin/runc"</span>.into()),
-<a href=#326 id=326 data-nosnippet>326</a>            ],
-<a href=#327 id=327 data-nosnippet>327</a>            plugin_dir: <span class="string">"/nix/cni"</span>.into(),
-<a href=#328 id=328 data-nosnippet>328</a>        }
-<a href=#329 id=329 data-nosnippet>329</a>    }
-<a href=#330 id=330 data-nosnippet>330</a>
-<a href=#331 id=331 data-nosnippet>331</a>    <span class="doccomment">/// The absolute run root of the test configurations. A relative one
-<a href=#332 id=332 data-nosnippet>332</a>    /// would hide paths of the configuration which do not belong to the
-<a href=#333 id=333 data-nosnippet>333</a>    /// node.
-<a href=#334 id=334 data-nosnippet>334</a>    </span><span class="kw">const </span>ROOT: <span class="kw-2">&amp;</span>str = <span class="string">"/kubernix"</span>;
-<a href=#335 id=335 data-nosnippet>335</a>
-<a href=#336 id=336 data-nosnippet>336</a>    <span class="doccomment">/// Parse the arguments with the run root `ROOT`.
-<a href=#337 id=337 data-nosnippet>337</a>    </span><span class="kw">fn </span>parse(args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; <span class="prelude-ty">Result</span>&lt;Config&gt; {
-<a href=#338 id=338 data-nosnippet>338</a>        <span class="kw">let </span>root = <span class="macro">format!</span>(<span class="string">"--root={}"</span>, ROOT);
-<a href=#339 id=339 data-nosnippet>339</a>        <span class="kw">let </span>args: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = [root.as_str()]
-<a href=#340 id=340 data-nosnippet>340</a>            .into_iter()
-<a href=#341 id=341 data-nosnippet>341</a>            .chain(args.iter().copied())
-<a href=#342 id=342 data-nosnippet>342</a>            .collect();
-<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">crate</span>::config::tests::parse(<span class="kw-2">&amp;</span>args)
-<a href=#344 id=344 data-nosnippet>344</a>    }
-<a href=#345 id=345 data-nosnippet>345</a>
-<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">fn </span>render_with(config: <span class="kw-2">&amp;</span>Config, paths: <span class="kw-2">&amp;</span>RuntimePaths) -&gt; <span class="prelude-ty">Result</span>&lt;toml::Value&gt; {
-<a href=#347 id=347 data-nosnippet>347</a>        <span class="kw">let </span>dir = config.root().join(CRIO).join(<span class="string">"node"</span>);
-<a href=#348 id=348 data-nosnippet>348</a>        <span class="kw">let </span>socket = CriSocket::new(dir.join(<span class="string">"crio.sock"</span>))<span class="question-mark">?</span>;
-<a href=#349 id=349 data-nosnippet>349</a>        <span class="kw">let </span>run_dir = Crio::run_dir(config, <span class="number">0</span>);
-<a href=#350 id=350 data-nosnippet>350</a>        <span class="kw">let </span>content =
-<a href=#351 id=351 data-nosnippet>351</a>            Crio::render_config(config, <span class="kw-2">&amp;</span>dir, <span class="kw-2">&amp;</span>run_dir, <span class="kw-2">&amp;</span>socket, <span class="string">"/nix/bin/conmonrs"</span>, paths);
-<a href=#352 id=352 data-nosnippet>352</a>        <span class="prelude-val">Ok</span>(toml::from_str(<span class="kw-2">&amp;</span>content)<span class="question-mark">?</span>)
-<a href=#353 id=353 data-nosnippet>353</a>    }
-<a href=#354 id=354 data-nosnippet>354</a>
-<a href=#355 id=355 data-nosnippet>355</a>    <span class="kw">fn </span>render(config: <span class="kw-2">&amp;</span>Config) -&gt; <span class="prelude-ty">Result</span>&lt;toml::Value&gt; {
-<a href=#356 id=356 data-nosnippet>356</a>        render_with(config, <span class="kw-2">&amp;</span>test_paths())
-<a href=#357 id=357 data-nosnippet>357</a>    }
-<a href=#358 id=358 data-nosnippet>358</a>
-<a href=#359 id=359 data-nosnippet>359</a>    <span class="kw">fn </span>config(args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str], rootless: bool) -&gt; Config {
-<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = parse(<span class="kw-2">&amp;</span>args[<span class="number">1</span>..]).expect(<span class="string">"invalid arguments"</span>);
-<a href=#361 id=361 data-nosnippet>361</a>        c.set_rootless(rootless);
-<a href=#362 id=362 data-nosnippet>362</a>        c
-<a href=#363 id=363 data-nosnippet>363</a>    }
-<a href=#364 id=364 data-nosnippet>364</a>
-<a href=#365 id=365 data-nosnippet>365</a>    <span class="attr">#[test]
-<a href=#366 id=366 data-nosnippet>366</a>    </span><span class="kw">fn </span>render_config_skips_missing_runtime() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span><span class="kw-2">mut </span>paths = test_paths();
-<a href=#368 id=368 data-nosnippet>368</a>        paths.runtimes.retain(|(r, <span class="kw">_</span>)| <span class="kw-2">*</span>r == OciRuntime::Crun);
-<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">let </span>v = render_with(<span class="kw-2">&amp;</span>parse(<span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>, <span class="kw-2">&amp;</span>paths)<span class="question-mark">?</span>;
-<a href=#370 id=370 data-nosnippet>370</a>        <span class="kw">let </span>runtimes = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"runtimes"</span>];
-<a href=#371 id=371 data-nosnippet>371</a>        <span class="macro">assert!</span>(runtimes.get(<span class="string">"crun"</span>).is_some());
-<a href=#372 id=372 data-nosnippet>372</a>        <span class="macro">assert!</span>(runtimes.get(<span class="string">"runc"</span>).is_none());
-<a href=#373 id=373 data-nosnippet>373</a>        <span class="prelude-val">Ok</span>(())
-<a href=#374 id=374 data-nosnippet>374</a>    }
-<a href=#375 id=375 data-nosnippet>375</a>
-<a href=#376 id=376 data-nosnippet>376</a>    <span class="attr">#[test]
-<a href=#377 id=377 data-nosnippet>377</a>    </span><span class="kw">fn </span>render_config_registers_both_runtimes() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#378 id=378 data-nosnippet>378</a>        <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>], <span class="bool-val">false</span>))<span class="question-mark">?</span>;
-<a href=#379 id=379 data-nosnippet>379</a>        <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>];
-<a href=#380 id=380 data-nosnippet>380</a>        <span class="macro">assert_eq!</span>(runtime[<span class="string">"default_runtime"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"crun"</span>));
-<a href=#381 id=381 data-nosnippet>381</a>        <span class="kw">let </span>crun = <span class="kw-2">&amp;</span>runtime[<span class="string">"runtimes"</span>][<span class="string">"crun"</span>];
-<a href=#382 id=382 data-nosnippet>382</a>        <span class="macro">assert_eq!</span>(crun[<span class="string">"runtime_path"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"/nix/bin/crun"</span>));
-<a href=#383 id=383 data-nosnippet>383</a>        <span class="macro">assert_eq!</span>(crun[<span class="string">"monitor_path"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"/nix/bin/conmonrs"</span>));
-<a href=#384 id=384 data-nosnippet>384</a>        <span class="macro">assert_eq!</span>(
-<a href=#385 id=385 data-nosnippet>385</a>            crun[<span class="string">"runtime_root"</span>].as_str(),
-<a href=#386 id=386 data-nosnippet>386</a>            <span class="prelude-val">Some</span>(<span class="string">"/kubernix/crio/node/crun"</span>)
-<a href=#387 id=387 data-nosnippet>387</a>        );
-<a href=#388 id=388 data-nosnippet>388</a>        <span class="kw">let </span>runc = <span class="kw-2">&amp;</span>runtime[<span class="string">"runtimes"</span>][<span class="string">"runc"</span>];
-<a href=#389 id=389 data-nosnippet>389</a>        <span class="macro">assert_eq!</span>(runc[<span class="string">"runtime_path"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"/nix/bin/runc"</span>));
-<a href=#390 id=390 data-nosnippet>390</a>        <span class="macro">assert_eq!</span>(
-<a href=#391 id=391 data-nosnippet>391</a>            runc[<span class="string">"runtime_root"</span>].as_str(),
-<a href=#392 id=392 data-nosnippet>392</a>            <span class="prelude-val">Some</span>(<span class="string">"/kubernix/crio/node/runc"</span>)
-<a href=#393 id=393 data-nosnippet>393</a>        );
-<a href=#394 id=394 data-nosnippet>394</a>        <span class="prelude-val">Ok</span>(())
-<a href=#395 id=395 data-nosnippet>395</a>    }
-<a href=#396 id=396 data-nosnippet>396</a>
-<a href=#397 id=397 data-nosnippet>397</a>    <span class="attr">#[test]
-<a href=#398 id=398 data-nosnippet>398</a>    </span><span class="kw">fn </span>render_config_default_runc() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>parse(<span class="kw-2">&amp;</span>[<span class="string">"--oci-runtime=runc"</span>])<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#400 id=400 data-nosnippet>400</a>        <span class="macro">assert_eq!</span>(
-<a href=#401 id=401 data-nosnippet>401</a>            v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"default_runtime"</span>].as_str(),
-<a href=#402 id=402 data-nosnippet>402</a>            <span class="prelude-val">Some</span>(<span class="string">"runc"</span>)
-<a href=#403 id=403 data-nosnippet>403</a>        );
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="macro">assert!</span>(v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"runtimes"</span>].get(<span class="string">"crun"</span>).is_some());
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="prelude-val">Ok</span>(())
-<a href=#406 id=406 data-nosnippet>406</a>    }
-<a href=#407 id=407 data-nosnippet>407</a>
-<a href=#408 id=408 data-nosnippet>408</a>    <span class="attr">#[test]
-<a href=#409 id=409 data-nosnippet>409</a>    </span><span class="kw">fn </span>render_config_uses_conmonrs() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw">for </span>args <span class="kw">in </span>[<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>][..], <span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>, <span class="string">"--nodes=2"</span>]] {
-<a href=#411 id=411 data-nosnippet>411</a>            <span class="kw">for </span>rootless <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
-<a href=#412 id=412 data-nosnippet>412</a>                <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(args, rootless))<span class="question-mark">?</span>;
-<a href=#413 id=413 data-nosnippet>413</a>                <span class="kw">for </span>name <span class="kw">in </span>[<span class="string">"crun"</span>, <span class="string">"runc"</span>] {
-<a href=#414 id=414 data-nosnippet>414</a>                    <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"runtimes"</span>][name];
-<a href=#415 id=415 data-nosnippet>415</a>                    <span class="macro">assert_eq!</span>(runtime[<span class="string">"runtime_type"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"pod"</span>));
-<a href=#416 id=416 data-nosnippet>416</a>                    <span class="macro">assert_eq!</span>(runtime[<span class="string">"monitor_path"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"/nix/bin/conmonrs"</span>));
-<a href=#417 id=417 data-nosnippet>417</a>                    <span class="macro">assert_eq!</span>(runtime[<span class="string">"monitor_cgroup"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"pod"</span>));
-<a href=#418 id=418 data-nosnippet>418</a>                    <span class="macro">assert!</span>(runtime.get(<span class="string">"monitor_env"</span>).is_none());
-<a href=#419 id=419 data-nosnippet>419</a>                }
-<a href=#420 id=420 data-nosnippet>420</a>                <span class="comment">// Required for RuntimeClasses with the pod runtime type
-<a href=#421 id=421 data-nosnippet>421</a>                </span><span class="macro">assert_eq!</span>(
-<a href=#422 id=422 data-nosnippet>422</a>                    v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"drop_infra_ctr"</span>].as_bool(),
-<a href=#423 id=423 data-nosnippet>423</a>                    <span class="prelude-val">Some</span>(<span class="bool-val">false</span>)
-<a href=#424 id=424 data-nosnippet>424</a>                );
-<a href=#425 id=425 data-nosnippet>425</a>            }
-<a href=#426 id=426 data-nosnippet>426</a>        }
-<a href=#427 id=427 data-nosnippet>427</a>        <span class="prelude-val">Ok</span>(())
-<a href=#428 id=428 data-nosnippet>428</a>    }
-<a href=#429 id=429 data-nosnippet>429</a>
-<a href=#430 id=430 data-nosnippet>430</a>    <span class="attr">#[test]
-<a href=#431 id=431 data-nosnippet>431</a>    </span><span class="kw">fn </span>render_config_rootless_uses_wrappers() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#432 id=432 data-nosnippet>432</a>        <span class="kw">for </span>args <span class="kw">in </span>[<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>][..], <span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>, <span class="string">"--nodes=2"</span>]] {
-<a href=#433 id=433 data-nosnippet>433</a>            <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(args, <span class="bool-val">true</span>))<span class="question-mark">?</span>;
-<a href=#434 id=434 data-nosnippet>434</a>            <span class="kw">for </span>name <span class="kw">in </span>[<span class="string">"crun"</span>, <span class="string">"runc"</span>] {
-<a href=#435 id=435 data-nosnippet>435</a>                <span class="macro">assert_eq!</span>(
-<a href=#436 id=436 data-nosnippet>436</a>                    v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"runtimes"</span>][name][<span class="string">"runtime_path"</span>].as_str(),
-<a href=#437 id=437 data-nosnippet>437</a>                    <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"/kubernix/crio/node/{}-rootless"</span>, name).as_str())
-<a href=#438 id=438 data-nosnippet>438</a>                );
-<a href=#439 id=439 data-nosnippet>439</a>            }
-<a href=#440 id=440 data-nosnippet>440</a>        }
-<a href=#441 id=441 data-nosnippet>441</a>        <span class="prelude-val">Ok</span>(())
-<a href=#442 id=442 data-nosnippet>442</a>    }
-<a href=#443 id=443 data-nosnippet>443</a>
-<a href=#444 id=444 data-nosnippet>444</a>    <span class="attr">#[test]
-<a href=#445 id=445 data-nosnippet>445</a>    </span><span class="kw">fn </span>render_config_skips_removed_options() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#446 id=446 data-nosnippet>446</a>        <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>parse(<span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>)<span class="question-mark">?</span>;
-<a href=#447 id=447 data-nosnippet>447</a>        <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>];
-<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw">for </span>key <span class="kw">in </span>[
-<a href=#449 id=449 data-nosnippet>449</a>            <span class="string">"conmon"</span>,
-<a href=#450 id=450 data-nosnippet>450</a>            <span class="string">"conmon_cgroup"</span>,
-<a href=#451 id=451 data-nosnippet>451</a>            <span class="string">"conmon_env"</span>,
-<a href=#452 id=452 data-nosnippet>452</a>            <span class="string">"default_mounts"</span>,
-<a href=#453 id=453 data-nosnippet>453</a>            <span class="string">"pids_limit"</span>,
-<a href=#454 id=454 data-nosnippet>454</a>            <span class="string">"log_size_max"</span>,
-<a href=#455 id=455 data-nosnippet>455</a>            <span class="string">"uid_mappings"</span>,
-<a href=#456 id=456 data-nosnippet>456</a>            <span class="string">"gid_mappings"</span>,
-<a href=#457 id=457 data-nosnippet>457</a>        ] {
-<a href=#458 id=458 data-nosnippet>458</a>            <span class="macro">assert!</span>(runtime.get(key).is_none(), <span class="string">"{} is set"</span>, key);
-<a href=#459 id=459 data-nosnippet>459</a>        }
-<a href=#460 id=460 data-nosnippet>460</a>        <span class="kw">let </span>image = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"image"</span>];
-<a href=#461 id=461 data-nosnippet>461</a>        <span class="macro">assert!</span>(image.get(<span class="string">"registries"</span>).is_none());
-<a href=#462 id=462 data-nosnippet>462</a>        <span class="macro">assert_eq!</span>(
-<a href=#463 id=463 data-nosnippet>463</a>            image[<span class="string">"pause_image"</span>].as_str(),
-<a href=#464 id=464 data-nosnippet>464</a>            <span class="prelude-val">Some</span>(<span class="string">"registry.k8s.io/pause:3.10.2"</span>)
-<a href=#465 id=465 data-nosnippet>465</a>        );
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="prelude-val">Ok</span>(())
-<a href=#467 id=467 data-nosnippet>467</a>    }
-<a href=#468 id=468 data-nosnippet>468</a>
-<a href=#469 id=469 data-nosnippet>469</a>    <span class="attr">#[test]
-<a href=#470 id=470 data-nosnippet>470</a>    </span><span class="kw">fn </span>render_config_uses_node_paths() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#471 id=471 data-nosnippet>471</a>        <span class="kw">for </span>rootless <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
-<a href=#472 id=472 data-nosnippet>472</a>            <span class="kw">let </span>c = config(<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>], rootless);
-<a href=#473 id=473 data-nosnippet>473</a>            <span class="kw">let </span>run_dir = Crio::run_dir(<span class="kw-2">&amp;</span>c, <span class="number">0</span>).display().to_string();
-<a href=#474 id=474 data-nosnippet>474</a>            <span class="macro">assert!</span>(run_dir.starts_with(<span class="string">"/run/kubernix/"</span>));
-<a href=#475 id=475 data-nosnippet>475</a>            <span class="kw">let </span>version_file = <span class="macro">format!</span>(<span class="string">"{}/version"</span>, run_dir);
-<a href=#476 id=476 data-nosnippet>476</a>            <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>c)<span class="question-mark">?</span>;
-<a href=#477 id=477 data-nosnippet>477</a>            <span class="kw">let </span>crio = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>];
-<a href=#478 id=478 data-nosnippet>478</a>            <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>crio[<span class="string">"runtime"</span>];
-<a href=#479 id=479 data-nosnippet>479</a>            <span class="kw">for </span>(value, expected) <span class="kw">in </span>[
-<a href=#480 id=480 data-nosnippet>480</a>                (
-<a href=#481 id=481 data-nosnippet>481</a>                    <span class="kw-2">&amp;</span>crio[<span class="string">"clean_shutdown_file"</span>],
-<a href=#482 id=482 data-nosnippet>482</a>                    <span class="string">"/kubernix/crio/node/clean.shutdown"</span>,
-<a href=#483 id=483 data-nosnippet>483</a>                ),
-<a href=#484 id=484 data-nosnippet>484</a>                (<span class="kw-2">&amp;</span>crio[<span class="string">"version_file"</span>], version_file.as_str()),
-<a href=#485 id=485 data-nosnippet>485</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"decryption_keys_path"</span>], <span class="string">"/kubernix/crio/node/keys"</span>),
-<a href=#486 id=486 data-nosnippet>486</a>                (
-<a href=#487 id=487 data-nosnippet>487</a>                    <span class="kw-2">&amp;</span>runtime[<span class="string">"default_mounts_file"</span>],
-<a href=#488 id=488 data-nosnippet>488</a>                    <span class="string">"/kubernix/crio/node/mounts.conf"</span>,
-<a href=#489 id=489 data-nosnippet>489</a>                ),
-<a href=#490 id=490 data-nosnippet>490</a>                (
-<a href=#491 id=491 data-nosnippet>491</a>                    <span class="kw-2">&amp;</span>runtime[<span class="string">"irqbalance_config_file"</span>],
-<a href=#492 id=492 data-nosnippet>492</a>                    <span class="string">"/kubernix/crio/node/irqbalance"</span>,
-<a href=#493 id=493 data-nosnippet>493</a>                ),
-<a href=#494 id=494 data-nosnippet>494</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"irqbalance_config_restore_file"</span>], <span class="string">"disable"</span>),
-<a href=#495 id=495 data-nosnippet>495</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"container_attach_socket_dir"</span>], run_dir.as_str()),
-<a href=#496 id=496 data-nosnippet>496</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"container_exits_dir"</span>], <span class="string">"/kubernix/crio/node/exits"</span>),
-<a href=#497 id=497 data-nosnippet>497</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"namespaces_dir"</span>], <span class="string">"/kubernix/crio/node/ns"</span>),
-<a href=#498 id=498 data-nosnippet>498</a>                (
-<a href=#499 id=499 data-nosnippet>499</a>                    <span class="kw-2">&amp;</span>crio[<span class="string">"image"</span>][<span class="string">"signature_policy_dir"</span>],
-<a href=#500 id=500 data-nosnippet>500</a>                    <span class="string">"/kubernix/crio/node/policies"</span>,
-<a href=#501 id=501 data-nosnippet>501</a>                ),
-<a href=#502 id=502 data-nosnippet>502</a>                (
-<a href=#503 id=503 data-nosnippet>503</a>                    <span class="kw-2">&amp;</span>crio[<span class="string">"image"</span>][<span class="string">"big_files_temporary_dir"</span>],
-<a href=#504 id=504 data-nosnippet>504</a>                    <span class="string">"/kubernix/crio/node/tmp"</span>,
-<a href=#505 id=505 data-nosnippet>505</a>                ),
-<a href=#506 id=506 data-nosnippet>506</a>            ] {
-<a href=#507 id=507 data-nosnippet>507</a>                <span class="macro">assert_eq!</span>(value.as_str(), <span class="prelude-val">Some</span>(expected));
-<a href=#508 id=508 data-nosnippet>508</a>            }
-<a href=#509 id=509 data-nosnippet>509</a>            <span class="macro">assert_eq!</span>(
-<a href=#510 id=510 data-nosnippet>510</a>                runtime[<span class="string">"hooks_dir"</span>],
-<a href=#511 id=511 data-nosnippet>511</a>                toml::Value::Array(<span class="macro">vec!</span>[<span class="string">"/kubernix/crio/node/hooks.d"</span>.into()])
-<a href=#512 id=512 data-nosnippet>512</a>            );
-<a href=#513 id=513 data-nosnippet>513</a>            <span class="macro">assert_eq!</span>(
-<a href=#514 id=514 data-nosnippet>514</a>                runtime[<span class="string">"cdi_spec_dirs"</span>],
-<a href=#515 id=515 data-nosnippet>515</a>                toml::Value::Array(<span class="macro">vec!</span>[<span class="string">"/kubernix/crio/node/cdi"</span>.into()])
-<a href=#516 id=516 data-nosnippet>516</a>            );
-<a href=#517 id=517 data-nosnippet>517</a>            <span class="macro">assert_eq!</span>(crio[<span class="string">"nri"</span>][<span class="string">"enable_nri"</span>].as_bool(), <span class="prelude-val">Some</span>(<span class="bool-val">false</span>));
-<a href=#518 id=518 data-nosnippet>518</a>            <span class="macro">assert_eq!</span>(runtime[<span class="string">"log_level"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"info"</span>));
-<a href=#519 id=519 data-nosnippet>519</a>        }
-<a href=#520 id=520 data-nosnippet>520</a>        <span class="prelude-val">Ok</span>(())
-<a href=#521 id=521 data-nosnippet>521</a>    }
-<a href=#522 id=522 data-nosnippet>522</a>
-<a href=#523 id=523 data-nosnippet>523</a>    <span class="doccomment">/// Collect the absolute paths of the configuration with their keys.
-<a href=#524 id=524 data-nosnippet>524</a>    </span><span class="kw">fn </span>absolute_paths&lt;<span class="lifetime">'a</span>&gt;(key: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, v: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>toml::Value, paths: <span class="kw-2">&amp;mut </span>Vec&lt;(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)&gt;) {
-<a href=#525 id=525 data-nosnippet>525</a>        <span class="kw">match </span>v {
-<a href=#526 id=526 data-nosnippet>526</a>            toml::Value::String(s) <span class="kw">if </span>s.starts_with(<span class="string">'/'</span>) =&gt; paths.push((key, s)),
-<a href=#527 id=527 data-nosnippet>527</a>            toml::Value::Array(a) =&gt; a.iter().for_each(|v| absolute_paths(key, v, paths)),
-<a href=#528 id=528 data-nosnippet>528</a>            toml::Value::Table(t) =&gt; t.iter().for_each(|(k, v)| absolute_paths(k, v, paths)),
-<a href=#529 id=529 data-nosnippet>529</a>            <span class="kw">_ </span>=&gt; {}
-<a href=#530 id=530 data-nosnippet>530</a>        }
-<a href=#531 id=531 data-nosnippet>531</a>    }
-<a href=#532 id=532 data-nosnippet>532</a>
-<a href=#533 id=533 data-nosnippet>533</a>    <span class="doccomment">/// The options whose default in CRI-O 1.37 (`crio config --default`)
-<a href=#534 id=534 data-nosnippet>534</a>    /// belongs to the host, as table and key. An empty
-<a href=#535 id=535 data-nosnippet>535</a>    /// `default_mounts_file`, `signature_policy` or `big_files_temporary_dir`
-<a href=#536 id=536 data-nosnippet>536</a>    /// falls back to the host as well. The NRI options are left out, since
-<a href=#537 id=537 data-nosnippet>537</a>    /// NRI is disabled, and the global registry credentials of the host
-<a href=#538 id=538 data-nosnippet>538</a>    /// (`global_auth_file`) apply on purpose.
-<a href=#539 id=539 data-nosnippet>539</a>    </span><span class="kw">const </span>HOST_DEFAULTS: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str)] = <span class="kw-2">&amp;</span>[
-<a href=#540 id=540 data-nosnippet>540</a>        (<span class="string">"crio"</span>, <span class="string">"root"</span>),
-<a href=#541 id=541 data-nosnippet>541</a>        (<span class="string">"crio"</span>, <span class="string">"runroot"</span>),
-<a href=#542 id=542 data-nosnippet>542</a>        (<span class="string">"crio"</span>, <span class="string">"log_dir"</span>),
-<a href=#543 id=543 data-nosnippet>543</a>        (<span class="string">"crio"</span>, <span class="string">"version_file"</span>),
-<a href=#544 id=544 data-nosnippet>544</a>        (<span class="string">"crio"</span>, <span class="string">"clean_shutdown_file"</span>),
-<a href=#545 id=545 data-nosnippet>545</a>        (<span class="string">"crio.api"</span>, <span class="string">"listen"</span>),
-<a href=#546 id=546 data-nosnippet>546</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"decryption_keys_path"</span>),
-<a href=#547 id=547 data-nosnippet>547</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"irqbalance_config_file"</span>),
-<a href=#548 id=548 data-nosnippet>548</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"irqbalance_config_restore_file"</span>),
-<a href=#549 id=549 data-nosnippet>549</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"cdi_spec_dirs"</span>),
-<a href=#550 id=550 data-nosnippet>550</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"hooks_dir"</span>),
-<a href=#551 id=551 data-nosnippet>551</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"default_mounts_file"</span>),
-<a href=#552 id=552 data-nosnippet>552</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"container_exits_dir"</span>),
-<a href=#553 id=553 data-nosnippet>553</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"container_attach_socket_dir"</span>),
-<a href=#554 id=554 data-nosnippet>554</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"namespaces_dir"</span>),
-<a href=#555 id=555 data-nosnippet>555</a>        (<span class="string">"crio.image"</span>, <span class="string">"signature_policy"</span>),
-<a href=#556 id=556 data-nosnippet>556</a>        (<span class="string">"crio.image"</span>, <span class="string">"signature_policy_dir"</span>),
-<a href=#557 id=557 data-nosnippet>557</a>        (<span class="string">"crio.image"</span>, <span class="string">"big_files_temporary_dir"</span>),
-<a href=#558 id=558 data-nosnippet>558</a>        (<span class="string">"crio.network"</span>, <span class="string">"network_dir"</span>),
-<a href=#559 id=559 data-nosnippet>559</a>        (<span class="string">"crio.network"</span>, <span class="string">"plugin_dirs"</span>),
-<a href=#560 id=560 data-nosnippet>560</a>    ];
-<a href=#561 id=561 data-nosnippet>561</a>
-<a href=#562 id=562 data-nosnippet>562</a>    <span class="doccomment">/// Returns true if the path belongs to the node: it is below the run
-<a href=#563 id=563 data-nosnippet>563</a>    /// root, the temporary directory of the node or the Nix store (`/nix/`
-<a href=#564 id=564 data-nosnippet>564</a>    /// in the tests).
-<a href=#565 id=565 data-nosnippet>565</a>    </span><span class="kw">fn </span>node_path(config: <span class="kw-2">&amp;</span>Config, path: <span class="kw-2">&amp;</span>str) -&gt; bool {
-<a href=#566 id=566 data-nosnippet>566</a>        <span class="kw">let </span>path = Path::new(path);
-<a href=#567 id=567 data-nosnippet>567</a>        path.starts_with(config.root())
-<a href=#568 id=568 data-nosnippet>568</a>            || path.starts_with(Crio::run_dir(config, <span class="number">0</span>))
-<a href=#569 id=569 data-nosnippet>569</a>            || path.starts_with(<span class="string">"/nix/"</span>)
-<a href=#570 id=570 data-nosnippet>570</a>    }
-<a href=#571 id=571 data-nosnippet>571</a>
-<a href=#572 id=572 data-nosnippet>572</a>    <span class="attr">#[test]
-<a href=#573 id=573 data-nosnippet>573</a>    </span><span class="kw">fn </span>render_config_overrides_host_defaults() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#574 id=574 data-nosnippet>574</a>        <span class="kw">for </span>args <span class="kw">in </span>[<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>][..], <span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>, <span class="string">"--nodes=2"</span>]] {
-<a href=#575 id=575 data-nosnippet>575</a>            <span class="kw">for </span>rootless <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
-<a href=#576 id=576 data-nosnippet>576</a>                <span class="kw">let </span>c = config(args, rootless);
-<a href=#577 id=577 data-nosnippet>577</a>                <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>c)<span class="question-mark">?</span>;
-<a href=#578 id=578 data-nosnippet>578</a>                <span class="kw">for </span>(table, key) <span class="kw">in </span>HOST_DEFAULTS {
-<a href=#579 id=579 data-nosnippet>579</a>                    <span class="kw">let </span>value = table
-<a href=#580 id=580 data-nosnippet>580</a>                        .split(<span class="string">'.'</span>)
-<a href=#581 id=581 data-nosnippet>581</a>                        .try_fold(<span class="kw-2">&amp;</span>v, |v, k| v.get(k))
-<a href=#582 id=582 data-nosnippet>582</a>                        .and_then(|t| t.get(key))
-<a href=#583 id=583 data-nosnippet>583</a>                        .with_context(|| <span class="macro">format!</span>(<span class="string">"{}.{} is not set"</span>, table, key))<span class="question-mark">?</span>;
-<a href=#584 id=584 data-nosnippet>584</a>                    <span class="kw">let </span>values: Vec&lt;<span class="kw">_</span>&gt; = <span class="kw">match </span>value {
-<a href=#585 id=585 data-nosnippet>585</a>                        toml::Value::Array(a) =&gt; a.iter().collect(),
-<a href=#586 id=586 data-nosnippet>586</a>                        value =&gt; <span class="macro">vec!</span>[value],
-<a href=#587 id=587 data-nosnippet>587</a>                    };
-<a href=#588 id=588 data-nosnippet>588</a>                    <span class="macro">assert!</span>(!values.is_empty(), <span class="string">"{}.{} is empty"</span>, table, key);
-<a href=#589 id=589 data-nosnippet>589</a>                    <span class="kw">for </span>value <span class="kw">in </span>values {
-<a href=#590 id=590 data-nosnippet>590</a>                        <span class="kw">let </span>value = value
-<a href=#591 id=591 data-nosnippet>591</a>                            .as_str()
-<a href=#592 id=592 data-nosnippet>592</a>                            .with_context(|| <span class="macro">format!</span>(<span class="string">"{}.{} is no string"</span>, table, key))<span class="question-mark">?</span>;
-<a href=#593 id=593 data-nosnippet>593</a>                        <span class="comment">// Skips the restore of the irqbalance config
-<a href=#594 id=594 data-nosnippet>594</a>                        </span><span class="kw">if </span><span class="kw-2">*</span>key == <span class="string">"irqbalance_config_restore_file" </span>{
-<a href=#595 id=595 data-nosnippet>595</a>                            <span class="macro">assert_eq!</span>(value, <span class="string">"disable"</span>);
-<a href=#596 id=596 data-nosnippet>596</a>                            <span class="kw">continue</span>;
-<a href=#597 id=597 data-nosnippet>597</a>                        }
-<a href=#598 id=598 data-nosnippet>598</a>                        <span class="macro">assert!</span>(
-<a href=#599 id=599 data-nosnippet>599</a>                            node_path(<span class="kw-2">&amp;</span>c, value),
-<a href=#600 id=600 data-nosnippet>600</a>                            <span class="string">"{}.{} = {} belongs to the host"</span>,
-<a href=#601 id=601 data-nosnippet>601</a>                            table,
-<a href=#602 id=602 data-nosnippet>602</a>                            key,
-<a href=#603 id=603 data-nosnippet>603</a>                            value,
-<a href=#604 id=604 data-nosnippet>604</a>                        );
-<a href=#605 id=605 data-nosnippet>605</a>                    }
-<a href=#606 id=606 data-nosnippet>606</a>                }
-<a href=#607 id=607 data-nosnippet>607</a>                <span class="macro">assert_eq!</span>(v[<span class="string">"crio"</span>][<span class="string">"nri"</span>][<span class="string">"enable_nri"</span>].as_bool(), <span class="prelude-val">Some</span>(<span class="bool-val">false</span>));
-<a href=#608 id=608 data-nosnippet>608</a>            }
-<a href=#609 id=609 data-nosnippet>609</a>        }
-<a href=#610 id=610 data-nosnippet>610</a>        <span class="prelude-val">Ok</span>(())
-<a href=#611 id=611 data-nosnippet>611</a>    }
-<a href=#612 id=612 data-nosnippet>612</a>
-<a href=#613 id=613 data-nosnippet>613</a>    <span class="attr">#[test]
-<a href=#614 id=614 data-nosnippet>614</a>    </span><span class="kw">fn </span>render_config_uses_no_host_paths() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#615 id=615 data-nosnippet>615</a>        <span class="kw">for </span>args <span class="kw">in </span>[<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>][..], <span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>, <span class="string">"--nodes=2"</span>]] {
-<a href=#616 id=616 data-nosnippet>616</a>            <span class="kw">for </span>rootless <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
-<a href=#617 id=617 data-nosnippet>617</a>                <span class="kw">let </span>c = config(args, rootless);
-<a href=#618 id=618 data-nosnippet>618</a>                <span class="macro">assert!</span>(c.root().is_absolute());
-<a href=#619 id=619 data-nosnippet>619</a>                <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>c)<span class="question-mark">?</span>;
-<a href=#620 id=620 data-nosnippet>620</a>                <span class="kw">let </span><span class="kw-2">mut </span>paths = Vec::new();
-<a href=#621 id=621 data-nosnippet>621</a>                absolute_paths(<span class="string">""</span>, <span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;mut </span>paths);
-<a href=#622 id=622 data-nosnippet>622</a>                <span class="macro">assert!</span>(paths.len() &gt; HOST_DEFAULTS.len());
-<a href=#623 id=623 data-nosnippet>623</a>                <span class="kw">for </span>(key, path) <span class="kw">in </span>paths {
-<a href=#624 id=624 data-nosnippet>624</a>                    <span class="comment">// The command inside of the pause image
-<a href=#625 id=625 data-nosnippet>625</a>                    </span><span class="kw">if </span>key == <span class="string">"pause_command" </span>{
-<a href=#626 id=626 data-nosnippet>626</a>                        <span class="kw">continue</span>;
-<a href=#627 id=627 data-nosnippet>627</a>                    }
-<a href=#628 id=628 data-nosnippet>628</a>                    <span class="macro">assert!</span>(
-<a href=#629 id=629 data-nosnippet>629</a>                        node_path(<span class="kw-2">&amp;</span>c, path),
-<a href=#630 id=630 data-nosnippet>630</a>                        <span class="string">"{} = {} belongs to the host"</span>,
-<a href=#631 id=631 data-nosnippet>631</a>                        key,
-<a href=#632 id=632 data-nosnippet>632</a>                        path,
-<a href=#633 id=633 data-nosnippet>633</a>                    );
-<a href=#634 id=634 data-nosnippet>634</a>                }
-<a href=#635 id=635 data-nosnippet>635</a>            }
-<a href=#636 id=636 data-nosnippet>636</a>        }
-<a href=#637 id=637 data-nosnippet>637</a>        <span class="prelude-val">Ok</span>(())
-<a href=#638 id=638 data-nosnippet>638</a>    }
-<a href=#639 id=639 data-nosnippet>639</a>
-<a href=#640 id=640 data-nosnippet>640</a>    <span class="attr">#[test]
-<a href=#641 id=641 data-nosnippet>641</a>    </span><span class="kw">fn </span>render_config_matches_containerd_defaults() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#642 id=642 data-nosnippet>642</a>        <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>], <span class="bool-val">false</span>))<span class="question-mark">?</span>;
-<a href=#643 id=643 data-nosnippet>643</a>        <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>];
-<a href=#644 id=644 data-nosnippet>644</a>        <span class="kw">let </span>caps: Vec&lt;<span class="kw">_</span>&gt; = runtime[<span class="string">"default_capabilities"</span>]
-<a href=#645 id=645 data-nosnippet>645</a>            .as_array()
-<a href=#646 id=646 data-nosnippet>646</a>            .context(<span class="string">"no capabilities"</span>)<span class="question-mark">?
-<a href=#647 id=647 data-nosnippet>647</a>            </span>.iter()
-<a href=#648 id=648 data-nosnippet>648</a>            .filter_map(|c| c.as_str())
-<a href=#649 id=649 data-nosnippet>649</a>            .collect();
-<a href=#650 id=650 data-nosnippet>650</a>        <span class="macro">assert_eq!</span>(caps.len(), <span class="number">14</span>);
-<a href=#651 id=651 data-nosnippet>651</a>        <span class="kw">for </span>cap <span class="kw">in </span>[<span class="string">"MKNOD"</span>, <span class="string">"NET_RAW"</span>, <span class="string">"SETFCAP"</span>, <span class="string">"SYS_CHROOT"</span>, <span class="string">"AUDIT_WRITE"</span>] {
-<a href=#652 id=652 data-nosnippet>652</a>            <span class="macro">assert!</span>(caps.contains(<span class="kw-2">&amp;</span>cap), <span class="string">"{} missing"</span>, cap);
-<a href=#653 id=653 data-nosnippet>653</a>        }
-<a href=#654 id=654 data-nosnippet>654</a>        <span class="macro">assert_eq!</span>(
-<a href=#655 id=655 data-nosnippet>655</a>            runtime[<span class="string">"default_sysctls"</span>],
-<a href=#656 id=656 data-nosnippet>656</a>            toml::Value::Array(<span class="macro">vec!</span>[
-<a href=#657 id=657 data-nosnippet>657</a>                <span class="string">"net.ipv4.ip_unprivileged_port_start=0"</span>.into(),
-<a href=#658 id=658 data-nosnippet>658</a>                <span class="string">"net.ipv4.ping_group_range=0 2147483647"</span>.into(),
-<a href=#659 id=659 data-nosnippet>659</a>            ])
-<a href=#660 id=660 data-nosnippet>660</a>        );
-<a href=#661 id=661 data-nosnippet>661</a>        <span class="macro">assert_eq!</span>(
-<a href=#662 id=662 data-nosnippet>662</a>            v[<span class="string">"crio"</span>][<span class="string">"image"</span>][<span class="string">"short_name_mode"</span>].as_str(),
-<a href=#663 id=663 data-nosnippet>663</a>            <span class="prelude-val">Some</span>(<span class="string">"disabled"</span>)
-<a href=#664 id=664 data-nosnippet>664</a>        );
-<a href=#665 id=665 data-nosnippet>665</a>        <span class="comment">// The groups are not mapped in the user namespace
-<a href=#666 id=666 data-nosnippet>666</a>        </span><span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>], <span class="bool-val">true</span>))<span class="question-mark">?</span>;
-<a href=#667 id=667 data-nosnippet>667</a>        <span class="macro">assert_eq!</span>(
-<a href=#668 id=668 data-nosnippet>668</a>            v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"default_sysctls"</span>],
-<a href=#669 id=669 data-nosnippet>669</a>            toml::Value::Array(<span class="macro">vec!</span>[<span class="string">"net.ipv4.ip_unprivileged_port_start=0"</span>.into()])
-<a href=#670 id=670 data-nosnippet>670</a>        );
-<a href=#671 id=671 data-nosnippet>671</a>        <span class="prelude-val">Ok</span>(())
-<a href=#672 id=672 data-nosnippet>672</a>    }
-<a href=#673 id=673 data-nosnippet>673</a>
-<a href=#674 id=674 data-nosnippet>674</a>    <span class="attr">#[test]
-<a href=#675 id=675 data-nosnippet>675</a>    </span><span class="kw">fn </span>args_skip_host_config() {
-<a href=#676 id=676 data-nosnippet>676</a>        <span class="kw">let </span>args = Crio::args(
-<a href=#677 id=677 data-nosnippet>677</a>            Path::new(<span class="string">"/n/crio.conf.d"</span>),
-<a href=#678 id=678 data-nosnippet>678</a>            Path::new(<span class="string">"/n/registries.conf"</span>),
-<a href=#679 id=679 data-nosnippet>679</a>            Path::new(<span class="string">"/n/registries.conf.d"</span>),
-<a href=#680 id=680 data-nosnippet>680</a>        );
-<a href=#681 id=681 data-nosnippet>681</a>        <span class="macro">assert_eq!</span>(
-<a href=#682 id=682 data-nosnippet>682</a>            args,
-<a href=#683 id=683 data-nosnippet>683</a>            [
-<a href=#684 id=684 data-nosnippet>684</a>                <span class="string">"--config=/dev/null"</span>,
-<a href=#685 id=685 data-nosnippet>685</a>                <span class="string">"--config-dir=/n/crio.conf.d"</span>,
-<a href=#686 id=686 data-nosnippet>686</a>                <span class="string">"--registries-conf=/n/registries.conf"</span>,
-<a href=#687 id=687 data-nosnippet>687</a>                <span class="string">"--registries-conf-dir=/n/registries.conf.d"</span>,
-<a href=#688 id=688 data-nosnippet>688</a>            ]
-<a href=#689 id=689 data-nosnippet>689</a>        );
-<a href=#690 id=690 data-nosnippet>690</a>    }
-<a href=#691 id=691 data-nosnippet>691</a>
-<a href=#692 id=692 data-nosnippet>692</a>    <span class="attr">#[test]
-<a href=#693 id=693 data-nosnippet>693</a>    </span><span class="kw">fn </span>registries_conf_resolves_short_names() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#694 id=694 data-nosnippet>694</a>        <span class="kw">let </span>v: toml::Value = toml::from_str(REGISTRIES_CONF)<span class="question-mark">?</span>;
-<a href=#695 id=695 data-nosnippet>695</a>        <span class="macro">assert_eq!</span>(
-<a href=#696 id=696 data-nosnippet>696</a>            v[<span class="string">"unqualified-search-registries"</span>],
-<a href=#697 id=697 data-nosnippet>697</a>            toml::Value::Array(<span class="macro">vec!</span>[<span class="string">"docker.io"</span>.into()])
+<a href=#320 id=320 data-nosnippet>320</a>}
+<a href=#321 id=321 data-nosnippet>321</a>
+<a href=#322 id=322 data-nosnippet>322</a><span class="attr">#[cfg(test)]
+<a href=#323 id=323 data-nosnippet>323</a></span><span class="kw">mod </span>tests {
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="kw">use super</span>::<span class="kw-2">*</span>;
+<a href=#325 id=325 data-nosnippet>325</a>    <span class="kw">use </span><span class="kw">crate</span>::config::OciRuntime;
+<a href=#326 id=326 data-nosnippet>326</a>
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="attr">#[test]
+<a href=#328 id=328 data-nosnippet>328</a>    </span><span class="kw">fn </span>component_name_per_node() {
+<a href=#329 id=329 data-nosnippet>329</a>        <span class="macro">assert_eq!</span>(CrioComponent::new(<span class="number">0</span>).name(), <span class="string">"CRI-O (node 0)"</span>);
+<a href=#330 id=330 data-nosnippet>330</a>        <span class="macro">assert_eq!</span>(CrioComponent::new(<span class="number">2</span>).name(), <span class="string">"CRI-O (node 2)"</span>);
+<a href=#331 id=331 data-nosnippet>331</a>    }
+<a href=#332 id=332 data-nosnippet>332</a>
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="kw">fn </span>test_paths() -&gt; RuntimePaths {
+<a href=#334 id=334 data-nosnippet>334</a>        RuntimePaths {
+<a href=#335 id=335 data-nosnippet>335</a>            runtimes: <span class="macro">vec!</span>[
+<a href=#336 id=336 data-nosnippet>336</a>                (OciRuntime::Crun, <span class="string">"/nix/bin/crun"</span>.into()),
+<a href=#337 id=337 data-nosnippet>337</a>                (OciRuntime::Runc, <span class="string">"/nix/bin/runc"</span>.into()),
+<a href=#338 id=338 data-nosnippet>338</a>            ],
+<a href=#339 id=339 data-nosnippet>339</a>            plugin_dir: <span class="string">"/nix/cni"</span>.into(),
+<a href=#340 id=340 data-nosnippet>340</a>        }
+<a href=#341 id=341 data-nosnippet>341</a>    }
+<a href=#342 id=342 data-nosnippet>342</a>
+<a href=#343 id=343 data-nosnippet>343</a>    <span class="doccomment">/// The absolute run root of the test configurations. A relative one
+<a href=#344 id=344 data-nosnippet>344</a>    /// would hide paths of the configuration which do not belong to the
+<a href=#345 id=345 data-nosnippet>345</a>    /// node.
+<a href=#346 id=346 data-nosnippet>346</a>    </span><span class="kw">const </span>ROOT: <span class="kw-2">&amp;</span>str = <span class="string">"/kubernix"</span>;
+<a href=#347 id=347 data-nosnippet>347</a>
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="doccomment">/// Parse the arguments with the run root `ROOT`.
+<a href=#349 id=349 data-nosnippet>349</a>    </span><span class="kw">fn </span>parse(args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str]) -&gt; <span class="prelude-ty">Result</span>&lt;Config&gt; {
+<a href=#350 id=350 data-nosnippet>350</a>        <span class="kw">let </span>root = <span class="macro">format!</span>(<span class="string">"--root={}"</span>, ROOT);
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">let </span>args: Vec&lt;<span class="kw-2">&amp;</span>str&gt; = [root.as_str()]
+<a href=#352 id=352 data-nosnippet>352</a>            .into_iter()
+<a href=#353 id=353 data-nosnippet>353</a>            .chain(args.iter().copied())
+<a href=#354 id=354 data-nosnippet>354</a>            .collect();
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">crate</span>::config::tests::parse(<span class="kw-2">&amp;</span>args)
+<a href=#356 id=356 data-nosnippet>356</a>    }
+<a href=#357 id=357 data-nosnippet>357</a>
+<a href=#358 id=358 data-nosnippet>358</a>    <span class="kw">fn </span>render_with(config: <span class="kw-2">&amp;</span>Config, paths: <span class="kw-2">&amp;</span>RuntimePaths) -&gt; <span class="prelude-ty">Result</span>&lt;toml::Value&gt; {
+<a href=#359 id=359 data-nosnippet>359</a>        <span class="kw">let </span>dir = config.root().join(CRIO).join(<span class="string">"node"</span>);
+<a href=#360 id=360 data-nosnippet>360</a>        <span class="kw">let </span>socket = CriSocket::new(dir.join(<span class="string">"crio.sock"</span>))<span class="question-mark">?</span>;
+<a href=#361 id=361 data-nosnippet>361</a>        <span class="kw">let </span>run_dir = Crio::run_dir(config, <span class="number">0</span>);
+<a href=#362 id=362 data-nosnippet>362</a>        <span class="kw">let </span>nri = NriPaths::new(<span class="kw-2">&amp;</span>dir)<span class="question-mark">?</span>;
+<a href=#363 id=363 data-nosnippet>363</a>        <span class="kw">let </span>content = Crio::render_config(
+<a href=#364 id=364 data-nosnippet>364</a>            config,
+<a href=#365 id=365 data-nosnippet>365</a>            <span class="kw-2">&amp;</span>dir,
+<a href=#366 id=366 data-nosnippet>366</a>            <span class="kw-2">&amp;</span>run_dir,
+<a href=#367 id=367 data-nosnippet>367</a>            <span class="kw-2">&amp;</span>socket,
+<a href=#368 id=368 data-nosnippet>368</a>            <span class="kw-2">&amp;</span>nri,
+<a href=#369 id=369 data-nosnippet>369</a>            <span class="string">"/nix/bin/conmonrs"</span>,
+<a href=#370 id=370 data-nosnippet>370</a>            paths,
+<a href=#371 id=371 data-nosnippet>371</a>        );
+<a href=#372 id=372 data-nosnippet>372</a>        <span class="prelude-val">Ok</span>(toml::from_str(<span class="kw-2">&amp;</span>content)<span class="question-mark">?</span>)
+<a href=#373 id=373 data-nosnippet>373</a>    }
+<a href=#374 id=374 data-nosnippet>374</a>
+<a href=#375 id=375 data-nosnippet>375</a>    <span class="kw">fn </span>render(config: <span class="kw-2">&amp;</span>Config) -&gt; <span class="prelude-ty">Result</span>&lt;toml::Value&gt; {
+<a href=#376 id=376 data-nosnippet>376</a>        render_with(config, <span class="kw-2">&amp;</span>test_paths())
+<a href=#377 id=377 data-nosnippet>377</a>    }
+<a href=#378 id=378 data-nosnippet>378</a>
+<a href=#379 id=379 data-nosnippet>379</a>    <span class="kw">fn </span>config(args: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>str], rootless: bool) -&gt; Config {
+<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">let </span><span class="kw-2">mut </span>c = parse(<span class="kw-2">&amp;</span>args[<span class="number">1</span>..]).expect(<span class="string">"invalid arguments"</span>);
+<a href=#381 id=381 data-nosnippet>381</a>        c.set_rootless(rootless);
+<a href=#382 id=382 data-nosnippet>382</a>        c
+<a href=#383 id=383 data-nosnippet>383</a>    }
+<a href=#384 id=384 data-nosnippet>384</a>
+<a href=#385 id=385 data-nosnippet>385</a>    <span class="attr">#[test]
+<a href=#386 id=386 data-nosnippet>386</a>    </span><span class="kw">fn </span>render_config_skips_missing_runtime() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">let </span><span class="kw-2">mut </span>paths = test_paths();
+<a href=#388 id=388 data-nosnippet>388</a>        paths.runtimes.retain(|(r, <span class="kw">_</span>)| <span class="kw-2">*</span>r == OciRuntime::Crun);
+<a href=#389 id=389 data-nosnippet>389</a>        <span class="kw">let </span>v = render_with(<span class="kw-2">&amp;</span>parse(<span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>, <span class="kw-2">&amp;</span>paths)<span class="question-mark">?</span>;
+<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">let </span>runtimes = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"runtimes"</span>];
+<a href=#391 id=391 data-nosnippet>391</a>        <span class="macro">assert!</span>(runtimes.get(<span class="string">"crun"</span>).is_some());
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="macro">assert!</span>(runtimes.get(<span class="string">"runc"</span>).is_none());
+<a href=#393 id=393 data-nosnippet>393</a>        <span class="prelude-val">Ok</span>(())
+<a href=#394 id=394 data-nosnippet>394</a>    }
+<a href=#395 id=395 data-nosnippet>395</a>
+<a href=#396 id=396 data-nosnippet>396</a>    <span class="attr">#[test]
+<a href=#397 id=397 data-nosnippet>397</a>    </span><span class="kw">fn </span>render_config_registers_both_runtimes() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>], <span class="bool-val">false</span>))<span class="question-mark">?</span>;
+<a href=#399 id=399 data-nosnippet>399</a>        <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>];
+<a href=#400 id=400 data-nosnippet>400</a>        <span class="macro">assert_eq!</span>(runtime[<span class="string">"default_runtime"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"crun"</span>));
+<a href=#401 id=401 data-nosnippet>401</a>        <span class="kw">let </span>crun = <span class="kw-2">&amp;</span>runtime[<span class="string">"runtimes"</span>][<span class="string">"crun"</span>];
+<a href=#402 id=402 data-nosnippet>402</a>        <span class="macro">assert_eq!</span>(crun[<span class="string">"runtime_path"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"/nix/bin/crun"</span>));
+<a href=#403 id=403 data-nosnippet>403</a>        <span class="macro">assert_eq!</span>(crun[<span class="string">"monitor_path"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"/nix/bin/conmonrs"</span>));
+<a href=#404 id=404 data-nosnippet>404</a>        <span class="macro">assert_eq!</span>(
+<a href=#405 id=405 data-nosnippet>405</a>            crun[<span class="string">"runtime_root"</span>].as_str(),
+<a href=#406 id=406 data-nosnippet>406</a>            <span class="prelude-val">Some</span>(<span class="string">"/kubernix/crio/node/crun"</span>)
+<a href=#407 id=407 data-nosnippet>407</a>        );
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="kw">let </span>runc = <span class="kw-2">&amp;</span>runtime[<span class="string">"runtimes"</span>][<span class="string">"runc"</span>];
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="macro">assert_eq!</span>(runc[<span class="string">"runtime_path"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"/nix/bin/runc"</span>));
+<a href=#410 id=410 data-nosnippet>410</a>        <span class="macro">assert_eq!</span>(
+<a href=#411 id=411 data-nosnippet>411</a>            runc[<span class="string">"runtime_root"</span>].as_str(),
+<a href=#412 id=412 data-nosnippet>412</a>            <span class="prelude-val">Some</span>(<span class="string">"/kubernix/crio/node/runc"</span>)
+<a href=#413 id=413 data-nosnippet>413</a>        );
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="prelude-val">Ok</span>(())
+<a href=#415 id=415 data-nosnippet>415</a>    }
+<a href=#416 id=416 data-nosnippet>416</a>
+<a href=#417 id=417 data-nosnippet>417</a>    <span class="attr">#[test]
+<a href=#418 id=418 data-nosnippet>418</a>    </span><span class="kw">fn </span>render_config_default_runc() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#419 id=419 data-nosnippet>419</a>        <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>parse(<span class="kw-2">&amp;</span>[<span class="string">"--oci-runtime=runc"</span>])<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="macro">assert_eq!</span>(
+<a href=#421 id=421 data-nosnippet>421</a>            v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"default_runtime"</span>].as_str(),
+<a href=#422 id=422 data-nosnippet>422</a>            <span class="prelude-val">Some</span>(<span class="string">"runc"</span>)
+<a href=#423 id=423 data-nosnippet>423</a>        );
+<a href=#424 id=424 data-nosnippet>424</a>        <span class="macro">assert!</span>(v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"runtimes"</span>].get(<span class="string">"crun"</span>).is_some());
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="prelude-val">Ok</span>(())
+<a href=#426 id=426 data-nosnippet>426</a>    }
+<a href=#427 id=427 data-nosnippet>427</a>
+<a href=#428 id=428 data-nosnippet>428</a>    <span class="attr">#[test]
+<a href=#429 id=429 data-nosnippet>429</a>    </span><span class="kw">fn </span>render_config_uses_conmonrs() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#430 id=430 data-nosnippet>430</a>        <span class="kw">for </span>args <span class="kw">in </span>[<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>][..], <span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>, <span class="string">"--nodes=2"</span>]] {
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="kw">for </span>rootless <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
+<a href=#432 id=432 data-nosnippet>432</a>                <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(args, rootless))<span class="question-mark">?</span>;
+<a href=#433 id=433 data-nosnippet>433</a>                <span class="kw">for </span>name <span class="kw">in </span>[<span class="string">"crun"</span>, <span class="string">"runc"</span>] {
+<a href=#434 id=434 data-nosnippet>434</a>                    <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"runtimes"</span>][name];
+<a href=#435 id=435 data-nosnippet>435</a>                    <span class="macro">assert_eq!</span>(runtime[<span class="string">"runtime_type"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"pod"</span>));
+<a href=#436 id=436 data-nosnippet>436</a>                    <span class="macro">assert_eq!</span>(runtime[<span class="string">"monitor_path"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"/nix/bin/conmonrs"</span>));
+<a href=#437 id=437 data-nosnippet>437</a>                    <span class="macro">assert_eq!</span>(runtime[<span class="string">"monitor_cgroup"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"pod"</span>));
+<a href=#438 id=438 data-nosnippet>438</a>                    <span class="macro">assert!</span>(runtime.get(<span class="string">"monitor_env"</span>).is_none());
+<a href=#439 id=439 data-nosnippet>439</a>                }
+<a href=#440 id=440 data-nosnippet>440</a>                <span class="comment">// Required for RuntimeClasses with the pod runtime type
+<a href=#441 id=441 data-nosnippet>441</a>                </span><span class="macro">assert_eq!</span>(
+<a href=#442 id=442 data-nosnippet>442</a>                    v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"drop_infra_ctr"</span>].as_bool(),
+<a href=#443 id=443 data-nosnippet>443</a>                    <span class="prelude-val">Some</span>(<span class="bool-val">false</span>)
+<a href=#444 id=444 data-nosnippet>444</a>                );
+<a href=#445 id=445 data-nosnippet>445</a>            }
+<a href=#446 id=446 data-nosnippet>446</a>        }
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="prelude-val">Ok</span>(())
+<a href=#448 id=448 data-nosnippet>448</a>    }
+<a href=#449 id=449 data-nosnippet>449</a>
+<a href=#450 id=450 data-nosnippet>450</a>    <span class="attr">#[test]
+<a href=#451 id=451 data-nosnippet>451</a>    </span><span class="kw">fn </span>render_config_rootless_uses_wrappers() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#452 id=452 data-nosnippet>452</a>        <span class="kw">for </span>args <span class="kw">in </span>[<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>][..], <span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>, <span class="string">"--nodes=2"</span>]] {
+<a href=#453 id=453 data-nosnippet>453</a>            <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(args, <span class="bool-val">true</span>))<span class="question-mark">?</span>;
+<a href=#454 id=454 data-nosnippet>454</a>            <span class="kw">for </span>name <span class="kw">in </span>[<span class="string">"crun"</span>, <span class="string">"runc"</span>] {
+<a href=#455 id=455 data-nosnippet>455</a>                <span class="macro">assert_eq!</span>(
+<a href=#456 id=456 data-nosnippet>456</a>                    v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"runtimes"</span>][name][<span class="string">"runtime_path"</span>].as_str(),
+<a href=#457 id=457 data-nosnippet>457</a>                    <span class="prelude-val">Some</span>(<span class="macro">format!</span>(<span class="string">"/kubernix/crio/node/{}-rootless"</span>, name).as_str())
+<a href=#458 id=458 data-nosnippet>458</a>                );
+<a href=#459 id=459 data-nosnippet>459</a>            }
+<a href=#460 id=460 data-nosnippet>460</a>        }
+<a href=#461 id=461 data-nosnippet>461</a>        <span class="prelude-val">Ok</span>(())
+<a href=#462 id=462 data-nosnippet>462</a>    }
+<a href=#463 id=463 data-nosnippet>463</a>
+<a href=#464 id=464 data-nosnippet>464</a>    <span class="attr">#[test]
+<a href=#465 id=465 data-nosnippet>465</a>    </span><span class="kw">fn </span>render_config_skips_removed_options() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>parse(<span class="kw-2">&amp;</span>[])<span class="question-mark">?</span>)<span class="question-mark">?</span>;
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>];
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="kw">for </span>key <span class="kw">in </span>[
+<a href=#469 id=469 data-nosnippet>469</a>            <span class="string">"conmon"</span>,
+<a href=#470 id=470 data-nosnippet>470</a>            <span class="string">"conmon_cgroup"</span>,
+<a href=#471 id=471 data-nosnippet>471</a>            <span class="string">"conmon_env"</span>,
+<a href=#472 id=472 data-nosnippet>472</a>            <span class="string">"default_mounts"</span>,
+<a href=#473 id=473 data-nosnippet>473</a>            <span class="string">"pids_limit"</span>,
+<a href=#474 id=474 data-nosnippet>474</a>            <span class="string">"log_size_max"</span>,
+<a href=#475 id=475 data-nosnippet>475</a>            <span class="string">"uid_mappings"</span>,
+<a href=#476 id=476 data-nosnippet>476</a>            <span class="string">"gid_mappings"</span>,
+<a href=#477 id=477 data-nosnippet>477</a>        ] {
+<a href=#478 id=478 data-nosnippet>478</a>            <span class="macro">assert!</span>(runtime.get(key).is_none(), <span class="string">"{} is set"</span>, key);
+<a href=#479 id=479 data-nosnippet>479</a>        }
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="kw">let </span>image = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"image"</span>];
+<a href=#481 id=481 data-nosnippet>481</a>        <span class="macro">assert!</span>(image.get(<span class="string">"registries"</span>).is_none());
+<a href=#482 id=482 data-nosnippet>482</a>        <span class="macro">assert_eq!</span>(
+<a href=#483 id=483 data-nosnippet>483</a>            image[<span class="string">"pause_image"</span>].as_str(),
+<a href=#484 id=484 data-nosnippet>484</a>            <span class="prelude-val">Some</span>(<span class="string">"registry.k8s.io/pause:3.10.2"</span>)
+<a href=#485 id=485 data-nosnippet>485</a>        );
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="prelude-val">Ok</span>(())
+<a href=#487 id=487 data-nosnippet>487</a>    }
+<a href=#488 id=488 data-nosnippet>488</a>
+<a href=#489 id=489 data-nosnippet>489</a>    <span class="attr">#[test]
+<a href=#490 id=490 data-nosnippet>490</a>    </span><span class="kw">fn </span>render_config_uses_node_paths() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#491 id=491 data-nosnippet>491</a>        <span class="kw">for </span>rootless <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
+<a href=#492 id=492 data-nosnippet>492</a>            <span class="kw">let </span>c = config(<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>], rootless);
+<a href=#493 id=493 data-nosnippet>493</a>            <span class="kw">let </span>run_dir = Crio::run_dir(<span class="kw-2">&amp;</span>c, <span class="number">0</span>).display().to_string();
+<a href=#494 id=494 data-nosnippet>494</a>            <span class="macro">assert!</span>(run_dir.starts_with(<span class="string">"/run/kubernix/"</span>));
+<a href=#495 id=495 data-nosnippet>495</a>            <span class="kw">let </span>version_file = <span class="macro">format!</span>(<span class="string">"{}/version"</span>, run_dir);
+<a href=#496 id=496 data-nosnippet>496</a>            <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>c)<span class="question-mark">?</span>;
+<a href=#497 id=497 data-nosnippet>497</a>            <span class="kw">let </span>crio = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>];
+<a href=#498 id=498 data-nosnippet>498</a>            <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>crio[<span class="string">"runtime"</span>];
+<a href=#499 id=499 data-nosnippet>499</a>            <span class="kw">for </span>(value, expected) <span class="kw">in </span>[
+<a href=#500 id=500 data-nosnippet>500</a>                (
+<a href=#501 id=501 data-nosnippet>501</a>                    <span class="kw-2">&amp;</span>crio[<span class="string">"clean_shutdown_file"</span>],
+<a href=#502 id=502 data-nosnippet>502</a>                    <span class="string">"/kubernix/crio/node/clean.shutdown"</span>,
+<a href=#503 id=503 data-nosnippet>503</a>                ),
+<a href=#504 id=504 data-nosnippet>504</a>                (<span class="kw-2">&amp;</span>crio[<span class="string">"version_file"</span>], version_file.as_str()),
+<a href=#505 id=505 data-nosnippet>505</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"decryption_keys_path"</span>], <span class="string">"/kubernix/crio/node/keys"</span>),
+<a href=#506 id=506 data-nosnippet>506</a>                (
+<a href=#507 id=507 data-nosnippet>507</a>                    <span class="kw-2">&amp;</span>runtime[<span class="string">"default_mounts_file"</span>],
+<a href=#508 id=508 data-nosnippet>508</a>                    <span class="string">"/kubernix/crio/node/mounts.conf"</span>,
+<a href=#509 id=509 data-nosnippet>509</a>                ),
+<a href=#510 id=510 data-nosnippet>510</a>                (
+<a href=#511 id=511 data-nosnippet>511</a>                    <span class="kw-2">&amp;</span>runtime[<span class="string">"irqbalance_config_file"</span>],
+<a href=#512 id=512 data-nosnippet>512</a>                    <span class="string">"/kubernix/crio/node/irqbalance"</span>,
+<a href=#513 id=513 data-nosnippet>513</a>                ),
+<a href=#514 id=514 data-nosnippet>514</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"irqbalance_config_restore_file"</span>], <span class="string">"disable"</span>),
+<a href=#515 id=515 data-nosnippet>515</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"container_attach_socket_dir"</span>], run_dir.as_str()),
+<a href=#516 id=516 data-nosnippet>516</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"container_exits_dir"</span>], <span class="string">"/kubernix/crio/node/exits"</span>),
+<a href=#517 id=517 data-nosnippet>517</a>                (<span class="kw-2">&amp;</span>runtime[<span class="string">"namespaces_dir"</span>], <span class="string">"/kubernix/crio/node/ns"</span>),
+<a href=#518 id=518 data-nosnippet>518</a>                (
+<a href=#519 id=519 data-nosnippet>519</a>                    <span class="kw-2">&amp;</span>crio[<span class="string">"image"</span>][<span class="string">"signature_policy_dir"</span>],
+<a href=#520 id=520 data-nosnippet>520</a>                    <span class="string">"/kubernix/crio/node/policies"</span>,
+<a href=#521 id=521 data-nosnippet>521</a>                ),
+<a href=#522 id=522 data-nosnippet>522</a>                (
+<a href=#523 id=523 data-nosnippet>523</a>                    <span class="kw-2">&amp;</span>crio[<span class="string">"image"</span>][<span class="string">"big_files_temporary_dir"</span>],
+<a href=#524 id=524 data-nosnippet>524</a>                    <span class="string">"/kubernix/crio/node/tmp"</span>,
+<a href=#525 id=525 data-nosnippet>525</a>                ),
+<a href=#526 id=526 data-nosnippet>526</a>            ] {
+<a href=#527 id=527 data-nosnippet>527</a>                <span class="macro">assert_eq!</span>(value.as_str(), <span class="prelude-val">Some</span>(expected));
+<a href=#528 id=528 data-nosnippet>528</a>            }
+<a href=#529 id=529 data-nosnippet>529</a>            <span class="macro">assert_eq!</span>(
+<a href=#530 id=530 data-nosnippet>530</a>                runtime[<span class="string">"hooks_dir"</span>],
+<a href=#531 id=531 data-nosnippet>531</a>                toml::Value::Array(<span class="macro">vec!</span>[<span class="string">"/kubernix/crio/node/hooks.d"</span>.into()])
+<a href=#532 id=532 data-nosnippet>532</a>            );
+<a href=#533 id=533 data-nosnippet>533</a>            <span class="macro">assert_eq!</span>(
+<a href=#534 id=534 data-nosnippet>534</a>                runtime[<span class="string">"cdi_spec_dirs"</span>],
+<a href=#535 id=535 data-nosnippet>535</a>                toml::Value::Array(<span class="macro">vec!</span>[<span class="string">"/kubernix/crio/node/cdi"</span>.into()])
+<a href=#536 id=536 data-nosnippet>536</a>            );
+<a href=#537 id=537 data-nosnippet>537</a>            <span class="macro">assert_eq!</span>(crio[<span class="string">"nri"</span>][<span class="string">"enable_nri"</span>].as_bool(), <span class="prelude-val">Some</span>(<span class="bool-val">false</span>));
+<a href=#538 id=538 data-nosnippet>538</a>            <span class="macro">assert_eq!</span>(runtime[<span class="string">"log_level"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"info"</span>));
+<a href=#539 id=539 data-nosnippet>539</a>        }
+<a href=#540 id=540 data-nosnippet>540</a>        <span class="prelude-val">Ok</span>(())
+<a href=#541 id=541 data-nosnippet>541</a>    }
+<a href=#542 id=542 data-nosnippet>542</a>
+<a href=#543 id=543 data-nosnippet>543</a>    <span class="doccomment">/// Collect the absolute paths of the configuration with their keys.
+<a href=#544 id=544 data-nosnippet>544</a>    </span><span class="kw">fn </span>absolute_paths&lt;<span class="lifetime">'a</span>&gt;(key: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, v: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>toml::Value, paths: <span class="kw-2">&amp;mut </span>Vec&lt;(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>str, <span class="kw-2">&amp;</span><span class="lifetime">'a </span>str)&gt;) {
+<a href=#545 id=545 data-nosnippet>545</a>        <span class="kw">match </span>v {
+<a href=#546 id=546 data-nosnippet>546</a>            toml::Value::String(s) <span class="kw">if </span>s.starts_with(<span class="string">'/'</span>) =&gt; paths.push((key, s)),
+<a href=#547 id=547 data-nosnippet>547</a>            toml::Value::Array(a) =&gt; a.iter().for_each(|v| absolute_paths(key, v, paths)),
+<a href=#548 id=548 data-nosnippet>548</a>            toml::Value::Table(t) =&gt; t.iter().for_each(|(k, v)| absolute_paths(k, v, paths)),
+<a href=#549 id=549 data-nosnippet>549</a>            <span class="kw">_ </span>=&gt; {}
+<a href=#550 id=550 data-nosnippet>550</a>        }
+<a href=#551 id=551 data-nosnippet>551</a>    }
+<a href=#552 id=552 data-nosnippet>552</a>
+<a href=#553 id=553 data-nosnippet>553</a>    <span class="doccomment">/// The options whose default in CRI-O 1.37 (`crio config --default`)
+<a href=#554 id=554 data-nosnippet>554</a>    /// belongs to the host, as table and key. An empty
+<a href=#555 id=555 data-nosnippet>555</a>    /// `default_mounts_file`, `signature_policy` or `big_files_temporary_dir`
+<a href=#556 id=556 data-nosnippet>556</a>    /// falls back to the host as well. The global registry credentials of
+<a href=#557 id=557 data-nosnippet>557</a>    /// the host (`global_auth_file`) apply on purpose.
+<a href=#558 id=558 data-nosnippet>558</a>    </span><span class="kw">const </span>HOST_DEFAULTS: <span class="kw-2">&amp;</span>[(<span class="kw-2">&amp;</span>str, <span class="kw-2">&amp;</span>str)] = <span class="kw-2">&amp;</span>[
+<a href=#559 id=559 data-nosnippet>559</a>        (<span class="string">"crio"</span>, <span class="string">"root"</span>),
+<a href=#560 id=560 data-nosnippet>560</a>        (<span class="string">"crio"</span>, <span class="string">"runroot"</span>),
+<a href=#561 id=561 data-nosnippet>561</a>        (<span class="string">"crio"</span>, <span class="string">"log_dir"</span>),
+<a href=#562 id=562 data-nosnippet>562</a>        (<span class="string">"crio"</span>, <span class="string">"version_file"</span>),
+<a href=#563 id=563 data-nosnippet>563</a>        (<span class="string">"crio"</span>, <span class="string">"clean_shutdown_file"</span>),
+<a href=#564 id=564 data-nosnippet>564</a>        (<span class="string">"crio.api"</span>, <span class="string">"listen"</span>),
+<a href=#565 id=565 data-nosnippet>565</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"decryption_keys_path"</span>),
+<a href=#566 id=566 data-nosnippet>566</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"irqbalance_config_file"</span>),
+<a href=#567 id=567 data-nosnippet>567</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"irqbalance_config_restore_file"</span>),
+<a href=#568 id=568 data-nosnippet>568</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"cdi_spec_dirs"</span>),
+<a href=#569 id=569 data-nosnippet>569</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"hooks_dir"</span>),
+<a href=#570 id=570 data-nosnippet>570</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"default_mounts_file"</span>),
+<a href=#571 id=571 data-nosnippet>571</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"container_exits_dir"</span>),
+<a href=#572 id=572 data-nosnippet>572</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"container_attach_socket_dir"</span>),
+<a href=#573 id=573 data-nosnippet>573</a>        (<span class="string">"crio.runtime"</span>, <span class="string">"namespaces_dir"</span>),
+<a href=#574 id=574 data-nosnippet>574</a>        (<span class="string">"crio.image"</span>, <span class="string">"signature_policy"</span>),
+<a href=#575 id=575 data-nosnippet>575</a>        (<span class="string">"crio.image"</span>, <span class="string">"signature_policy_dir"</span>),
+<a href=#576 id=576 data-nosnippet>576</a>        (<span class="string">"crio.image"</span>, <span class="string">"big_files_temporary_dir"</span>),
+<a href=#577 id=577 data-nosnippet>577</a>        (<span class="string">"crio.network"</span>, <span class="string">"network_dir"</span>),
+<a href=#578 id=578 data-nosnippet>578</a>        (<span class="string">"crio.network"</span>, <span class="string">"plugin_dirs"</span>),
+<a href=#579 id=579 data-nosnippet>579</a>        (<span class="string">"crio.nri"</span>, <span class="string">"nri_listen"</span>),
+<a href=#580 id=580 data-nosnippet>580</a>        (<span class="string">"crio.nri"</span>, <span class="string">"nri_plugin_dir"</span>),
+<a href=#581 id=581 data-nosnippet>581</a>        (<span class="string">"crio.nri"</span>, <span class="string">"nri_plugin_config_dir"</span>),
+<a href=#582 id=582 data-nosnippet>582</a>    ];
+<a href=#583 id=583 data-nosnippet>583</a>
+<a href=#584 id=584 data-nosnippet>584</a>    <span class="doccomment">/// Returns true if the path belongs to the node: it is below the run
+<a href=#585 id=585 data-nosnippet>585</a>    /// root, the temporary directory of the node or the Nix store (`/nix/`
+<a href=#586 id=586 data-nosnippet>586</a>    /// in the tests).
+<a href=#587 id=587 data-nosnippet>587</a>    </span><span class="kw">fn </span>node_path(config: <span class="kw-2">&amp;</span>Config, path: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#588 id=588 data-nosnippet>588</a>        <span class="kw">let </span>path = Path::new(path);
+<a href=#589 id=589 data-nosnippet>589</a>        path.starts_with(config.root())
+<a href=#590 id=590 data-nosnippet>590</a>            || path.starts_with(Crio::run_dir(config, <span class="number">0</span>))
+<a href=#591 id=591 data-nosnippet>591</a>            || path.starts_with(<span class="string">"/nix/"</span>)
+<a href=#592 id=592 data-nosnippet>592</a>    }
+<a href=#593 id=593 data-nosnippet>593</a>
+<a href=#594 id=594 data-nosnippet>594</a>    <span class="attr">#[test]
+<a href=#595 id=595 data-nosnippet>595</a>    </span><span class="kw">fn </span>render_config_nri() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="kw">for </span>(args, enabled) <span class="kw">in </span>[(<span class="kw-2">&amp;</span>[][..], <span class="bool-val">false</span>), (<span class="kw-2">&amp;</span>[<span class="string">"--nri"</span>][..], <span class="bool-val">true</span>)] {
+<a href=#597 id=597 data-nosnippet>597</a>            <span class="kw">let </span>nri = <span class="kw-2">&amp;</span>render(<span class="kw-2">&amp;</span>parse(args)<span class="question-mark">?</span>)<span class="question-mark">?</span>[<span class="string">"crio"</span>][<span class="string">"nri"</span>];
+<a href=#598 id=598 data-nosnippet>598</a>            <span class="macro">assert_eq!</span>(nri[<span class="string">"enable_nri"</span>].as_bool(), <span class="prelude-val">Some</span>(enabled));
+<a href=#599 id=599 data-nosnippet>599</a>            <span class="kw">for </span>(key, expected) <span class="kw">in </span>[
+<a href=#600 id=600 data-nosnippet>600</a>                (<span class="string">"nri_listen"</span>, <span class="string">"/kubernix/crio/node/nri.sock"</span>),
+<a href=#601 id=601 data-nosnippet>601</a>                (<span class="string">"nri_plugin_dir"</span>, <span class="string">"/kubernix/crio/node/nri/plugins"</span>),
+<a href=#602 id=602 data-nosnippet>602</a>                (<span class="string">"nri_plugin_config_dir"</span>, <span class="string">"/kubernix/crio/node/nri/conf.d"</span>),
+<a href=#603 id=603 data-nosnippet>603</a>            ] {
+<a href=#604 id=604 data-nosnippet>604</a>                <span class="macro">assert_eq!</span>(nri[key].as_str(), <span class="prelude-val">Some</span>(expected), <span class="string">"{}"</span>, key);
+<a href=#605 id=605 data-nosnippet>605</a>            }
+<a href=#606 id=606 data-nosnippet>606</a>        }
+<a href=#607 id=607 data-nosnippet>607</a>        <span class="prelude-val">Ok</span>(())
+<a href=#608 id=608 data-nosnippet>608</a>    }
+<a href=#609 id=609 data-nosnippet>609</a>
+<a href=#610 id=610 data-nosnippet>610</a>    <span class="attr">#[test]
+<a href=#611 id=611 data-nosnippet>611</a>    </span><span class="kw">fn </span>render_config_overrides_host_defaults() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#612 id=612 data-nosnippet>612</a>        <span class="kw">for </span>args <span class="kw">in </span>[<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>][..], <span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>, <span class="string">"--nodes=2"</span>]] {
+<a href=#613 id=613 data-nosnippet>613</a>            <span class="kw">for </span>rootless <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
+<a href=#614 id=614 data-nosnippet>614</a>                <span class="kw">let </span>c = config(args, rootless);
+<a href=#615 id=615 data-nosnippet>615</a>                <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>c)<span class="question-mark">?</span>;
+<a href=#616 id=616 data-nosnippet>616</a>                <span class="kw">for </span>(table, key) <span class="kw">in </span>HOST_DEFAULTS {
+<a href=#617 id=617 data-nosnippet>617</a>                    <span class="kw">let </span>value = table
+<a href=#618 id=618 data-nosnippet>618</a>                        .split(<span class="string">'.'</span>)
+<a href=#619 id=619 data-nosnippet>619</a>                        .try_fold(<span class="kw-2">&amp;</span>v, |v, k| v.get(k))
+<a href=#620 id=620 data-nosnippet>620</a>                        .and_then(|t| t.get(key))
+<a href=#621 id=621 data-nosnippet>621</a>                        .with_context(|| <span class="macro">format!</span>(<span class="string">"{}.{} is not set"</span>, table, key))<span class="question-mark">?</span>;
+<a href=#622 id=622 data-nosnippet>622</a>                    <span class="kw">let </span>values: Vec&lt;<span class="kw">_</span>&gt; = <span class="kw">match </span>value {
+<a href=#623 id=623 data-nosnippet>623</a>                        toml::Value::Array(a) =&gt; a.iter().collect(),
+<a href=#624 id=624 data-nosnippet>624</a>                        value =&gt; <span class="macro">vec!</span>[value],
+<a href=#625 id=625 data-nosnippet>625</a>                    };
+<a href=#626 id=626 data-nosnippet>626</a>                    <span class="macro">assert!</span>(!values.is_empty(), <span class="string">"{}.{} is empty"</span>, table, key);
+<a href=#627 id=627 data-nosnippet>627</a>                    <span class="kw">for </span>value <span class="kw">in </span>values {
+<a href=#628 id=628 data-nosnippet>628</a>                        <span class="kw">let </span>value = value
+<a href=#629 id=629 data-nosnippet>629</a>                            .as_str()
+<a href=#630 id=630 data-nosnippet>630</a>                            .with_context(|| <span class="macro">format!</span>(<span class="string">"{}.{} is no string"</span>, table, key))<span class="question-mark">?</span>;
+<a href=#631 id=631 data-nosnippet>631</a>                        <span class="comment">// Skips the restore of the irqbalance config
+<a href=#632 id=632 data-nosnippet>632</a>                        </span><span class="kw">if </span><span class="kw-2">*</span>key == <span class="string">"irqbalance_config_restore_file" </span>{
+<a href=#633 id=633 data-nosnippet>633</a>                            <span class="macro">assert_eq!</span>(value, <span class="string">"disable"</span>);
+<a href=#634 id=634 data-nosnippet>634</a>                            <span class="kw">continue</span>;
+<a href=#635 id=635 data-nosnippet>635</a>                        }
+<a href=#636 id=636 data-nosnippet>636</a>                        <span class="macro">assert!</span>(
+<a href=#637 id=637 data-nosnippet>637</a>                            node_path(<span class="kw-2">&amp;</span>c, value),
+<a href=#638 id=638 data-nosnippet>638</a>                            <span class="string">"{}.{} = {} belongs to the host"</span>,
+<a href=#639 id=639 data-nosnippet>639</a>                            table,
+<a href=#640 id=640 data-nosnippet>640</a>                            key,
+<a href=#641 id=641 data-nosnippet>641</a>                            value,
+<a href=#642 id=642 data-nosnippet>642</a>                        );
+<a href=#643 id=643 data-nosnippet>643</a>                    }
+<a href=#644 id=644 data-nosnippet>644</a>                }
+<a href=#645 id=645 data-nosnippet>645</a>                <span class="macro">assert_eq!</span>(v[<span class="string">"crio"</span>][<span class="string">"nri"</span>][<span class="string">"enable_nri"</span>].as_bool(), <span class="prelude-val">Some</span>(<span class="bool-val">false</span>));
+<a href=#646 id=646 data-nosnippet>646</a>            }
+<a href=#647 id=647 data-nosnippet>647</a>        }
+<a href=#648 id=648 data-nosnippet>648</a>        <span class="prelude-val">Ok</span>(())
+<a href=#649 id=649 data-nosnippet>649</a>    }
+<a href=#650 id=650 data-nosnippet>650</a>
+<a href=#651 id=651 data-nosnippet>651</a>    <span class="attr">#[test]
+<a href=#652 id=652 data-nosnippet>652</a>    </span><span class="kw">fn </span>render_config_uses_no_host_paths() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#653 id=653 data-nosnippet>653</a>        <span class="kw">for </span>args <span class="kw">in </span>[<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>][..], <span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>, <span class="string">"--nodes=2"</span>]] {
+<a href=#654 id=654 data-nosnippet>654</a>            <span class="kw">for </span>rootless <span class="kw">in </span>[<span class="bool-val">false</span>, <span class="bool-val">true</span>] {
+<a href=#655 id=655 data-nosnippet>655</a>                <span class="kw">let </span>c = config(args, rootless);
+<a href=#656 id=656 data-nosnippet>656</a>                <span class="macro">assert!</span>(c.root().is_absolute());
+<a href=#657 id=657 data-nosnippet>657</a>                <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>c)<span class="question-mark">?</span>;
+<a href=#658 id=658 data-nosnippet>658</a>                <span class="kw">let </span><span class="kw-2">mut </span>paths = Vec::new();
+<a href=#659 id=659 data-nosnippet>659</a>                absolute_paths(<span class="string">""</span>, <span class="kw-2">&amp;</span>v, <span class="kw-2">&amp;mut </span>paths);
+<a href=#660 id=660 data-nosnippet>660</a>                <span class="macro">assert!</span>(paths.len() &gt; HOST_DEFAULTS.len());
+<a href=#661 id=661 data-nosnippet>661</a>                <span class="kw">for </span>(key, path) <span class="kw">in </span>paths {
+<a href=#662 id=662 data-nosnippet>662</a>                    <span class="comment">// The command inside of the pause image
+<a href=#663 id=663 data-nosnippet>663</a>                    </span><span class="kw">if </span>key == <span class="string">"pause_command" </span>{
+<a href=#664 id=664 data-nosnippet>664</a>                        <span class="kw">continue</span>;
+<a href=#665 id=665 data-nosnippet>665</a>                    }
+<a href=#666 id=666 data-nosnippet>666</a>                    <span class="macro">assert!</span>(
+<a href=#667 id=667 data-nosnippet>667</a>                        node_path(<span class="kw-2">&amp;</span>c, path),
+<a href=#668 id=668 data-nosnippet>668</a>                        <span class="string">"{} = {} belongs to the host"</span>,
+<a href=#669 id=669 data-nosnippet>669</a>                        key,
+<a href=#670 id=670 data-nosnippet>670</a>                        path,
+<a href=#671 id=671 data-nosnippet>671</a>                    );
+<a href=#672 id=672 data-nosnippet>672</a>                }
+<a href=#673 id=673 data-nosnippet>673</a>            }
+<a href=#674 id=674 data-nosnippet>674</a>        }
+<a href=#675 id=675 data-nosnippet>675</a>        <span class="prelude-val">Ok</span>(())
+<a href=#676 id=676 data-nosnippet>676</a>    }
+<a href=#677 id=677 data-nosnippet>677</a>
+<a href=#678 id=678 data-nosnippet>678</a>    <span class="attr">#[test]
+<a href=#679 id=679 data-nosnippet>679</a>    </span><span class="kw">fn </span>render_config_matches_containerd_defaults() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#680 id=680 data-nosnippet>680</a>        <span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>], <span class="bool-val">false</span>))<span class="question-mark">?</span>;
+<a href=#681 id=681 data-nosnippet>681</a>        <span class="kw">let </span>runtime = <span class="kw-2">&amp;</span>v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>];
+<a href=#682 id=682 data-nosnippet>682</a>        <span class="kw">let </span>caps: Vec&lt;<span class="kw">_</span>&gt; = runtime[<span class="string">"default_capabilities"</span>]
+<a href=#683 id=683 data-nosnippet>683</a>            .as_array()
+<a href=#684 id=684 data-nosnippet>684</a>            .context(<span class="string">"no capabilities"</span>)<span class="question-mark">?
+<a href=#685 id=685 data-nosnippet>685</a>            </span>.iter()
+<a href=#686 id=686 data-nosnippet>686</a>            .filter_map(|c| c.as_str())
+<a href=#687 id=687 data-nosnippet>687</a>            .collect();
+<a href=#688 id=688 data-nosnippet>688</a>        <span class="macro">assert_eq!</span>(caps.len(), <span class="number">14</span>);
+<a href=#689 id=689 data-nosnippet>689</a>        <span class="kw">for </span>cap <span class="kw">in </span>[<span class="string">"MKNOD"</span>, <span class="string">"NET_RAW"</span>, <span class="string">"SETFCAP"</span>, <span class="string">"SYS_CHROOT"</span>, <span class="string">"AUDIT_WRITE"</span>] {
+<a href=#690 id=690 data-nosnippet>690</a>            <span class="macro">assert!</span>(caps.contains(<span class="kw-2">&amp;</span>cap), <span class="string">"{} missing"</span>, cap);
+<a href=#691 id=691 data-nosnippet>691</a>        }
+<a href=#692 id=692 data-nosnippet>692</a>        <span class="macro">assert_eq!</span>(
+<a href=#693 id=693 data-nosnippet>693</a>            runtime[<span class="string">"default_sysctls"</span>],
+<a href=#694 id=694 data-nosnippet>694</a>            toml::Value::Array(<span class="macro">vec!</span>[
+<a href=#695 id=695 data-nosnippet>695</a>                <span class="string">"net.ipv4.ip_unprivileged_port_start=0"</span>.into(),
+<a href=#696 id=696 data-nosnippet>696</a>                <span class="string">"net.ipv4.ping_group_range=0 2147483647"</span>.into(),
+<a href=#697 id=697 data-nosnippet>697</a>            ])
 <a href=#698 id=698 data-nosnippet>698</a>        );
-<a href=#699 id=699 data-nosnippet>699</a>        <span class="prelude-val">Ok</span>(())
-<a href=#700 id=700 data-nosnippet>700</a>    }
-<a href=#701 id=701 data-nosnippet>701</a>
-<a href=#702 id=702 data-nosnippet>702</a>    <span class="attr">#[test]
-<a href=#703 id=703 data-nosnippet>703</a>    </span><span class="kw">fn </span>storage_conf_sets_driver() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#704 id=704 data-nosnippet>704</a>        <span class="kw">let </span>v: toml::Value = toml::from_str(STORAGE_CONF)<span class="question-mark">?</span>;
-<a href=#705 id=705 data-nosnippet>705</a>        <span class="macro">assert_eq!</span>(v[<span class="string">"storage"</span>][<span class="string">"driver"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"overlay"</span>));
-<a href=#706 id=706 data-nosnippet>706</a>        <span class="prelude-val">Ok</span>(())
-<a href=#707 id=707 data-nosnippet>707</a>    }
-<a href=#708 id=708 data-nosnippet>708</a>
-<a href=#709 id=709 data-nosnippet>709</a>    <span class="attr">#[test]
-<a href=#710 id=710 data-nosnippet>710</a>    </span><span class="kw">fn </span>run_dir_unique_per_root_and_node() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#711 id=711 data-nosnippet>711</a>        <span class="kw">let </span>a = <span class="kw">crate</span>::config::tests::parse(<span class="kw-2">&amp;</span>[<span class="string">"--root"</span>, <span class="string">"/home/user/kubernix-run"</span>])<span class="question-mark">?</span>;
-<a href=#712 id=712 data-nosnippet>712</a>        <span class="kw">let </span>b = <span class="kw">crate</span>::config::tests::parse(<span class="kw-2">&amp;</span>[<span class="string">"--root"</span>, <span class="string">"/home/user/other-run"</span>])<span class="question-mark">?</span>;
-<a href=#713 id=713 data-nosnippet>713</a>        <span class="macro">assert!</span>(Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>).starts_with(RUN_BASE));
-<a href=#714 id=714 data-nosnippet>714</a>        <span class="macro">assert_ne!</span>(Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>), Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">1</span>));
-<a href=#715 id=715 data-nosnippet>715</a>        <span class="macro">assert_ne!</span>(Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>), Crio::run_dir(<span class="kw-2">&amp;</span>b, <span class="number">0</span>));
-<a href=#716 id=716 data-nosnippet>716</a>        <span class="macro">assert_eq!</span>(Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>), Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>));
-<a href=#717 id=717 data-nosnippet>717</a>        <span class="prelude-val">Ok</span>(())
-<a href=#718 id=718 data-nosnippet>718</a>    }
-<a href=#719 id=719 data-nosnippet>719</a>}
+<a href=#699 id=699 data-nosnippet>699</a>        <span class="macro">assert_eq!</span>(
+<a href=#700 id=700 data-nosnippet>700</a>            v[<span class="string">"crio"</span>][<span class="string">"image"</span>][<span class="string">"short_name_mode"</span>].as_str(),
+<a href=#701 id=701 data-nosnippet>701</a>            <span class="prelude-val">Some</span>(<span class="string">"disabled"</span>)
+<a href=#702 id=702 data-nosnippet>702</a>        );
+<a href=#703 id=703 data-nosnippet>703</a>        <span class="comment">// The groups are not mapped in the user namespace
+<a href=#704 id=704 data-nosnippet>704</a>        </span><span class="kw">let </span>v = render(<span class="kw-2">&amp;</span>config(<span class="kw-2">&amp;</span>[<span class="string">"kubernix"</span>], <span class="bool-val">true</span>))<span class="question-mark">?</span>;
+<a href=#705 id=705 data-nosnippet>705</a>        <span class="macro">assert_eq!</span>(
+<a href=#706 id=706 data-nosnippet>706</a>            v[<span class="string">"crio"</span>][<span class="string">"runtime"</span>][<span class="string">"default_sysctls"</span>],
+<a href=#707 id=707 data-nosnippet>707</a>            toml::Value::Array(<span class="macro">vec!</span>[<span class="string">"net.ipv4.ip_unprivileged_port_start=0"</span>.into()])
+<a href=#708 id=708 data-nosnippet>708</a>        );
+<a href=#709 id=709 data-nosnippet>709</a>        <span class="prelude-val">Ok</span>(())
+<a href=#710 id=710 data-nosnippet>710</a>    }
+<a href=#711 id=711 data-nosnippet>711</a>
+<a href=#712 id=712 data-nosnippet>712</a>    <span class="attr">#[test]
+<a href=#713 id=713 data-nosnippet>713</a>    </span><span class="kw">fn </span>args_skip_host_config() {
+<a href=#714 id=714 data-nosnippet>714</a>        <span class="kw">let </span>args = Crio::args(
+<a href=#715 id=715 data-nosnippet>715</a>            Path::new(<span class="string">"/n/crio.conf.d"</span>),
+<a href=#716 id=716 data-nosnippet>716</a>            Path::new(<span class="string">"/n/registries.conf"</span>),
+<a href=#717 id=717 data-nosnippet>717</a>            Path::new(<span class="string">"/n/registries.conf.d"</span>),
+<a href=#718 id=718 data-nosnippet>718</a>        );
+<a href=#719 id=719 data-nosnippet>719</a>        <span class="macro">assert_eq!</span>(
+<a href=#720 id=720 data-nosnippet>720</a>            args,
+<a href=#721 id=721 data-nosnippet>721</a>            [
+<a href=#722 id=722 data-nosnippet>722</a>                <span class="string">"--config=/dev/null"</span>,
+<a href=#723 id=723 data-nosnippet>723</a>                <span class="string">"--config-dir=/n/crio.conf.d"</span>,
+<a href=#724 id=724 data-nosnippet>724</a>                <span class="string">"--registries-conf=/n/registries.conf"</span>,
+<a href=#725 id=725 data-nosnippet>725</a>                <span class="string">"--registries-conf-dir=/n/registries.conf.d"</span>,
+<a href=#726 id=726 data-nosnippet>726</a>            ]
+<a href=#727 id=727 data-nosnippet>727</a>        );
+<a href=#728 id=728 data-nosnippet>728</a>    }
+<a href=#729 id=729 data-nosnippet>729</a>
+<a href=#730 id=730 data-nosnippet>730</a>    <span class="attr">#[test]
+<a href=#731 id=731 data-nosnippet>731</a>    </span><span class="kw">fn </span>registries_conf_resolves_short_names() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#732 id=732 data-nosnippet>732</a>        <span class="kw">let </span>v: toml::Value = toml::from_str(REGISTRIES_CONF)<span class="question-mark">?</span>;
+<a href=#733 id=733 data-nosnippet>733</a>        <span class="macro">assert_eq!</span>(
+<a href=#734 id=734 data-nosnippet>734</a>            v[<span class="string">"unqualified-search-registries"</span>],
+<a href=#735 id=735 data-nosnippet>735</a>            toml::Value::Array(<span class="macro">vec!</span>[<span class="string">"docker.io"</span>.into()])
+<a href=#736 id=736 data-nosnippet>736</a>        );
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="prelude-val">Ok</span>(())
+<a href=#738 id=738 data-nosnippet>738</a>    }
+<a href=#739 id=739 data-nosnippet>739</a>
+<a href=#740 id=740 data-nosnippet>740</a>    <span class="attr">#[test]
+<a href=#741 id=741 data-nosnippet>741</a>    </span><span class="kw">fn </span>storage_conf_sets_driver() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#742 id=742 data-nosnippet>742</a>        <span class="kw">let </span>v: toml::Value = toml::from_str(STORAGE_CONF)<span class="question-mark">?</span>;
+<a href=#743 id=743 data-nosnippet>743</a>        <span class="macro">assert_eq!</span>(v[<span class="string">"storage"</span>][<span class="string">"driver"</span>].as_str(), <span class="prelude-val">Some</span>(<span class="string">"overlay"</span>));
+<a href=#744 id=744 data-nosnippet>744</a>        <span class="prelude-val">Ok</span>(())
+<a href=#745 id=745 data-nosnippet>745</a>    }
+<a href=#746 id=746 data-nosnippet>746</a>
+<a href=#747 id=747 data-nosnippet>747</a>    <span class="attr">#[test]
+<a href=#748 id=748 data-nosnippet>748</a>    </span><span class="kw">fn </span>run_dir_unique_per_root_and_node() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#749 id=749 data-nosnippet>749</a>        <span class="kw">let </span>a = <span class="kw">crate</span>::config::tests::parse(<span class="kw-2">&amp;</span>[<span class="string">"--root"</span>, <span class="string">"/home/user/kubernix-run"</span>])<span class="question-mark">?</span>;
+<a href=#750 id=750 data-nosnippet>750</a>        <span class="kw">let </span>b = <span class="kw">crate</span>::config::tests::parse(<span class="kw-2">&amp;</span>[<span class="string">"--root"</span>, <span class="string">"/home/user/other-run"</span>])<span class="question-mark">?</span>;
+<a href=#751 id=751 data-nosnippet>751</a>        <span class="macro">assert!</span>(Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>).starts_with(RUN_BASE));
+<a href=#752 id=752 data-nosnippet>752</a>        <span class="macro">assert_ne!</span>(Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>), Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">1</span>));
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="macro">assert_ne!</span>(Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>), Crio::run_dir(<span class="kw-2">&amp;</span>b, <span class="number">0</span>));
+<a href=#754 id=754 data-nosnippet>754</a>        <span class="macro">assert_eq!</span>(Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>), Crio::run_dir(<span class="kw-2">&amp;</span>a, <span class="number">0</span>));
+<a href=#755 id=755 data-nosnippet>755</a>        <span class="prelude-val">Ok</span>(())
+<a href=#756 id=756 data-nosnippet>756</a>    }
+<a href=#757 id=757 data-nosnippet>757</a>}
 </code></pre></div></section></main></body></html>
