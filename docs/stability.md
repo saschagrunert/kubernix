@@ -65,6 +65,7 @@ If the run directory contains a cluster, these fields are present as well:
 - `nodes`: the number of nodes.
 - `cri-runtime`: `crio` or `containerd`.
 - `oci-runtime`: `crun` or `runc`.
+- `nri`: whether NRI is enabled (`--nri`).
 - `api-server`: the URL of the API server.
 - `node-status`: only while running and if the API server answered, a list of
   objects with the node `name` and whether it is `ready`.
@@ -100,6 +101,7 @@ The run directory (`--root`) keeps these files at stable locations:
   cluster is ready and removed after the cleanup.
 - The component log files listed in
   [Shell Environment](usage.md#shell-environment).
+- The NRI sockets and plugin directories listed in [NRI](configuration.md#nri).
 
 All other files, like the PKI, the component configurations and the generated
 Nix environment, are internal and may change in any release.
@@ -125,8 +127,11 @@ which contains the command to remove the run directory (see
 KuberNix, starting with 1.0: earlier versions ignore the `version` field and use
 any run directory. Version 2 changed the network layout and the PKI, so run
 directories of version 0 and 1 have to be removed, and KuberNix versions before
-1.0 must not be used with run directories of version 2. The other fields of the
-file are not part of the stable interface.
+1.0 must not be used with run directories of version 2. Version 3 adds the `nri`
+setting (`--nri`), which KuberNix 1.0.0 would ignore. Only run directories with
+NRI enabled get version 3, so that KuberNix 1.0.0 refuses them, while all other
+run directories keep version 2 and work with both. The other fields of the file
+are not part of the stable interface.
 
 ## Library
 

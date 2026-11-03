@@ -9,7 +9,7 @@ use crate::{
     Config,
     component::{ClusterContext, Component, Phase},
     container::{Container, NodeContainer},
-    cri::{self, CriSocket, RuntimePaths},
+    cri::{self, CriSocket, NriPaths, RuntimePaths},
     network::Network,
     node::Node,
     process::{Process, ProcessState, Stoppable},
@@ -99,6 +99,7 @@ impl Crio {
         let network_dir = dir.join("cni");
         let socket = Self::socket(config, network, node)?;
         let run_dir = Self::run_dir(config, node);
+        let nri = NriPaths::new(&dir)?;
 
         // Always render the configuration, since it references the current
         // Nix store paths.
@@ -110,7 +111,11 @@ impl Crio {
             &dir.join("hooks.d"),
             &dir.join("cdi"),
             &dir.join("tmp"),
-        ] {
+        ]
+        .into_iter()
+        .map(PathBuf::as_path)
+        .chain(nri.dirs().into_iter().filter(|_| config.nri()))
+        {
             create_dir_all(d)
                 .with_context(|| format!("Unable to create CRI-O directory {}", d.display()))?;
         }
@@ -119,7 +124,7 @@ impl Crio {
         }
         write_if_changed(
             &config_file,
-            &Self::render_config(config, &dir, &run_dir, &socket, &conmonrs, &paths),
+            &Self::render_config(config, &dir, &run_dir, &socket, &nri, &conmonrs, &paths),
         )
         .context("Unable to write CRI-O config")?;
         write_if_changed(&registries_file, REGISTRIES_CONF)
@@ -189,17 +194,20 @@ impl Crio {
     /// in a user namespace.
     ///
     /// The capabilities and sysctls of the containers match the defaults of
-    /// containerd. NRI is disabled, and the other paths CRI-O uses belong to
-    /// the node instead of the host, also the CDI spec directory, which is
-    /// empty. CRI-O creates the attach socket directory and the PID files of
-    /// exec sessions below `run_dir`, otherwise it would use `/var/run/crio`.
-    /// Only the registry certificates (`certs.d`) and credentials of the host
-    /// still apply, like for other image pulls on the host.
+    /// containerd. NRI is disabled unless `--nri` is set, and its socket and
+    /// plugin directories (see `NriPaths`) as well as the other paths CRI-O
+    /// uses belong to the node instead of the host, also the CDI spec
+    /// directory, which is empty. CRI-O creates the attach socket directory and
+    /// the PID files of exec sessions below `run_dir`, otherwise it would use
+    /// `/var/run/crio`. Only the registry certificates (`certs.d`) and
+    /// credentials of the host still apply, like for other image pulls on the
+    /// host.
     fn render_config(
         config: &Config,
         dir: &Path,
         run_dir: &Path,
         socket: &CriSocket,
+        nri: &NriPaths,
         conmonrs: &str,
         paths: &RuntimePaths,
     ) -> String {
@@ -238,6 +246,10 @@ impl Crio {
             log_dir = dir.join("log").display(),
             namespaces_dir = dir.join("ns").display(),
             network_dir = dir.join("cni").display(),
+            nri = config.nri(),
+            nri_listen = nri.socket.display(),
+            nri_plugin_dir = nri.plugin_dir.display(),
+            nri_plugin_config_dir = nri.plugin_config_dir.display(),
             plugin_dir = paths.plugin_dir,
             exits_dir = dir.join("exits").display(),
             default_runtime = config.oci_runtime(),
@@ -347,8 +359,16 @@ mod tests {
         let dir = config.root().join(CRIO).join("node");
         let socket = CriSocket::new(dir.join("crio.sock"))?;
         let run_dir = Crio::run_dir(config, 0);
-        let content =
-            Crio::render_config(config, &dir, &run_dir, &socket, "/nix/bin/conmonrs", paths);
+        let nri = NriPaths::new(&dir)?;
+        let content = Crio::render_config(
+            config,
+            &dir,
+            &run_dir,
+            &socket,
+            &nri,
+            "/nix/bin/conmonrs",
+            paths,
+        );
         Ok(toml::from_str(&content)?)
     }
 
@@ -533,9 +553,8 @@ mod tests {
     /// The options whose default in CRI-O 1.37 (`crio config --default`)
     /// belongs to the host, as table and key. An empty
     /// `default_mounts_file`, `signature_policy` or `big_files_temporary_dir`
-    /// falls back to the host as well. The NRI options are left out, since
-    /// NRI is disabled, and the global registry credentials of the host
-    /// (`global_auth_file`) apply on purpose.
+    /// falls back to the host as well. The global registry credentials of
+    /// the host (`global_auth_file`) apply on purpose.
     const HOST_DEFAULTS: &[(&str, &str)] = &[
         ("crio", "root"),
         ("crio", "runroot"),
@@ -557,6 +576,9 @@ mod tests {
         ("crio.image", "big_files_temporary_dir"),
         ("crio.network", "network_dir"),
         ("crio.network", "plugin_dirs"),
+        ("crio.nri", "nri_listen"),
+        ("crio.nri", "nri_plugin_dir"),
+        ("crio.nri", "nri_plugin_config_dir"),
     ];
 
     /// Returns true if the path belongs to the node: it is below the run
@@ -567,6 +589,22 @@ mod tests {
         path.starts_with(config.root())
             || path.starts_with(Crio::run_dir(config, 0))
             || path.starts_with("/nix/")
+    }
+
+    #[test]
+    fn render_config_nri() -> Result<()> {
+        for (args, enabled) in [(&[][..], false), (&["--nri"][..], true)] {
+            let nri = &render(&parse(args)?)?["crio"]["nri"];
+            assert_eq!(nri["enable_nri"].as_bool(), Some(enabled));
+            for (key, expected) in [
+                ("nri_listen", "/kubernix/crio/node/nri.sock"),
+                ("nri_plugin_dir", "/kubernix/crio/node/nri/plugins"),
+                ("nri_plugin_config_dir", "/kubernix/crio/node/nri/conf.d"),
+            ] {
+                assert_eq!(nri[key].as_str(), Some(expected), "{}", key);
+            }
+        }
+        Ok(())
     }
 
     #[test]

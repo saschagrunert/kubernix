@@ -75,6 +75,20 @@ impl Nix {
 
         // Run the shell, forwarding all config options
         let exe = current_exe()?.display().to_string();
+        let args = Self::stage_args(&config, &exe);
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+
+        let mut cmd = Self::command(&config, &args)?;
+        Config::remove_option_env(&mut cmd);
+        cmd.env(Self::NIX_ENV, "1");
+        signals::check()?;
+        lock.inherit(&mut cmd)?;
+        Err(cmd.exec()).context("Unable to run nix develop")
+    }
+
+    /// The command line of the next stage of kubernix, which runs inside the
+    /// Nix environment and gets all options passed as arguments.
+    fn stage_args(config: &Config, exe: &str) -> Vec<String> {
         let root = config.root().display().to_string();
         let log_level = config.log_level().to_string();
         let log_format = config.log_format().to_string();
@@ -87,7 +101,7 @@ impl Nix {
         let shell_val: String = config.shell().unwrap_or_default().to_owned();
         let overlay_val = config.overlay().map(|o| o.display().to_string());
         let mut args = vec![
-            exe.as_str(),
+            exe,
             "--root",
             root.as_str(),
             "--log-level",
@@ -130,6 +144,10 @@ impl Nix {
             args.push(pkg.as_str());
         }
 
+        if config.nri() {
+            args.push("--nri");
+        }
+
         let addons = Self::addons_arg(config.addons());
         args.push("--addons");
         args.push(addons.as_str());
@@ -141,12 +159,7 @@ impl Nix {
             args.push(&shell_val);
         }
 
-        let mut cmd = Self::command(&config, &args)?;
-        Config::remove_option_env(&mut cmd);
-        cmd.env(Self::NIX_ENV, "1");
-        signals::check()?;
-        lock.inherit(&mut cmd)?;
-        Err(cmd.exec()).context("Unable to run nix develop")
+        args.into_iter().map(String::from).collect()
     }
 
     /// The `--addons` value for the addons, `none` explicitly disables the
@@ -465,6 +478,26 @@ impl Nix {
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn stage_args_forward_options() -> Result<()> {
+        for nri in [false, true] {
+            let mut args = vec!["--nodes=2", "--cri-runtime=containerd", "--no-shell"];
+            if nri {
+                args.push("--nri");
+            }
+            let config = crate::config::tests::parse(&args)?;
+            let stage = Nix::stage_args(&config, "kubernix");
+            assert_eq!(stage[0], "kubernix");
+            let stage: Vec<&str> = stage[1..].iter().map(String::as_str).collect();
+            let parsed = crate::config::tests::parse(&stage)?;
+            assert_eq!(parsed.nri(), nri);
+            assert_eq!(parsed.nodes(), 2);
+            assert_eq!(parsed.cri_runtime(), crate::config::CriRuntime::Containerd);
+            assert!(parsed.no_shell());
+        }
+        Ok(())
+    }
 
     #[test]
     fn addons_arg() {
