@@ -49,14 +49,14 @@ The following technology stack is currently being used:
 | cri-o-wrapper   | v1.37.2  |
 | cri-tools       | v1.37.0  |
 | crun            | v1.30.1  |
-| etcd            | v3.7.2   |
+| etcd            | v3.7.3   |
 | iproute2        | v7.2.0   |
 | iptables        | v1.8.13  |
 | kmod            | v31      |
 | kubectl         | v1.37.1  |
 | kubernetes      | v1.37.1  |
 | nss-cacert      | v3.131.1 |
-| podman          | v5.8.9   |
+| podman          | v6.1.4   |
 | rootlesskit     | v2.3.6   |
 | runc            | v1.5.2   |
 | slirp4netns     | v1.3.6   |
