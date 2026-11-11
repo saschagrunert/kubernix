@@ -43,7 +43,7 @@ The following technology stack is currently being used:
 | Application     | Version  |
 | --------------- | -------- |
 | cni-plugins     | v1.9.1   |
-| conmon-rs       | v1.1.1   |
+| conmon-rs       | v1.2.2   |
 | conntrack-tools | v1.4.9   |
 | containerd      | v2.4.1   |
 | cri-o-wrapper   | v1.37.2  |
@@ -53,13 +53,13 @@ The following technology stack is currently being used:
 | iproute2        | v7.2.0   |
 | iptables        | v1.8.13  |
 | kmod            | v31      |
-| kubectl         | v1.37.1  |
-| kubernetes      | v1.37.1  |
+| kubectl         | v1.37.2  |
+| kubernetes      | v1.37.2  |
 | nss-cacert      | v3.131.1 |
 | podman          | v6.1.4   |
 | rootlesskit     | v2.3.6   |
 | runc            | v1.5.2   |
-| slirp4netns     | v1.3.6   |
+| slirp4netns     | v1.3.7   |
 | socat           | v1.8.1.3 |
 | util-linux      | v2.42.4  |
 
